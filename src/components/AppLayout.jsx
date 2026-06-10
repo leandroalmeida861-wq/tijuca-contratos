@@ -2,6 +2,7 @@ import {
   BarChart3,
   Building2,
   ClipboardList,
+  Database,
   FileArchive,
   FileText,
   Factory,
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/frete', label: 'Frete', icon: Truck },
   { to: '/documentos', label: 'Documentos', icon: FileArchive },
   { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3 },
+  { to: '/backup', label: 'Backup', icon: Database },
 ];
 
 export default function AppLayout() {

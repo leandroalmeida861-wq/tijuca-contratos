@@ -35,6 +35,28 @@ export async function listNotes() {
   }));
 }
 
+export async function listBackupData() {
+  const [fornecedores, fabricas, produtos, contratos, notas_fiscais, documentos, fretes] = await Promise.all([
+    listTable('fornecedores'),
+    listTable('fabricas'),
+    listTable('produtos'),
+    listContracts(),
+    listNotes(),
+    listTable('documentos'),
+    listTable('fretes'),
+  ]);
+
+  return {
+    fornecedores,
+    fabricas,
+    produtos,
+    contratos,
+    notas_fiscais,
+    documentos,
+    fretes,
+  };
+}
+
 export async function createRow(table, payload) {
   const { data, error } = await supabase.from(table).insert(payload).select().single();
   if (error) throw error;
