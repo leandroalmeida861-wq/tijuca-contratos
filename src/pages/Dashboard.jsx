@@ -13,11 +13,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { deleteRow, exportContractsCsv, exportContractsExcel, listContracts, listFreights, listTable } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 
-const colors = ['#f59e0b', '#229653', '#0ea5e9', '#6366f1', '#ef4444'];
+const chartColors = ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#e2b849', '#d8783d'];
 
 export default function Dashboard() {
   const [contracts, setContracts] = useState([]);
@@ -92,7 +91,9 @@ export default function Dashboard() {
       const key = contract.fornecedor?.nome || 'Sem fornecedor';
       grouped.set(key, (grouped.get(key) || 0) + Number(contract.quantidade_contratada || 0));
     });
-    return Array.from(grouped, ([name, value]) => ({ name, value }));
+    return Array.from(grouped, ([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 7);
   }, [contracts]);
 
   const productChart = useMemo(() => {
@@ -101,7 +102,9 @@ export default function Dashboard() {
       const key = contract.produto?.nome || 'Sem produto';
       grouped.set(key, (grouped.get(key) || 0) + Number(contract.quantidade_contratada || 0));
     });
-    return Array.from(grouped, ([name, value]) => ({ name, value }));
+    return Array.from(grouped, ([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
   }, [contracts]);
 
   const contractChart = useMemo(() => (
@@ -148,50 +151,13 @@ export default function Dashboard() {
 
       <section className="grid gap-5 xl:grid-cols-3">
         <ChartPanel title="Volume por fornecedor">
-          <ResponsiveContainer width="100%" height={270}>
-            <BarChart data={supplierChart} layout="vertical" margin={{ left: 44, right: 22 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tickFormatter={(value) => `${value / 1000}t`} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
-              <Tooltip formatter={(value) => kg(value)} />
-              <Bar dataKey="value" radius={[0, 5, 5, 0]}>
-                {supplierChart.map((entry, index) => (
-                  <Cell key={entry.name} fill={colors[index % colors.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <SupplierVolumeChart data={supplierChart} />
         </ChartPanel>
         <ChartPanel title="Distribuição por produto">
-          <ResponsiveContainer width="100%" height={270}>
-            <PieChart>
-              <Pie data={productChart} dataKey="value" nameKey="name" innerRadius={62} outerRadius={94} paddingAngle={1}>
-                {productChart.map((entry, index) => (
-                  <Cell key={entry.name} fill={colors[index % colors.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value, name) => [kg(value), name]} />
-            </PieChart>
-          </ResponsiveContainer>
+          <ProductDonutChart data={productChart} />
         </ChartPanel>
         <ChartPanel title="Execução por contrato">
-          {contractChart.length ? (
-            <ResponsiveContainer width="100%" height={270}>
-              <BarChart data={contractChart} layout="vertical" margin={{ left: 34, right: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tickFormatter={(value) => `${value}%`} domain={[0, 100]} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={84} />
-                <Tooltip formatter={(value, name, props) => [`${value}%`, props.payload.fornecedor]} />
-                <Bar dataKey="value" minPointSize={4} radius={[0, 5, 5, 0]}>
-                  {contractChart.map((entry, index) => (
-                    <Cell key={entry.name} fill={colors[index % colors.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <EmptyChart message="Cadastre contratos para visualizar a execução." />
-          )}
+          <ContractExecutionChart data={contractChart} />
         </ChartPanel>
       </section>
 
@@ -269,10 +235,163 @@ export default function Dashboard() {
 
 function ChartPanel({ title, children }) {
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
-      <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-600">{title}</h2>
+    <article className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+      <HexPattern />
+      <h2 className="relative z-10 mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-900">{title}</h2>
       {children}
     </article>
+  );
+}
+
+function SupplierVolumeChart({ data }) {
+  if (!data.length) return <EmptyChart message="Cadastre contratos para visualizar o volume." />;
+  const max = Math.max(...data.map((item) => item.value), 1);
+  const ticks = [0, max / 2, max];
+
+  return (
+    <div className="relative z-10 h-[270px] overflow-hidden rounded-md px-1 pb-7 pt-2">
+      <div className="pointer-events-none absolute bottom-8 left-[39%] right-4 top-2 grid grid-cols-2 border-l border-slate-200/80">
+        <span className="border-r border-dashed border-slate-200" />
+        <span className="border-r border-dashed border-slate-200" />
+      </div>
+      <div className="absolute inset-y-4 right-4 w-[48%] rounded-full bg-cyan-100/70 blur-2xl" />
+      <div className="relative z-10 flex h-full flex-col justify-center gap-2.5">
+        {data.map((item, index) => {
+          const width = Math.max((item.value / max) * 100, 8);
+          return (
+            <div key={item.name} className="grid grid-cols-[38%_1fr] items-center gap-2">
+              <p className="truncate text-right text-[11px] font-semibold uppercase text-slate-700" title={item.name}>
+                {compactName(item.name)} ({shortWeight(item.value)})
+              </p>
+              <div className="relative h-5 rounded-r-md bg-slate-100">
+                <div
+                  className="h-full rounded-r-md shadow-[0_4px_9px_rgba(15,23,42,0.18)]"
+                  style={{
+                    width: `${width}%`,
+                    background: `linear-gradient(90deg, ${chartColors[index % chartColors.length]}, #25b7ae)`,
+                  }}
+                />
+                <span
+                  className="absolute top-1/2 -translate-y-1/2 rounded bg-teal-700 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm"
+                  style={{ left: `min(calc(${width}% - 30px), calc(100% - 38px))` }}
+                >
+                  {shortWeight(item.value)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="absolute bottom-0 left-[39%] right-4 flex justify-between text-[11px] font-semibold text-slate-600">
+        {ticks.map((tick) => <span key={tick}>{shortWeight(tick)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function ProductDonutChart({ data }) {
+  if (!data.length) return <EmptyChart message="Cadastre produtos nos contratos para visualizar a distribuição." />;
+
+  const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  if (total <= 0) return <EmptyChart message="Cadastre volumes nos contratos para visualizar a distribuição." />;
+  let current = 0;
+  const segments = data.map((item, index) => {
+    const value = Number(item.value || 0);
+    const percentValue = total > 0 ? value / total : 0;
+    const start = current;
+    const end = Math.min(current + percentValue * 360, 359.99);
+    current = end;
+    return { ...item, start, end, color: chartColors[index % chartColors.length] };
+  }).filter((item) => item.end > item.start);
+
+  return (
+    <div className="relative z-10 grid h-[270px] place-items-center">
+      <div className="relative h-[230px] w-[230px]">
+        <svg viewBox="0 0 240 240" className="h-full w-full drop-shadow-[0_10px_12px_rgba(15,23,42,0.22)]">
+          <defs>
+            <linearGradient id="donutShade" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.18" />
+            </linearGradient>
+          </defs>
+          {segments.map((segment) => (
+            <path key={segment.name} d={donutArc(120, 120, 92, 50, segment.start, segment.end)} fill={segment.color} stroke="#ffffff" strokeWidth="2" />
+          ))}
+          <circle cx="120" cy="120" r="49" fill="#f8fafc" stroke="#d8dee7" strokeWidth="3" />
+          <circle cx="120" cy="120" r="92" fill="url(#donutShade)" opacity="0.28" />
+          <circle cx="120" cy="120" r="58" fill="none" stroke="#eef2f7" strokeWidth="8" opacity="0.9" />
+          <path d="M120 109a12 12 0 1 0 0-24 12 12 0 0 0 0 24Zm-24 40c3-17 14-27 24-27s21 10 24 27" fill="none" stroke="#111827" strokeLinecap="round" strokeWidth="5" />
+        </svg>
+        {segments.map((segment) => {
+          const middle = segment.start + ((segment.end - segment.start) / 2);
+          const pos = polarToCartesian(115, 115, 69, middle);
+          return (
+            <div
+              key={segment.name}
+              className="absolute -translate-x-1/2 -translate-y-1/2 text-center text-[10px] font-extrabold uppercase leading-tight text-white drop-shadow"
+              style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
+            >
+              <span>{compactName(segment.name)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ContractExecutionChart({ data }) {
+  if (!data.length) return <EmptyChart message="Cadastre contratos para visualizar a execução." />;
+
+  return (
+    <div className="relative z-10 h-[270px] pb-7 pt-3">
+      <div className="pointer-events-none absolute bottom-7 left-[18%] right-3 top-0 grid grid-cols-4">
+        {[0, 1, 2, 3].map((tick) => <span key={tick} className="border-l border-dashed border-slate-200" />)}
+        <span className="border-l border-dashed border-slate-200" />
+      </div>
+      <div className="relative z-10 flex h-full flex-col justify-center gap-4">
+        {data.map((item, index) => {
+          const value = Math.max(0, Math.min(Number(item.value || 0), 100));
+          const highlighted = index === 0;
+          return (
+            <div key={item.name} className={`grid grid-cols-[16%_1fr] items-center gap-3 rounded-md py-1 ${highlighted ? 'bg-gradient-to-r from-slate-200/80 to-teal-100/70 pr-2' : ''}`}>
+              <p className="text-xs font-semibold text-slate-700">{item.name}</p>
+              <div className="relative h-6 rounded-full bg-slate-200 shadow-inner ring-1 ring-slate-300/70">
+                <div
+                  className="h-full rounded-full shadow-[0_4px_9px_rgba(15,23,42,0.18)]"
+                  style={{
+                    width: `${Math.max(value, 9)}%`,
+                    background: 'linear-gradient(90deg, #16325f 0%, #0f8d8d 64%, #34c1b3 100%)',
+                  }}
+                />
+                <span
+                  className="absolute top-1/2 -translate-y-1/2 rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-extrabold text-white shadow"
+                  style={{ left: `min(calc(${Math.max(value, 9)}% - 28px), calc(100% - 46px))` }}
+                >
+                  {value}%
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="absolute bottom-0 left-[18%] right-3 flex justify-between text-[11px] font-semibold text-slate-600">
+        {[0, 25, 50, 75, 100].map((tick) => <span key={tick}>{tick}%</span>)}
+      </div>
+    </div>
+  );
+}
+
+function HexPattern() {
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full text-slate-200/70" aria-hidden="true">
+      <defs>
+        <pattern id="hex-pattern" width="44" height="38" patternUnits="userSpaceOnUse" patternTransform="translate(10 2)">
+          <path d="M11 1h22l11 18-11 18H11L0 19 11 1Z" fill="none" stroke="currentColor" strokeWidth="1" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#hex-pattern)" opacity="0.28" />
+    </svg>
   );
 }
 
@@ -291,4 +410,43 @@ function unitCurrency(value, decimals = 4) {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(Number(value || 0));
+}
+
+function compactName(value) {
+  const name = String(value || '-').trim();
+  if (name.length <= 13) return name;
+  return `${name.slice(0, 12).trim()}...`;
+}
+
+function shortWeight(value) {
+  const number = Number(value || 0);
+  if (number >= 1000) {
+    const tons = number / 1000;
+    return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: tons >= 10 ? 0 : 1 }).format(tons)}t`;
+  }
+  return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(number)}kg`;
+}
+
+function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+  return {
+    x: centerX + (radius * Math.cos(angleInRadians)),
+    y: centerY + (radius * Math.sin(angleInRadians)),
+  };
+}
+
+function donutArc(cx, cy, outerRadius, innerRadius, startAngle, endAngle) {
+  const startOuter = polarToCartesian(cx, cy, outerRadius, endAngle);
+  const endOuter = polarToCartesian(cx, cy, outerRadius, startAngle);
+  const startInner = polarToCartesian(cx, cy, innerRadius, startAngle);
+  const endInner = polarToCartesian(cx, cy, innerRadius, endAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+
+  return [
+    'M', startOuter.x, startOuter.y,
+    'A', outerRadius, outerRadius, 0, largeArcFlag, 0, endOuter.x, endOuter.y,
+    'L', startInner.x, startInner.y,
+    'A', innerRadius, innerRadius, 0, largeArcFlag, 1, endInner.x, endInner.y,
+    'Z',
+  ].join(' ');
 }
