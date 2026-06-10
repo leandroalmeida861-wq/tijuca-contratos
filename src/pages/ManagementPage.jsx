@@ -306,7 +306,13 @@ function NotesPage() {
         valor_total: parsed.valor_total || current.valor_total,
         data_recebimento: parsed.data_recebimento || current.data_recebimento,
       }));
-      setXmlInfo(`XML importado: NF ${parsed.numero_nf || 'sem numero'} | ${kg(parsed.quantidade_recebida)} | ${currency(parsed.valor_total)}.`);
+      setXmlInfo([
+        `XML importado: NF ${parsed.numero_nf || 'sem numero'}`,
+        parsed.fornecedor_nome ? `Fornecedor: ${parsed.fornecedor_nome}` : '',
+        parsed.fornecedor_cnpj ? `CNPJ: ${formatCnpj(parsed.fornecedor_cnpj)}` : '',
+        kg(parsed.quantidade_recebida),
+        currency(parsed.valor_total),
+      ].filter(Boolean).join(' | '));
     } catch (err) {
       setError(err.message || 'Nao foi possivel importar o XML.');
     }
@@ -685,8 +691,20 @@ function parseInvoiceXml(xmlText) {
 
   return {
     numero_nf: text('ide nNF', 'infNFe ide nNF'),
+    fornecedor_nome: text('emit xNome', 'NFe infNFe emit xNome'),
+    fornecedor_cnpj: onlyDigits(text('emit CNPJ', 'NFe infNFe emit CNPJ')),
     quantidade_recebida: quantities.reduce((sum, value) => sum + value, 0),
     valor_total: number('ICMSTot vNF', 'total ICMSTot vNF'),
     data_recebimento: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
   };
+}
+
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function formatCnpj(value) {
+  const digits = onlyDigits(value);
+  if (digits.length !== 14) return value || '-';
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
