@@ -98,6 +98,17 @@ export default function Dashboard() {
     return Array.from(grouped, ([name, value]) => ({ name, value }));
   }, [contracts]);
 
+  const contractChart = useMemo(() => (
+    contracts
+      .map((contract) => ({
+        name: contract.numero_contrato,
+        value: Math.round(contract.percentual || 0),
+        fornecedor: contract.fornecedor?.nome || '-',
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  ), [contracts]);
+
   const cards = [
     { label: 'Contratado', value: kg(stats.contratado), icon: ClipboardList },
     { label: 'Recebido', value: kg(stats.recebido), icon: FileSpreadsheet },
@@ -129,7 +140,7 @@ export default function Dashboard() {
         ))}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-2">
+      <section className="grid gap-5 xl:grid-cols-3">
         <ChartPanel title="Volume por fornecedor">
           <ResponsiveContainer width="100%" height={270}>
             <BarChart data={supplierChart} layout="vertical" margin={{ left: 44, right: 22 }}>
@@ -137,7 +148,11 @@ export default function Dashboard() {
               <XAxis type="number" tickFormatter={(value) => `${value / 1000}t`} />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={110} />
               <Tooltip formatter={(value) => kg(value)} />
-              <Bar dataKey="value" fill="#239952" radius={[0, 5, 5, 0]} />
+              <Bar dataKey="value" radius={[0, 5, 5, 0]}>
+                {supplierChart.map((entry, index) => (
+                  <Cell key={entry.name} fill={colors[index % colors.length]} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
@@ -151,6 +166,21 @@ export default function Dashboard() {
               </Pie>
               <Tooltip formatter={(value, name) => [kg(value), name]} />
             </PieChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Execução por contrato">
+          <ResponsiveContainer width="100%" height={270}>
+            <BarChart data={contractChart} margin={{ left: 8, right: 18, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(value) => `${value}%`} domain={[0, 100]} />
+              <Tooltip formatter={(value, name, props) => [`${value}%`, props.payload.fornecedor]} />
+              <Bar dataKey="value" radius={[5, 5, 0, 0]}>
+                {contractChart.map((entry, index) => (
+                  <Cell key={entry.name} fill={colors[index % colors.length]} />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
       </section>

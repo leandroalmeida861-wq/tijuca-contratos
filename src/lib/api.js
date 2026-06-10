@@ -27,7 +27,12 @@ export async function listNotes() {
     .select('*, contrato:contratos(numero_contrato), fornecedor:fornecedores(nome)')
     .order('data_recebimento', { ascending: false });
   if (error) throw error;
-  return data || [];
+  return (data || []).map((note) => ({
+    ...note,
+    valor_unitario: Number(note.quantidade_recebida || 0) > 0
+      ? Number(note.valor_total || 0) / Number(note.quantidade_recebida || 0)
+      : 0,
+  }));
 }
 
 export async function createRow(table, payload) {

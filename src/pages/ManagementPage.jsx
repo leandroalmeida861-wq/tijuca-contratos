@@ -1,7 +1,8 @@
-import { Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { createNote, createRow, deleteRow, listContracts, listNotes, listTable, updateRow } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
+import { exportSimplePdf } from '../lib/pdf.js';
 
 const pageConfig = {
   fornecedores: {
@@ -225,6 +226,7 @@ function NotesPage() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [xmlInfo, setXmlInfo] = useState('');
+  const [reportFilters, setReportFilters] = useState({ contrato_id: '', fornecedor_id: '' });
 
   async function load() {
     const [noteRows, contractRows, supplierRows] = await Promise.all([listNotes(), listContracts(), listTable('fornecedores')]);
@@ -238,6 +240,10 @@ function NotesPage() {
   }, []);
 
   const filtered = filterRows(notes, ['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome'], query);
+  const reportRows = filtered.filter((note) =>
+    (!reportFilters.contrato_id || note.contrato_id === reportFilters.contrato_id)
+    && (!reportFilters.fornecedor_id || note.fornecedor_id === reportFilters.fornecedor_id),
+  );
 
   async function submit(event) {
     event.preventDefault();
@@ -275,8 +281,46 @@ function NotesPage() {
     }
   }
 
+  function exportNotesPdf() {
+    exportSimplePdf({
+      title: 'Tijuca Alimentos - Relatorio de Notas Fiscais',
+      subtitle: 'Notas filtradas por contrato e fornecedor',
+      fileName: 'relatorio-notas-fiscais.pdf',
+      columns: [
+        { key: 'numero_nf', label: 'NF' },
+        { key: 'contrato', label: 'Contrato' },
+        { key: 'fornecedor', label: 'Fornecedor' },
+        { key: 'quantidade', label: 'Quantidade' },
+        { key: 'valor_unitario', label: 'Valor unit.' },
+        { key: 'valor_total', label: 'Valor total' },
+        { key: 'data', label: 'Data' },
+      ],
+      rows: reportRows.map((note) => ({
+        numero_nf: note.numero_nf,
+        contrato: note.contrato?.numero_contrato,
+        fornecedor: note.fornecedor?.nome,
+        quantidade: kg(note.quantidade_recebida),
+        valor_unitario: currency(note.valor_unitario),
+        valor_total: currency(note.valor_total),
+        data: dateBr(note.data_recebimento),
+      })),
+      totals: [
+        { label: 'Notas', value: reportRows.length },
+        { label: 'Quantidade total', value: kg(reportRows.reduce((sum, note) => sum + Number(note.quantidade_recebida || 0), 0)) },
+        { label: 'Valor total', value: currency(reportRows.reduce((sum, note) => sum + Number(note.valor_total || 0), 0)) },
+      ],
+    });
+  }
+
   return (
     <CrudShell title="Notas Fiscais" query={query} setQuery={setQuery} error={error}>
+      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-[1fr_1fr_auto]">
+        <Select label="Relatorio por contrato" value={reportFilters.contrato_id} onChange={(value) => setReportFilters({ ...reportFilters, contrato_id: value })} options={contracts.map((item) => ({ id: item.id, nome: item.numero_contrato }))} />
+        <Select label="Relatorio por fornecedor" value={reportFilters.fornecedor_id} onChange={(value) => setReportFilters({ ...reportFilters, fornecedor_id: value })} options={suppliers} />
+        <button type="button" onClick={exportNotesPdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+          <Download size={17} /> PDF
+        </button>
+      </section>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -302,26 +346,100 @@ function NotesPage() {
           <Save size={17} /> Registrar nota fiscal
         </button>
       </form>
-      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_total', 'data_recebimento']} />
+      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_unitario', 'valor_total', 'data_recebimento']} />
     </CrudShell>
   );
 }
 
 function FinancePage() {
   const [contracts, setContracts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [filters, setFilters] = useState({ fornecedor_id: '', contrato_id: '' });
   useEffect(() => {
-    listContracts().then(setContracts).catch(() => setContracts([]));
+    Promise.all([listContracts(), listTable('fornecedores')])
+      .then(([contractRows, supplierRows]) => {
+        setContracts(contractRows);
+        setSuppliers(supplierRows);
+      })
+      .catch(() => {
+        setContracts([]);
+        setSuppliers([]);
+      });
   }, []);
-  const total = contracts.reduce((sum, item) => sum + Number(item.quantidade_contratada || 0) * Number(item.custo_kg || 0), 0);
-  const received = contracts.reduce((sum, item) => sum + Number(item.quantidade_recebida || 0) * Number(item.custo_kg || 0), 0);
+
+  const filteredContracts = contracts.filter((contract) =>
+    (!filters.fornecedor_id || contract.fornecedor_id === filters.fornecedor_id)
+    && (!filters.contrato_id || contract.id === filters.contrato_id),
+  );
+  const total = filteredContracts.reduce((sum, item) => sum + Number(item.quantidade_contratada || 0) * Number(item.custo_kg || 0), 0);
+  const received = filteredContracts.reduce((sum, item) => sum + Number(item.quantidade_recebida || 0) * Number(item.custo_kg || 0), 0);
+
+  function exportFinancePdf() {
+    exportSimplePdf({
+      title: 'Tijuca Alimentos - Relatorio Financeiro',
+      subtitle: 'Relatorio filtrado por fornecedor e contrato',
+      fileName: 'relatorio-financeiro.pdf',
+      columns: [
+        { key: 'contrato', label: 'Contrato' },
+        { key: 'fornecedor', label: 'Fornecedor' },
+        { key: 'produto', label: 'Produto' },
+        { key: 'contratado', label: 'Contratado' },
+        { key: 'recebido', label: 'Recebido' },
+        { key: 'custo', label: 'Custo KG' },
+        { key: 'valor', label: 'Valor contratado' },
+        { key: 'saldo', label: 'Saldo financeiro' },
+      ],
+      rows: filteredContracts.map((contract) => {
+        const valorContratado = Number(contract.quantidade_contratada || 0) * Number(contract.custo_kg || 0);
+        const valorRecebido = Number(contract.quantidade_recebida || 0) * Number(contract.custo_kg || 0);
+        return {
+          contrato: contract.numero_contrato,
+          fornecedor: contract.fornecedor?.nome,
+          produto: contract.produto?.nome,
+          contratado: kg(contract.quantidade_contratada),
+          recebido: kg(contract.quantidade_recebida),
+          custo: currency(contract.custo_kg),
+          valor: currency(valorContratado),
+          saldo: currency(Math.max(valorContratado - valorRecebido, 0)),
+        };
+      }),
+      totals: [
+        { label: 'Valor contratado', value: currency(total) },
+        { label: 'Valor recebido estimado', value: currency(received) },
+        { label: 'Saldo financeiro', value: currency(Math.max(total - received, 0)) },
+      ],
+    });
+  }
 
   return (
     <CrudShell title="Rel. Financeiro" query="" setQuery={null}>
+      <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-[1fr_1fr_auto]">
+        <Select label="Fornecedor" value={filters.fornecedor_id} onChange={(value) => setFilters({ ...filters, fornecedor_id: value, contrato_id: '' })} options={suppliers} />
+        <Select label="Contrato" value={filters.contrato_id} onChange={(value) => setFilters({ ...filters, contrato_id: value })} options={contracts.filter((contract) => !filters.fornecedor_id || contract.fornecedor_id === filters.fornecedor_id).map((contract) => ({ id: contract.id, nome: contract.numero_contrato }))} />
+        <button type="button" onClick={exportFinancePdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+          <Download size={17} /> PDF
+        </button>
+      </section>
       <section className="grid gap-4 md:grid-cols-3">
         <Metric label="Valor contratado" value={currency(total)} />
         <Metric label="Valor recebido estimado" value={currency(received)} />
         <Metric label="Saldo financeiro" value={currency(Math.max(total - received, 0))} />
       </section>
+      <DataTable rows={filteredContracts.map((contract) => {
+        const valorContratado = Number(contract.quantidade_contratada || 0) * Number(contract.custo_kg || 0);
+        const valorRecebido = Number(contract.quantidade_recebida || 0) * Number(contract.custo_kg || 0);
+        return {
+          id: contract.id,
+          numero_contrato: contract.numero_contrato,
+          fornecedor: contract.fornecedor,
+          produto: contract.produto,
+          quantidade_contratada: contract.quantidade_contratada,
+          quantidade_recebida: contract.quantidade_recebida,
+          custo_kg: contract.custo_kg,
+          valor_contratado: valorContratado,
+          saldo_financeiro: Math.max(valorContratado - valorRecebido, 0),
+        };
+      })} columns={['numero_contrato', 'fornecedor.nome', 'produto.nome', 'quantidade_contratada', 'quantidade_recebida', 'custo_kg', 'valor_contratado', 'saldo_financeiro']} />
     </CrudShell>
   );
 }
@@ -463,7 +581,7 @@ function label(value) {
 
 function formatCell(value, column) {
   if (value === null || value === undefined || value === '') return '-';
-  if (column.includes('valor')) return currency(value);
+  if (column.includes('valor') || column.includes('custo') || column.includes('saldo_financeiro')) return currency(value);
   if (column.includes('quantidade')) return kg(value);
   if (column.includes('data')) return dateBr(value);
   return String(value);
