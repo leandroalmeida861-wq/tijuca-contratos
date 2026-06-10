@@ -14,13 +14,14 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { deleteRow, exportContractsCsv, exportContractsExcel, listContracts, listTable } from '../lib/api.js';
+import { deleteRow, exportContractsCsv, exportContractsExcel, listContracts, listFreights, listTable } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 
 const colors = ['#f59e0b', '#229653', '#0ea5e9', '#6366f1', '#ef4444'];
 
 export default function Dashboard() {
   const [contracts, setContracts] = useState([]);
+  const [freights, setFreights] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,9 +35,10 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      const [contractRows, supplierRows] = await Promise.all([listContracts(), listTable('fornecedores')]);
+      const [contractRows, supplierRows, freightRows] = await Promise.all([listContracts(), listTable('fornecedores'), listFreights()]);
       setContracts(contractRows);
       setSuppliers(supplierRows);
+      setFreights(freightRows);
     } catch (err) {
       setError(err.message || 'Erro ao carregar dashboard.');
     } finally {
@@ -67,7 +69,11 @@ export default function Dashboard() {
   const stats = useMemo(() => {
     const contratado = contracts.reduce((sum, item) => sum + Number(item.quantidade_contratada || 0), 0);
     const recebido = contracts.reduce((sum, item) => sum + Number(item.quantidade_recebida || 0), 0);
-    const custoTotal = contracts.reduce((sum, item) => sum + Number(item.custo_kg || 0) * Number(item.quantidade_contratada || 0), 0);
+    const custoContratos = contracts.reduce((sum, item) => sum + Number(item.custo_kg || 0) * Number(item.quantidade_contratada || 0), 0);
+    const custoFretes = freights
+      .filter((freight) => freight.contrato_id)
+      .reduce((sum, freight) => sum + Number(freight.valor || 0), 0);
+    const custoTotal = custoContratos + custoFretes;
     return {
       contratado,
       recebido,
@@ -78,7 +84,7 @@ export default function Dashboard() {
       vencidos: contracts.filter((item) => item.vencido).length,
       venceEm30: contracts.filter((item) => item.venceEm30).length,
     };
-  }, [contracts, suppliers]);
+  }, [contracts, suppliers, freights]);
 
   const supplierChart = useMemo(() => {
     const grouped = new Map();
@@ -113,7 +119,7 @@ export default function Dashboard() {
     { label: 'Contratado', value: kg(stats.contratado), icon: ClipboardList },
     { label: 'Recebido', value: kg(stats.recebido), icon: FileSpreadsheet },
     { label: 'Saldo', value: kg(stats.saldo), icon: TrendingUp },
-    { label: 'Custo médio', value: `${currency(stats.custoMedio)}/KG`, icon: Package },
+    { label: 'Custo médio c/ frete', value: `${currency(stats.custoMedio)}/KG`, icon: Package },
     { label: 'Contratos ativos', value: stats.ativos, icon: ClipboardList },
     { label: 'Fornecedores', value: stats.fornecedores, icon: Users },
     { label: 'Vencidos', value: stats.vencidos, icon: AlertTriangle },

@@ -35,6 +35,15 @@ export async function listNotes() {
   }));
 }
 
+export async function listFreights() {
+  const { data, error } = await supabase
+    .from('fretes')
+    .select('*, contrato:contratos(id,numero_contrato,fornecedor_id)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 export async function listBackupData() {
   const [fornecedores, fabricas, produtos, contratos, notas_fiscais, documentos, fretes] = await Promise.all([
     listTable('fornecedores'),
@@ -43,7 +52,7 @@ export async function listBackupData() {
     listContracts(),
     listNotes(),
     listTable('documentos'),
-    listTable('fretes'),
+    listFreights(),
   ]);
 
   return {

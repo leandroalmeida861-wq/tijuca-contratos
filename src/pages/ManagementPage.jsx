@@ -1,6 +1,6 @@
 import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createNote, createRow, deleteRow, listContracts, listNotes, listTable, updateRow } from '../lib/api.js';
+import { createNote, createRow, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { exportSimplePdf } from '../lib/pdf.js';
 
@@ -60,6 +60,7 @@ const pageConfig = {
     table: 'fretes',
     search: ['numero_cte', 'transportadora', 'placa'],
     fields: [
+      { name: 'contrato_id', label: 'Contrato vinculado', type: 'select', optionsKey: 'contracts' },
       { name: 'numero_cte', label: 'Número do CTE' },
       { name: 'transportadora', label: 'Transportadora', required: true },
       { name: 'placa', label: 'Placa' },
@@ -67,7 +68,7 @@ const pageConfig = {
       { name: 'valor', label: 'Valor', type: 'number', step: '0.01' },
       { name: 'data_frete', label: 'Data', type: 'date' },
     ],
-    columns: ['numero_cte', 'transportadora', 'placa', 'motorista', 'valor', 'data_frete'],
+    columns: ['contrato.numero_contrato', 'numero_cte', 'transportadora', 'placa', 'motorista', 'valor', 'data_frete'],
   },
 };
 
@@ -80,12 +81,19 @@ export default function ManagementPage({ type }) {
 
 function GenericPage({ config }) {
   const [rows, setRows] = useState([]);
+  const [selectOptions, setSelectOptions] = useState({});
   const [form, setForm] = useState(defaultForm(config.fields));
   const [editingId, setEditingId] = useState(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
 
   async function load() {
+    if (config.table === 'fretes') {
+      const [freightRows, contractRows] = await Promise.all([listFreights(), listContracts()]);
+      setRows(freightRows);
+      setSelectOptions({ contracts: contractRows.map((contract) => ({ id: contract.id, nome: contract.numero_contrato })) });
+      return;
+    }
     setRows(await listTable(config.table));
   }
 
@@ -117,7 +125,7 @@ function GenericPage({ config }) {
 
   return (
     <CrudShell title={config.title} query={query} setQuery={setQuery} error={error}>
-      <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} />
+      <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
       <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={(id) => deleteRow(config.table, id).then(load).catch((err) => setError(err.message))} />
     </CrudShell>
   );
@@ -354,17 +362,20 @@ function NotesPage() {
 
 function FinancePage() {
   const [contracts, setContracts] = useState([]);
+  const [freights, setFreights] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [filters, setFilters] = useState({ fornecedor_id: '', contrato_id: '' });
   useEffect(() => {
-    Promise.all([listContracts(), listTable('fornecedores')])
-      .then(([contractRows, supplierRows]) => {
+    Promise.all([listContracts(), listTable('fornecedores'), listFreights()])
+      .then(([contractRows, supplierRows, freightRows]) => {
         setContracts(contractRows);
         setSuppliers(supplierRows);
+        setFreights(freightRows);
       })
       .catch(() => {
         setContracts([]);
         setSuppliers([]);
+        setFreights([]);
       });
   }, []);
 
@@ -372,8 +383,18 @@ function FinancePage() {
     (!filters.fornecedor_id || contract.fornecedor_id === filters.fornecedor_id)
     && (!filters.contrato_id || contract.id === filters.contrato_id),
   );
+  const filteredContractIds = new Set(filteredContracts.map((contract) => contract.id));
+  const filteredFreights = freights.filter((freight) => filteredContractIds.has(freight.contrato_id));
+  const freightByContract = filteredFreights.reduce((map, freight) => {
+    map.set(freight.contrato_id, (map.get(freight.contrato_id) || 0) + Number(freight.valor || 0));
+    return map;
+  }, new Map());
   const total = filteredContracts.reduce((sum, item) => sum + Number(item.quantidade_contratada || 0) * Number(item.custo_kg || 0), 0);
+  const freightTotal = filteredFreights.reduce((sum, freight) => sum + Number(freight.valor || 0), 0);
+  const totalWithFreight = total + freightTotal;
   const received = filteredContracts.reduce((sum, item) => sum + Number(item.quantidade_recebida || 0) * Number(item.custo_kg || 0), 0);
+  const totalKg = filteredContracts.reduce((sum, item) => sum + Number(item.quantidade_contratada || 0), 0);
+  const averageWithFreight = totalKg > 0 ? totalWithFreight / totalKg : 0;
 
   function exportFinancePdf() {
     exportSimplePdf({
@@ -388,11 +409,14 @@ function FinancePage() {
         { key: 'recebido', label: 'Recebido' },
         { key: 'custo', label: 'Custo KG' },
         { key: 'valor', label: 'Valor contratado' },
+        { key: 'frete', label: 'Frete' },
+        { key: 'total', label: 'Total c/ frete' },
         { key: 'saldo', label: 'Saldo financeiro' },
       ],
       rows: filteredContracts.map((contract) => {
         const valorContratado = Number(contract.quantidade_contratada || 0) * Number(contract.custo_kg || 0);
         const valorRecebido = Number(contract.quantidade_recebida || 0) * Number(contract.custo_kg || 0);
+        const valorFrete = freightByContract.get(contract.id) || 0;
         return {
           contrato: contract.numero_contrato,
           fornecedor: contract.fornecedor?.nome,
@@ -401,11 +425,16 @@ function FinancePage() {
           recebido: kg(contract.quantidade_recebida),
           custo: currency(contract.custo_kg),
           valor: currency(valorContratado),
+          frete: currency(valorFrete),
+          total: currency(valorContratado + valorFrete),
           saldo: currency(Math.max(valorContratado - valorRecebido, 0)),
         };
       }),
       totals: [
         { label: 'Valor contratado', value: currency(total) },
+        { label: 'Frete vinculado', value: currency(freightTotal) },
+        { label: 'Custo total com frete', value: currency(totalWithFreight) },
+        { label: 'Custo medio com frete', value: `${currency(averageWithFreight)}/KG` },
         { label: 'Valor recebido estimado', value: currency(received) },
         { label: 'Saldo financeiro', value: currency(Math.max(total - received, 0)) },
       ],
@@ -421,14 +450,19 @@ function FinancePage() {
           <Download size={17} /> PDF
         </button>
       </section>
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Valor contratado" value={currency(total)} />
-        <Metric label="Valor recebido estimado" value={currency(received)} />
-        <Metric label="Saldo financeiro" value={currency(Math.max(total - received, 0))} />
+        <Metric label="Frete vinculado" value={currency(freightTotal)} />
+        <Metric label="Custo total com frete" value={currency(totalWithFreight)} />
+        <Metric label="Custo médio com frete" value={`${currency(averageWithFreight)}/KG`} />
       </section>
       <DataTable rows={filteredContracts.map((contract) => {
         const valorContratado = Number(contract.quantidade_contratada || 0) * Number(contract.custo_kg || 0);
         const valorRecebido = Number(contract.quantidade_recebida || 0) * Number(contract.custo_kg || 0);
+        const valorFrete = freightByContract.get(contract.id) || 0;
+        const custoMedioComFrete = Number(contract.quantidade_contratada || 0) > 0
+          ? (valorContratado + valorFrete) / Number(contract.quantidade_contratada || 0)
+          : 0;
         return {
           id: contract.id,
           numero_contrato: contract.numero_contrato,
@@ -438,9 +472,12 @@ function FinancePage() {
           quantidade_recebida: contract.quantidade_recebida,
           custo_kg: contract.custo_kg,
           valor_contratado: valorContratado,
+          valor_frete: valorFrete,
+          valor_total_com_frete: valorContratado + valorFrete,
+          custo_medio_com_frete: custoMedioComFrete,
           saldo_financeiro: Math.max(valorContratado - valorRecebido, 0),
         };
-      })} columns={['numero_contrato', 'fornecedor.nome', 'produto.nome', 'quantidade_contratada', 'quantidade_recebida', 'custo_kg', 'valor_contratado', 'saldo_financeiro']} />
+      })} columns={['numero_contrato', 'fornecedor.nome', 'produto.nome', 'quantidade_contratada', 'quantidade_recebida', 'custo_kg', 'valor_frete', 'valor_total_com_frete', 'custo_medio_com_frete', 'saldo_financeiro']} />
     </CrudShell>
   );
 }
@@ -466,11 +503,22 @@ function CrudShell({ title, query, setQuery, error, children }) {
   );
 }
 
-function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit }) {
+function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, selectOptions = {} }) {
   return (
     <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
       {fields.map((field) => (
-        <Input key={field.name} label={field.label} type={field.type} step={field.step} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} />
+        field.type === 'select'
+          ? (
+            <Select
+              key={field.name}
+              label={field.label}
+              value={form[field.name] || ''}
+              onChange={(value) => setForm({ ...form, [field.name]: value })}
+              options={selectOptions[field.optionsKey] || []}
+              required={field.required}
+            />
+          )
+          : <Input key={field.name} label={field.label} type={field.type} step={field.step} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} />
       ))}
       <div className="flex items-end gap-2 xl:col-span-3">
         <button className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700">
