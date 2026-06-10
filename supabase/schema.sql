@@ -67,6 +67,8 @@ create table if not exists public.notas_fiscais (
   numero_nf text not null,
   quantidade_recebida numeric(14, 3) not null default 0,
   valor_total numeric(14, 2) not null default 0,
+  valor_unitario numeric(18, 10),
+  valor_unitario_decimais integer,
   data_recebimento date,
   created_at timestamptz not null default now()
 );

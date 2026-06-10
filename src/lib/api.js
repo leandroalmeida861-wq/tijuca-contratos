@@ -22,16 +22,25 @@ export async function listContracts() {
 }
 
 export async function listNotes() {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('notas_fiscais')
     .select('*, contrato:contratos(numero_contrato), fornecedor:fornecedores(nome)')
     .order('data_recebimento', { ascending: false });
+  if (error && isMissingUnitColumnsError(error)) {
+    const fallback = await supabase
+      .from('notas_fiscais')
+      .select('id,user_id,contrato_id,fornecedor_id,numero_nf,quantidade_recebida,valor_total,data_recebimento,created_at,contrato:contratos(numero_contrato),fornecedor:fornecedores(nome)')
+      .order('data_recebimento', { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) throw error;
   return (data || []).map((note) => ({
     ...note,
-    valor_unitario: Number(note.quantidade_recebida || 0) > 0
+    valor_unitario: note.valor_unitario ?? (Number(note.quantidade_recebida || 0) > 0
       ? Number(note.valor_total || 0) / Number(note.quantidade_recebida || 0)
-      : 0,
+      : 0),
+    valor_unitario_decimais: note.valor_unitario_decimais ?? null,
   }));
 }
 
@@ -85,6 +94,15 @@ export async function deleteRow(table, id) {
 
 export async function createNote(payload) {
   const { data, error } = await supabase.from('notas_fiscais').insert(payload).select().single();
+  if (error && isMissingUnitColumnsError(error)) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.valor_unitario;
+    delete fallbackPayload.valor_unitario_decimais;
+    const { data: fallbackData, error: fallbackError } = await supabase.from('notas_fiscais').insert(fallbackPayload).select().single();
+    if (fallbackError) throw fallbackError;
+    await refreshContractReceived(payload.contrato_id);
+    return fallbackData;
+  }
   if (error) throw error;
   await refreshContractReceived(payload.contrato_id);
   return data;
@@ -186,4 +204,9 @@ function downloadBlob(blob, fileName) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function isMissingUnitColumnsError(error) {
+  const message = String(error?.message || '');
+  return message.includes('valor_unitario') || message.includes('valor_unitario_decimais');
 }

@@ -98,7 +98,7 @@ function GenericPage({ config }) {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(toUserError('carregar-cadastro', err)));
   }, [config.table]);
 
   const filtered = filterRows(rows, config.search, query);
@@ -114,7 +114,7 @@ function GenericPage({ config }) {
       setEditingId(null);
       await load();
     } catch (err) {
-      setError(err.message);
+      setError(toUserError('salvar-cadastro', err));
     }
   }
 
@@ -130,12 +130,60 @@ function GenericPage({ config }) {
       await deleteRow(config.table, id);
       await load();
     } catch (err) {
-      setError(err.message || 'Nao foi possivel excluir o registro.');
+      setError(toUserError('excluir-cadastro', err));
+    }
+  }
+
+  async function importFreightXml(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError('');
+    if (!form.contrato_id) {
+      setError('Selecione o contrato antes de importar o XML do frete. Como corrigir: escolha o número do contrato no campo "Contrato vinculado" e depois clique em "Importar XML".');
+      return;
+    }
+
+    try {
+      const parsed = parseFreightXml(await file.text());
+      const duplicate = rows.some((row) =>
+        normalizeKey(row.numero_cte) === normalizeKey(parsed.numero_cte)
+        && row.contrato_id === form.contrato_id,
+      );
+      if (duplicate) {
+        setError(`O CTE ${parsed.numero_cte || 'sem número'} já foi registrado para este contrato. Como corrigir: confira o contrato selecionado ou exclua o frete antigo antes de importar novamente.`);
+        return;
+      }
+      setForm((current) => ({
+        ...current,
+        numero_cte: parsed.numero_cte || current.numero_cte,
+        transportadora: parsed.transportadora || current.transportadora,
+        valor: parsed.valor || current.valor,
+        data_frete: parsed.data_frete || current.data_frete,
+      }));
+    } catch (err) {
+      setError(toUserError('importar-xml-frete', err));
     }
   }
 
   return (
     <CrudShell title={config.title} query={query} setQuery={setQuery} error={error}>
+      {config.table === 'fretes' && (
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Importar XML do CT-e</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">Selecione o contrato vinculado; o XML preenche CTE, transportadora, valor e data.</p>
+            </div>
+            <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <FileUp size={17} />
+              Importar XML
+              <input type="file" accept=".xml,text/xml,application/xml" onChange={importFreightXml} className="sr-only" />
+            </label>
+          </div>
+        </section>
+      )}
       <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
       <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={removeRow} />
     </CrudShell>
@@ -166,7 +214,7 @@ function ContractsPage() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(toUserError('carregar-contratos', err)));
   }, []);
 
   const filtered = filterRows(contracts, ['numero_contrato', 'fornecedor.nome', 'produto.nome'], query);
@@ -187,7 +235,7 @@ function ContractsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setError(err.message);
+      setError(toUserError('salvar-contrato', err));
     }
   }
 
@@ -228,7 +276,7 @@ function ContractsPage() {
                 <td className="px-4 py-3">{percent(contract.percentual)}</td>
                 <td className="px-4 py-3">{dateBr(contract.data_vencimento)}</td>
                 <td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-bold ring-1 ${statusClass(contract.status_calculado)}`}>{contract.status_calculado}</span></td>
-                <td className="px-4 py-3"><RowActions onEdit={() => { setEditingId(contract.id); setForm(defaultContractForm(contract)); }} onDelete={() => deleteRow('contratos', contract.id).then(load).catch((err) => setError(err.message))} /></td>
+                <td className="px-4 py-3"><RowActions onEdit={() => { setEditingId(contract.id); setForm(defaultContractForm(contract)); }} onDelete={() => deleteRow('contratos', contract.id).then(load).catch((err) => setError(toUserError('excluir-contrato', err)))} /></td>
               </tr>
             ))}
           </tbody>
@@ -242,7 +290,7 @@ function NotesPage() {
   const [notes, setNotes] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [form, setForm] = useState({ numero_nf: '', contrato_id: '', fornecedor_id: '', quantidade_recebida: '', valor_total: '', data_recebimento: '' });
+  const [form, setForm] = useState(defaultNoteForm());
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [xmlInfo, setXmlInfo] = useState('');
@@ -256,7 +304,7 @@ function NotesPage() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err.message));
+    load().catch((err) => setError(toUserError('carregar-notas', err)));
   }, []);
 
   const filtered = filterRows(notes, ['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome'], query);
@@ -268,13 +316,27 @@ function NotesPage() {
   async function submit(event) {
     event.preventDefault();
     setError('');
+    const duplicate = notes.some((note) =>
+      normalizeKey(note.numero_nf) === normalizeKey(form.numero_nf)
+      && note.fornecedor_id === form.fornecedor_id,
+    );
+    if (duplicate) {
+      setError('Esta nota fiscal já foi registrada para este fornecedor. Como corrigir: confira o número da NF e o fornecedor selecionado antes de tentar salvar novamente.');
+      return;
+    }
     try {
-      await createNote({ ...cleanPayload(form), quantidade_recebida: Number(form.quantidade_recebida || 0), valor_total: Number(form.valor_total || 0) });
-      setForm({ numero_nf: '', contrato_id: '', fornecedor_id: '', quantidade_recebida: '', valor_total: '', data_recebimento: '' });
+      await createNote({
+        ...cleanPayload(form),
+        quantidade_recebida: Number(form.quantidade_recebida || 0),
+        valor_total: Number(form.valor_total || 0),
+        valor_unitario: form.valor_unitario === '' ? null : Number(form.valor_unitario || 0),
+        valor_unitario_decimais: form.valor_unitario_decimais === '' ? null : Number(form.valor_unitario_decimais || 0),
+      });
+      setForm(defaultNoteForm());
       setXmlInfo('');
       await load();
     } catch (err) {
-      setError(err.message);
+      setError(toUserError('salvar-nota', err));
     }
   }
 
@@ -285,7 +347,7 @@ function NotesPage() {
       await deleteNote(note);
       await load();
     } catch (err) {
-      setError(err.message || 'Nao foi possivel excluir a nota fiscal.');
+      setError(toUserError('excluir-nota', err));
     }
   }
 
@@ -298,23 +360,44 @@ function NotesPage() {
     setXmlInfo('');
 
     try {
+      if (!form.contrato_id) {
+        setError('Selecione o contrato antes de importar o XML. Como corrigir: escolha o número do contrato no campo "Contrato" e depois clique em "Importar XML".');
+        return;
+      }
       const parsed = parseInvoiceXml(await file.text());
+      const matchedSupplier = findSupplierForXml(parsed, suppliers);
+      const supplierIdForDuplicate = matchedSupplier?.id || form.fornecedor_id;
+      const duplicate = notes.some((note) =>
+        normalizeKey(note.numero_nf) === normalizeKey(parsed.numero_nf)
+        && supplierIdForDuplicate
+        && note.fornecedor_id === supplierIdForDuplicate,
+      );
+      if (duplicate) {
+        const supplierName = matchedSupplier?.nome || suppliers.find((supplier) => supplier.id === form.fornecedor_id)?.nome || 'selecionado';
+        setError(`A NF ${parsed.numero_nf || 'sem número'} já foi importada para o fornecedor ${supplierName}. Como corrigir: exclua a nota antiga se ela estiver errada ou importe uma NF diferente.`);
+        return;
+      }
       setForm((current) => ({
         ...current,
         numero_nf: parsed.numero_nf || current.numero_nf,
+        fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
         quantidade_recebida: parsed.quantidade_recebida || current.quantidade_recebida,
         valor_total: parsed.valor_total || current.valor_total,
+        valor_unitario: parsed.valor_unitario || current.valor_unitario,
+        valor_unitario_decimais: parsed.valor_unitario_decimais || current.valor_unitario_decimais,
         data_recebimento: parsed.data_recebimento || current.data_recebimento,
       }));
       setXmlInfo([
-        `XML importado: NF ${parsed.numero_nf || 'sem numero'}`,
-        parsed.fornecedor_nome ? `Fornecedor: ${parsed.fornecedor_nome}` : '',
+        `XML importado: NF ${parsed.numero_nf || 'sem número'}`,
+        matchedSupplier ? `Fornecedor cadastrado: ${matchedSupplier.nome}` : parsed.fornecedor_nome ? `Fornecedor no XML: ${parsed.fornecedor_nome}` : '',
         parsed.fornecedor_cnpj ? `CNPJ: ${formatCnpj(parsed.fornecedor_cnpj)}` : '',
+        !matchedSupplier ? 'Fornecedor não encontrado no cadastro' : '',
+        parsed.valor_unitario ? `Valor unit.: ${unitCurrency(parsed.valor_unitario, parsed.valor_unitario_decimais)}` : '',
         kg(parsed.quantidade_recebida),
         currency(parsed.valor_total),
       ].filter(Boolean).join(' | '));
     } catch (err) {
-      setError(err.message || 'Nao foi possivel importar o XML.');
+      setError(toUserError('importar-xml-nota', err));
     }
   }
 
@@ -375,7 +458,7 @@ function NotesPage() {
       <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
         <Input label="Número da NF" value={form.numero_nf} onChange={(value) => setForm({ ...form, numero_nf: value })} required />
         <Select label="Contrato" value={form.contrato_id} onChange={(value) => setForm({ ...form, contrato_id: value })} options={contracts.map((item) => ({ id: item.id, nome: item.numero_contrato }))} required />
-        <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => setForm({ ...form, fornecedor_id: value })} options={suppliers} />
+        <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => setForm({ ...form, fornecedor_id: value })} options={suppliers} required />
         <Input label="Quantidade recebida" type="number" value={form.quantidade_recebida} onChange={(value) => setForm({ ...form, quantidade_recebida: value })} required />
         <Input label="Valor total" type="number" step="0.01" value={form.valor_total} onChange={(value) => setForm({ ...form, valor_total: value })} />
         <Input label="Data de recebimento" type="date" value={form.data_recebimento} onChange={(value) => setForm({ ...form, data_recebimento: value })} />
@@ -571,7 +654,7 @@ function DataTable({ rows, columns, onEdit, onDelete }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="border-b border-slate-100 last:border-0">
-              {columns.map((column) => <td key={column} className="px-4 py-3 text-slate-700">{formatCell(getValue(row, column), column)}</td>)}
+              {columns.map((column) => <td key={column} className="px-4 py-3 text-slate-700">{formatCell(getValue(row, column), column, row)}</td>)}
               {(onEdit || onDelete) && <td className="px-4 py-3"><RowActions onEdit={() => onEdit?.(row)} onDelete={() => onDelete?.(row.id, row)} /></td>}
             </tr>
           ))}
@@ -637,6 +720,19 @@ function defaultContractForm(row = {}) {
   };
 }
 
+function defaultNoteForm() {
+  return {
+    numero_nf: '',
+    contrato_id: '',
+    fornecedor_id: '',
+    quantidade_recebida: '',
+    valor_total: '',
+    valor_unitario: '',
+    valor_unitario_decimais: '',
+    data_recebimento: '',
+  };
+}
+
 function filterRows(rows, fields, query) {
   const term = query.toLowerCase().trim();
   if (!term) return rows;
@@ -656,8 +752,9 @@ function label(value) {
   return value.split('.').pop().replace(/_/g, ' ');
 }
 
-function formatCell(value, column) {
+function formatCell(value, column, row = {}) {
   if (value === null || value === undefined || value === '') return '-';
+  if (column.includes('valor_unitario')) return unitCurrency(value, row.valor_unitario_decimais);
   if (column.includes('valor') || column.includes('custo') || column.includes('saldo_financeiro')) return currency(value);
   if (column.includes('quantidade')) return kg(value);
   if (column.includes('data')) return dateBr(value);
@@ -667,7 +764,7 @@ function formatCell(value, column) {
 function parseInvoiceXml(xmlText) {
   const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
   const parserError = xml.querySelector('parsererror');
-  if (parserError) throw new Error('XML invalido. Confira se o arquivo e uma NF-e em XML.');
+  if (parserError) throw new Error('XML inválido. Como corrigir: selecione um arquivo XML original de NF-e ou CT-e, sem abrir e salvar em editor de texto.');
 
   const text = (...selectors) => {
     for (const selector of selectors) {
@@ -682,20 +779,69 @@ function parseInvoiceXml(xmlText) {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
-  const quantities = Array.from(xml.querySelectorAll('det prod')).map((prod) => {
+  const products = Array.from(xml.querySelectorAll('det prod'));
+  if (!products.length) throw new Error('Este XML não parece ser uma NF-e de produto. Como corrigir: importe o XML da nota fiscal de produto na tela Notas Fiscais ou use XML de CT-e na tela Frete.');
+
+  const quantities = products.map((prod) => {
     const raw = prod.querySelector('qCom')?.textContent || prod.querySelector('qTrib')?.textContent || '0';
     const parsed = Number(raw.replace(',', '.'));
     return Number.isFinite(parsed) ? parsed : 0;
   });
+  const unitItems = products.map((prod) => {
+    const quantityText = prod.querySelector('qCom')?.textContent || prod.querySelector('qTrib')?.textContent || '0';
+    const unitText = prod.querySelector('vUnCom')?.textContent || prod.querySelector('vUnTrib')?.textContent || '';
+    const quantity = Number(quantityText.replace(',', '.'));
+    const unit = Number(unitText.replace(',', '.'));
+    return {
+      quantity: Number.isFinite(quantity) ? quantity : 0,
+      unit: Number.isFinite(unit) ? unit : 0,
+      decimals: decimalPlaces(unitText),
+    };
+  });
+  const totalQuantity = quantities.reduce((sum, value) => sum + value, 0);
+  const weightedUnitTotal = unitItems.reduce((sum, item) => sum + item.quantity * item.unit, 0);
   const dateValue = text('ide dhEmi', 'ide dEmi').slice(0, 10);
 
   return {
     numero_nf: text('ide nNF', 'infNFe ide nNF'),
     fornecedor_nome: text('emit xNome', 'NFe infNFe emit xNome'),
     fornecedor_cnpj: onlyDigits(text('emit CNPJ', 'NFe infNFe emit CNPJ')),
-    quantidade_recebida: quantities.reduce((sum, value) => sum + value, 0),
+    quantidade_recebida: totalQuantity,
     valor_total: number('ICMSTot vNF', 'total ICMSTot vNF'),
+    valor_unitario: totalQuantity > 0 ? weightedUnitTotal / totalQuantity : 0,
+    valor_unitario_decimais: Math.max(2, ...unitItems.map((item) => item.decimals)),
     data_recebimento: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
+  };
+}
+
+function parseFreightXml(xmlText) {
+  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const parserError = xml.querySelector('parsererror');
+  if (parserError) throw new Error('XML inválido. Como corrigir: selecione o XML original do CT-e.');
+
+  const text = (...selectors) => {
+    for (const selector of selectors) {
+      const value = xml.querySelector(selector)?.textContent?.trim();
+      if (value) return value;
+    }
+    return '';
+  };
+
+  const number = (...selectors) => {
+    const parsed = Number(text(...selectors).replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const numeroCte = text('ide nCT', 'infCte ide nCT');
+  if (!numeroCte) throw new Error('Não encontrei o número do CT-e neste XML. Como corrigir: confira se o arquivo importado é um CT-e válido.');
+
+  const dateValue = text('ide dhEmi', 'ide dEmi').slice(0, 10);
+  return {
+    numero_cte: numeroCte,
+    transportadora: text('emit xNome', 'infCte emit xNome'),
+    transportadora_cnpj: onlyDigits(text('emit CNPJ', 'infCte emit CNPJ')),
+    valor: number('vPrest vTPrest', 'infCte vPrest vTPrest'),
+    data_frete: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
   };
 }
 
@@ -707,4 +853,81 @@ function formatCnpj(value) {
   const digits = onlyDigits(value);
   if (digits.length !== 14) return value || '-';
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function findSupplierForXml(parsed, suppliers) {
+  const xmlCnpj = onlyDigits(parsed.fornecedor_cnpj);
+  if (xmlCnpj) {
+    const byCnpj = suppliers.find((supplier) => onlyDigits(supplier.cnpj) === xmlCnpj);
+    if (byCnpj) return byCnpj;
+  }
+
+  const xmlName = normalizeKey(parsed.fornecedor_nome);
+  if (!xmlName) return null;
+  return suppliers.find((supplier) => normalizeKey(supplier.nome) === xmlName) || null;
+}
+
+function normalizeKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '')
+    .toLowerCase();
+}
+
+function decimalPlaces(value) {
+  const [, decimals = ''] = String(value || '').replace(',', '.').split('.');
+  return decimals.replace(/0+$/, '').length || (decimals ? decimals.length : 0);
+}
+
+function unitCurrency(value, decimals) {
+  const places = Math.min(Math.max(Number(decimals ?? 4), 2), 10);
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  }).format(Number(value || 0));
+}
+
+function toUserError(context, error) {
+  const raw = String(error?.message || error || '').toLowerCase();
+
+  if (raw.includes('duplicate') || raw.includes('unique')) {
+    return 'Registro duplicado. Como corrigir: confira se este número já foi cadastrado para o mesmo fornecedor ou contrato antes de salvar novamente.';
+  }
+  if (raw.includes('violates foreign key') || raw.includes('foreign key')) {
+    return 'Não foi possível salvar porque há um vínculo inválido. Como corrigir: selecione um contrato, fornecedor, fábrica ou produto que exista no cadastro.';
+  }
+  if (raw.includes('not-null') || raw.includes('null value')) {
+    return 'Faltam campos obrigatórios. Como corrigir: preencha todos os campos marcados como obrigatórios e tente novamente.';
+  }
+  if (raw.includes('permission') || raw.includes('row-level security') || raw.includes('rls')) {
+    return 'Acesso negado pelo banco de dados. Como corrigir: entre com o e-mail autorizado e tente novamente.';
+  }
+  if (raw.includes('schema cache') || raw.includes('does not exist') || raw.includes('could not find')) {
+    return 'O banco de dados ainda não reconheceu uma coluna nova. Como corrigir: aplique o SQL pendente no Supabase e execute o reload do schema.';
+  }
+  if (raw.includes('failed to fetch') || raw.includes('network')) {
+    return 'Falha de conexão com o servidor. Como corrigir: verifique sua internet e tente novamente em alguns segundos.';
+  }
+  if (raw.includes('xml')) {
+    return error?.message || 'Não foi possível ler o XML. Como corrigir: selecione o arquivo XML original da NF-e ou do CT-e.';
+  }
+
+  const fallback = {
+    'carregar-cadastro': 'Não foi possível carregar os dados. Como corrigir: atualize a página e confira sua conexão.',
+    'salvar-cadastro': 'Não foi possível salvar o cadastro. Como corrigir: confira os campos preenchidos e tente novamente.',
+    'excluir-cadastro': 'Não foi possível excluir o registro. Como corrigir: verifique se ele não está vinculado a outro cadastro.',
+    'carregar-contratos': 'Não foi possível carregar os contratos. Como corrigir: atualize a página e tente novamente.',
+    'salvar-contrato': 'Não foi possível salvar o contrato. Como corrigir: confira fornecedor, produto e número do contrato.',
+    'excluir-contrato': 'Não foi possível excluir o contrato. Como corrigir: remova antes notas fiscais ou fretes vinculados.',
+    'carregar-notas': 'Não foi possível carregar as notas fiscais. Como corrigir: atualize a página e tente novamente.',
+    'salvar-nota': 'Não foi possível registrar a nota fiscal. Como corrigir: selecione contrato e fornecedor, confira número, quantidade e valor.',
+    'excluir-nota': 'Não foi possível excluir a nota fiscal. Como corrigir: atualize a página e tente novamente.',
+    'importar-xml-nota': 'Não foi possível importar o XML da NF-e. Como corrigir: selecione o contrato, use o XML original da NF-e e confira se o fornecedor está cadastrado.',
+    'importar-xml-frete': 'Não foi possível importar o XML do CT-e. Como corrigir: selecione o contrato vinculado e use o XML original do CT-e.',
+  };
+
+  return fallback[context] || 'Não foi possível concluir a operação. Como corrigir: confira os dados informados e tente novamente.';
 }
