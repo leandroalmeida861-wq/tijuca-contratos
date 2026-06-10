@@ -295,6 +295,7 @@ function NotesPage() {
   const [error, setError] = useState('');
   const [xmlInfo, setXmlInfo] = useState('');
   const [reportFilters, setReportFilters] = useState({ contrato_id: '', fornecedor_id: '' });
+  const [unitConversion, setUnitConversion] = useState({ origem: '', destino: '', peso_saca: '60' });
 
   async function load() {
     const [noteRows, contractRows, supplierRows] = await Promise.all([listNotes(), listContracts(), listTable('fornecedores')]);
@@ -365,6 +366,7 @@ function NotesPage() {
         return;
       }
       const parsed = parseInvoiceXml(await file.text());
+      const converted = convertInvoiceUnit(parsed, unitConversion);
       const matchedSupplier = findSupplierForXml(parsed, suppliers);
       const supplierIdForDuplicate = matchedSupplier?.id || form.fornecedor_id;
       const duplicate = notes.some((note) =>
@@ -381,10 +383,10 @@ function NotesPage() {
         ...current,
         numero_nf: parsed.numero_nf || current.numero_nf,
         fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
-        quantidade_recebida: parsed.quantidade_recebida || current.quantidade_recebida,
+        quantidade_recebida: converted.quantidade_recebida || current.quantidade_recebida,
         valor_total: parsed.valor_total || current.valor_total,
-        valor_unitario: parsed.valor_unitario || current.valor_unitario,
-        valor_unitario_decimais: parsed.valor_unitario_decimais || current.valor_unitario_decimais,
+        valor_unitario: converted.valor_unitario || current.valor_unitario,
+        valor_unitario_decimais: converted.valor_unitario_decimais || current.valor_unitario_decimais,
         data_recebimento: parsed.data_recebimento || current.data_recebimento,
       }));
       setXmlInfo([
@@ -392,8 +394,9 @@ function NotesPage() {
         matchedSupplier ? `Fornecedor cadastrado: ${matchedSupplier.nome}` : parsed.fornecedor_nome ? `Fornecedor no XML: ${parsed.fornecedor_nome}` : '',
         parsed.fornecedor_cnpj ? `CNPJ: ${formatCnpj(parsed.fornecedor_cnpj)}` : '',
         !matchedSupplier ? 'Fornecedor não encontrado no cadastro' : '',
-        parsed.valor_unitario ? `Valor unit.: ${unitCurrency(parsed.valor_unitario, parsed.valor_unitario_decimais)}` : '',
-        kg(parsed.quantidade_recebida),
+        converted.unidade_aplicada ? `Conversão: ${converted.unidade_aplicada}` : '',
+        converted.valor_unitario ? `Valor unit. ${quantityUnitLabel(converted.unidade_exibicao)}: ${unitCurrency(converted.valor_unitario, converted.valor_unitario_decimais)}` : '',
+        quantityWithUnit(converted.quantidade_recebida, converted.unidade_exibicao),
         currency(parsed.valor_total),
       ].filter(Boolean).join(' | '));
     } catch (err) {
@@ -445,13 +448,44 @@ function NotesPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Importar XML da NF-e</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">Escolha o contrato e o fornecedor no formulario; o XML preenche numero, quantidade, valor e data.</p>
+            <p className="mt-1 text-sm font-medium text-slate-500">Escolha o contrato; o XML preenche fornecedor, número, quantidade, valor e data.</p>
           </div>
           <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
             <FileUp size={17} />
             Importar XML
             <input type="file" accept=".xml,text/xml,application/xml" onChange={importXml} className="sr-only" />
           </label>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_180px]">
+          <Select
+            label="Unidade do XML"
+            value={unitConversion.origem}
+            onChange={(value) => setUnitConversion({ ...unitConversion, origem: value })}
+            options={[
+              { id: '', nome: 'Sem conversão' },
+              { id: 'KG', nome: 'KG' },
+              { id: 'TON', nome: 'Tonelada' },
+              { id: 'SAC', nome: 'Saca' },
+            ]}
+          />
+          <Select
+            label="Converter para"
+            value={unitConversion.destino}
+            onChange={(value) => setUnitConversion({ ...unitConversion, destino: value })}
+            options={[
+              { id: '', nome: 'Sem conversão' },
+              { id: 'KG', nome: 'KG' },
+              { id: 'TON', nome: 'Tonelada' },
+              { id: 'SAC', nome: 'Saca' },
+            ]}
+          />
+          <Input
+            label="KG por saca"
+            type="number"
+            step="0.001"
+            value={unitConversion.peso_saca}
+            onChange={(value) => setUnitConversion({ ...unitConversion, peso_saca: value })}
+          />
         </div>
         {xmlInfo && <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{xmlInfo}</p>}
       </section>
@@ -534,7 +568,7 @@ function FinancePage() {
           produto: contract.produto?.nome,
           contratado: kg(contract.quantidade_contratada),
           recebido: kg(contract.quantidade_recebida),
-          custo: currency(contract.custo_kg),
+          custo: unitCurrency(contract.custo_kg, 4),
           valor: currency(valorContratado),
           frete: currency(valorFrete),
           total: currency(valorContratado + valorFrete),
@@ -545,7 +579,7 @@ function FinancePage() {
         { label: 'Valor contratado', value: currency(total) },
         { label: 'Frete vinculado', value: currency(freightTotal) },
         { label: 'Custo total com frete', value: currency(totalWithFreight) },
-        { label: 'Custo medio com frete', value: `${currency(averageWithFreight)}/KG` },
+        { label: 'Custo medio com frete', value: `${unitCurrency(averageWithFreight, 4)}/KG` },
         { label: 'Valor recebido estimado', value: currency(received) },
         { label: 'Saldo financeiro', value: currency(Math.max(total - received, 0)) },
       ],
@@ -565,7 +599,7 @@ function FinancePage() {
         <Metric label="Valor contratado" value={currency(total)} />
         <Metric label="Frete vinculado" value={currency(freightTotal)} />
         <Metric label="Custo total com frete" value={currency(totalWithFreight)} />
-        <Metric label="Custo médio com frete" value={`${currency(averageWithFreight)}/KG`} />
+        <Metric label="Custo médio com frete" value={`${unitCurrency(averageWithFreight, 4)}/KG`} />
       </section>
       <DataTable rows={filteredContracts.map((contract) => {
         const valorContratado = Number(contract.quantidade_contratada || 0) * Number(contract.custo_kg || 0);
@@ -755,6 +789,7 @@ function label(value) {
 function formatCell(value, column, row = {}) {
   if (value === null || value === undefined || value === '') return '-';
   if (column.includes('valor_unitario')) return unitCurrency(value, row.valor_unitario_decimais);
+  if (column.includes('custo_kg') || column.includes('custo_medio_com_frete')) return unitCurrency(value, 4);
   if (column.includes('valor') || column.includes('custo') || column.includes('saldo_financeiro')) return currency(value);
   if (column.includes('quantidade')) return kg(value);
   if (column.includes('data')) return dateBr(value);
@@ -790,11 +825,13 @@ function parseInvoiceXml(xmlText) {
   const unitItems = products.map((prod) => {
     const quantityText = prod.querySelector('qCom')?.textContent || prod.querySelector('qTrib')?.textContent || '0';
     const unitText = prod.querySelector('vUnCom')?.textContent || prod.querySelector('vUnTrib')?.textContent || '';
+    const unitCode = prod.querySelector('uCom')?.textContent || prod.querySelector('uTrib')?.textContent || '';
     const quantity = Number(quantityText.replace(',', '.'));
     const unit = Number(unitText.replace(',', '.'));
     return {
       quantity: Number.isFinite(quantity) ? quantity : 0,
       unit: Number.isFinite(unit) ? unit : 0,
+      unitCode: unitCode.trim(),
       decimals: decimalPlaces(unitText),
     };
   });
@@ -810,6 +847,7 @@ function parseInvoiceXml(xmlText) {
     valor_total: number('ICMSTot vNF', 'total ICMSTot vNF'),
     valor_unitario: totalQuantity > 0 ? weightedUnitTotal / totalQuantity : 0,
     valor_unitario_decimais: Math.max(2, ...unitItems.map((item) => item.decimals)),
+    unidade_xml: unitItems.find((item) => item.unitCode)?.unitCode || '',
     data_recebimento: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
   };
 }
@@ -843,6 +881,67 @@ function parseFreightXml(xmlText) {
     valor: number('vPrest vTPrest', 'infCte vPrest vTPrest'),
     data_frete: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
   };
+}
+
+function convertInvoiceUnit(parsed, conversion) {
+  const origin = conversion.origem;
+  const target = conversion.destino;
+  if (!origin || !target || origin === target) {
+    return {
+      ...parsed,
+      unidade_aplicada: '',
+      unidade_exibicao: parsed.unidade_xml || origin || target || 'KG',
+    };
+  }
+
+  const sackKg = Number(conversion.peso_saca || 60);
+  if (!Number.isFinite(sackKg) || sackKg <= 0) {
+    throw new Error('Peso da saca inválido. Como corrigir: informe quantos KG tem uma saca antes de importar o XML.');
+  }
+
+  const quantity = Number(parsed.quantidade_recebida || 0);
+  const totalValue = Number(parsed.valor_total || 0);
+  const quantityInKg = toKg(quantity, origin, sackKg);
+  const convertedQuantity = fromKg(quantityInKg, target, sackKg);
+  const convertedUnit = convertedQuantity > 0 ? totalValue / convertedQuantity : 0;
+
+  return {
+    ...parsed,
+    quantidade_recebida: convertedQuantity,
+    valor_unitario: convertedUnit,
+    valor_unitario_decimais: Math.max(Number(parsed.valor_unitario_decimais || 2), 4),
+    unidade_aplicada: `${unitLabel(origin)} para ${unitLabel(target)}`,
+    unidade_exibicao: target,
+  };
+}
+
+function toKg(value, unit, sackKg) {
+  if (unit === 'TON') return value * 1000;
+  if (unit === 'SAC') return value * sackKg;
+  return value;
+}
+
+function fromKg(value, unit, sackKg) {
+  if (unit === 'TON') return value / 1000;
+  if (unit === 'SAC') return value / sackKg;
+  return value;
+}
+
+function unitLabel(unit) {
+  if (unit === 'TON') return 'tonelada';
+  if (unit === 'SAC') return 'saca';
+  if (unit === 'KG') return 'KG';
+  if (unit) return unit;
+  return 'KG';
+}
+
+function quantityUnitLabel(unit) {
+  return unitLabel(unit).toUpperCase();
+}
+
+function quantityWithUnit(value, unit) {
+  const formatted = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(Number(value || 0));
+  return `${formatted} ${quantityUnitLabel(unit)}`;
 }
 
 function onlyDigits(value) {

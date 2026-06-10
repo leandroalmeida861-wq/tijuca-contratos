@@ -119,7 +119,7 @@ export default function Dashboard() {
     { label: 'Contratado', value: kg(stats.contratado), icon: ClipboardList },
     { label: 'Recebido', value: kg(stats.recebido), icon: FileSpreadsheet },
     { label: 'Saldo', value: kg(stats.saldo), icon: TrendingUp },
-    { label: 'Custo médio c/ frete', value: `${currency(stats.custoMedio)}/KG`, icon: Package },
+    { label: 'Custo médio c/ frete', value: `${unitCurrency(stats.custoMedio, 4)}/KG`, icon: Package },
     { label: 'Contratos ativos', value: stats.ativos, icon: ClipboardList },
     { label: 'Fornecedores', value: stats.fornecedores, icon: Users },
     { label: 'Vencidos', value: stats.vencidos, icon: AlertTriangle },
@@ -282,4 +282,13 @@ function EmptyChart({ message }) {
       {message}
     </div>
   );
+}
+
+function unitCurrency(value, decimals = 4) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Number(value || 0));
 }
