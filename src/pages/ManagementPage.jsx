@@ -1,6 +1,6 @@
 import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createNote, createRow, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
+import { createNote, createRow, deleteNote, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { exportSimplePdf } from '../lib/pdf.js';
 
@@ -123,10 +123,21 @@ function GenericPage({ config }) {
     setForm(defaultForm(config.fields, row));
   }
 
+  async function removeRow(id) {
+    if (!window.confirm(`Excluir este registro de ${config.title}?`)) return;
+    setError('');
+    try {
+      await deleteRow(config.table, id);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Nao foi possivel excluir o registro.');
+    }
+  }
+
   return (
     <CrudShell title={config.title} query={query} setQuery={setQuery} error={error}>
       <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
-      <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={(id) => deleteRow(config.table, id).then(load).catch((err) => setError(err.message))} />
+      <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={removeRow} />
     </CrudShell>
   );
 }
@@ -267,6 +278,17 @@ function NotesPage() {
     }
   }
 
+  async function removeNote(note) {
+    if (!window.confirm(`Excluir a nota fiscal ${note.numero_nf}?`)) return;
+    setError('');
+    try {
+      await deleteNote(note);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Nao foi possivel excluir a nota fiscal.');
+    }
+  }
+
   async function importXml(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -355,7 +377,7 @@ function NotesPage() {
           <Save size={17} /> Registrar nota fiscal
         </button>
       </form>
-      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_unitario', 'valor_total', 'data_recebimento']} />
+      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_unitario', 'valor_total', 'data_recebimento']} onDelete={(id, row) => removeNote(row)} />
     </CrudShell>
   );
 }
@@ -544,7 +566,7 @@ function DataTable({ rows, columns, onEdit, onDelete }) {
           {rows.map((row) => (
             <tr key={row.id} className="border-b border-slate-100 last:border-0">
               {columns.map((column) => <td key={column} className="px-4 py-3 text-slate-700">{formatCell(getValue(row, column), column)}</td>)}
-              {(onEdit || onDelete) && <td className="px-4 py-3"><RowActions onEdit={() => onEdit?.(row)} onDelete={() => onDelete?.(row.id)} /></td>}
+              {(onEdit || onDelete) && <td className="px-4 py-3"><RowActions onEdit={() => onEdit?.(row)} onDelete={() => onDelete?.(row.id, row)} /></td>}
             </tr>
           ))}
         </tbody>

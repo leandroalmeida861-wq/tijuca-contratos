@@ -90,6 +90,12 @@ export async function createNote(payload) {
   return data;
 }
 
+export async function deleteNote(note) {
+  const { error } = await supabase.from('notas_fiscais').delete().eq('id', note.id);
+  if (error) throw error;
+  if (note.contrato_id) await refreshContractReceived(note.contrato_id);
+}
+
 export async function refreshContractReceived(contractId) {
   const { data: notes, error: notesError } = await supabase
     .from('notas_fiscais')
