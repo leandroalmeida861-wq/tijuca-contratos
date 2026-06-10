@@ -85,6 +85,7 @@ create table if not exists public.fretes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid(),
   contrato_id uuid references public.contratos(id) on delete set null,
+  numero_cte text,
   transportadora text not null,
   placa text,
   motorista text,

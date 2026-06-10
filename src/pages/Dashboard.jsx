@@ -101,7 +101,7 @@ export default function Dashboard() {
   const contractChart = useMemo(() => (
     contracts
       .map((contract) => ({
-        name: contract.numero_contrato,
+        name: contract.numero_contrato || 'Sem número',
         value: Math.round(contract.percentual || 0),
         fornecedor: contract.fornecedor?.nome || '-',
       }))
@@ -169,19 +169,23 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </ChartPanel>
         <ChartPanel title="Execução por contrato">
-          <ResponsiveContainer width="100%" height={270}>
-            <BarChart data={contractChart} margin={{ left: 8, right: 18, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(value) => `${value}%`} domain={[0, 100]} />
-              <Tooltip formatter={(value, name, props) => [`${value}%`, props.payload.fornecedor]} />
-              <Bar dataKey="value" radius={[5, 5, 0, 0]}>
-                {contractChart.map((entry, index) => (
-                  <Cell key={entry.name} fill={colors[index % colors.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {contractChart.length ? (
+            <ResponsiveContainer width="100%" height={270}>
+              <BarChart data={contractChart} layout="vertical" margin={{ left: 34, right: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" tickFormatter={(value) => `${value}%`} domain={[0, 100]} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={84} />
+                <Tooltip formatter={(value, name, props) => [`${value}%`, props.payload.fornecedor]} />
+                <Bar dataKey="value" minPointSize={4} radius={[0, 5, 5, 0]}>
+                  {contractChart.map((entry, index) => (
+                    <Cell key={entry.name} fill={colors[index % colors.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyChart message="Cadastre contratos para visualizar a execução." />
+          )}
         </ChartPanel>
       </section>
 
@@ -263,5 +267,13 @@ function ChartPanel({ title, children }) {
       <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-600">{title}</h2>
       {children}
     </article>
+  );
+}
+
+function EmptyChart({ message }) {
+  return (
+    <div className="grid h-[270px] place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-semibold text-slate-500">
+      {message}
+    </div>
   );
 }

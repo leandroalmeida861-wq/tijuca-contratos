@@ -58,15 +58,16 @@ const pageConfig = {
   fretes: {
     title: 'Frete',
     table: 'fretes',
-    search: ['transportadora', 'placa'],
+    search: ['numero_cte', 'transportadora', 'placa'],
     fields: [
+      { name: 'numero_cte', label: 'Número do CTE' },
       { name: 'transportadora', label: 'Transportadora', required: true },
       { name: 'placa', label: 'Placa' },
       { name: 'motorista', label: 'Motorista' },
       { name: 'valor', label: 'Valor', type: 'number', step: '0.01' },
       { name: 'data_frete', label: 'Data', type: 'date' },
     ],
-    columns: ['transportadora', 'placa', 'motorista', 'valor', 'data_frete'],
+    columns: ['numero_cte', 'transportadora', 'placa', 'motorista', 'valor', 'data_frete'],
   },
 };
 
