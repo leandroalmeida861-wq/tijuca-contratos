@@ -40,7 +40,7 @@ export default function Login() {
             <Sprout size={24} />
           </div>
           <div>
-            <h1 className="text-lg font-extrabold text-slate-950">TIJUCA ALIMENTOS</h1>
+            <h1 className="text-2xl font-black tracking-wide text-slate-950">AgroFlow</h1>
             <p className="text-sm font-medium text-slate-500">Gestão de contratos</p>
           </div>
         </div>

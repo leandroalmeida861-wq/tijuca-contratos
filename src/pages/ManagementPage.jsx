@@ -283,7 +283,7 @@ function NotesPage() {
 
   function exportNotesPdf() {
     exportSimplePdf({
-      title: 'Tijuca Alimentos - Relatorio de Notas Fiscais',
+      title: 'AgroFlow - Relatorio de Notas Fiscais',
       subtitle: 'Notas filtradas por contrato e fornecedor',
       fileName: 'relatorio-notas-fiscais.pdf',
       columns: [
@@ -376,7 +376,7 @@ function FinancePage() {
 
   function exportFinancePdf() {
     exportSimplePdf({
-      title: 'Tijuca Alimentos - Relatorio Financeiro',
+      title: 'AgroFlow - Relatorio Financeiro',
       subtitle: 'Relatorio filtrado por fornecedor e contrato',
       fileName: 'relatorio-financeiro.pdf',
       columns: [

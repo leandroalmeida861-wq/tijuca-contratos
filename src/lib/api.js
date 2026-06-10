@@ -142,7 +142,7 @@ export function exportContractsCsv(contracts) {
     contract.status_calculado,
   ]);
   const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
-  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'contratos-tijuca.csv');
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'contratos-agroflow.csv');
 }
 
 export function exportContractsExcel(contracts) {
@@ -161,7 +161,7 @@ export function exportContractsExcel(contracts) {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Contratos');
-  XLSX.writeFile(workbook, 'contratos-tijuca.xlsx');
+  XLSX.writeFile(workbook, 'contratos-agroflow.xlsx');
 }
 
 function downloadBlob(blob, fileName) {

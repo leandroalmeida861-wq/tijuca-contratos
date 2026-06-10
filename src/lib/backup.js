@@ -26,7 +26,7 @@ export function exportBackupExcel(data) {
     XLSX.utils.book_append_sheet(workbook, worksheet, table.label.slice(0, 31));
   });
 
-  XLSX.writeFile(workbook, `backup-tijuca-${todayStamp()}.xlsx`);
+  XLSX.writeFile(workbook, `backup-agroflow-${todayStamp()}.xlsx`);
 }
 
 export function exportTableExcel(tableKey, data) {
@@ -35,13 +35,13 @@ export function exportTableExcel(tableKey, data) {
   const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ aviso: 'Nenhum registro encontrado' }]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, table?.label.slice(0, 31) || tableKey);
-  XLSX.writeFile(workbook, `${tableKey}-tijuca-${todayStamp()}.xlsx`);
+  XLSX.writeFile(workbook, `${tableKey}-agroflow-${todayStamp()}.xlsx`);
 }
 
 export function exportTableCsv(tableKey, data) {
   const rows = normalizeRows(tableKey, data?.[tableKey] || []);
   const csv = toCsv(rows);
-  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `${tableKey}-tijuca-${todayStamp()}.csv`);
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `${tableKey}-agroflow-${todayStamp()}.csv`);
 }
 
 export function exportAllCsv(data) {

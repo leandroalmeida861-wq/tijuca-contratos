@@ -4,7 +4,6 @@ import {
   ClipboardList,
   Database,
   FileArchive,
-  FileText,
   Factory,
   Grid2X2,
   LogOut,
@@ -40,8 +39,8 @@ export default function AppLayout() {
             <Sprout size={22} />
           </div>
           <div>
-            <p className="text-sm font-extrabold tracking-wide">TIJUCA ALIMENTOS</p>
-            <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Gestão de contratos</p>
+            <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">Gestão de contratos</p>
           </div>
         </div>
 

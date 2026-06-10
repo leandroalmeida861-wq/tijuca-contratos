@@ -1,4 +1,4 @@
-# Tijuca Alimentos - Gestão de Contratos
+# AgroFlow - Gestão de Contratos
 
 Sistema web em React + Vite + Tailwind CSS + Supabase para gestão de contratos, fornecedores, fábricas, produtos, notas fiscais, fretes, documentos e indicadores financeiros.
 
