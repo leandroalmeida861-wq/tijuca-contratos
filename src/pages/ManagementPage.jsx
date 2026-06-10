@@ -1,4 +1,4 @@
-import { Edit, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { createNote, createRow, deleteRow, listContracts, listNotes, listTable, updateRow } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
@@ -21,14 +21,15 @@ const pageConfig = {
   fabricas: {
     title: 'Fábricas',
     table: 'fabricas',
-    search: ['nome', 'cidade'],
+    search: ['nome', 'cnpj', 'cidade'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
+      { name: 'cnpj', label: 'CNPJ' },
       { name: 'cidade', label: 'Cidade' },
       { name: 'uf', label: 'UF' },
       { name: 'responsavel', label: 'Responsável' },
     ],
-    columns: ['nome', 'cidade', 'uf', 'responsavel'],
+    columns: ['nome', 'cnpj', 'cidade', 'uf', 'responsavel'],
   },
   produtos: {
     title: 'Produtos',
@@ -96,8 +97,9 @@ function GenericPage({ config }) {
     event.preventDefault();
     setError('');
     try {
-      if (editingId) await updateRow(config.table, editingId, cleanPayload(form));
-      else await createRow(config.table, cleanPayload(form));
+      const payload = cleanPayload(form, config.fields.map((field) => field.name));
+      if (editingId) await updateRow(config.table, editingId, payload);
+      else await createRow(config.table, payload);
       setForm(defaultForm(config.fields));
       setEditingId(null);
       await load();
@@ -222,6 +224,7 @@ function NotesPage() {
   const [form, setForm] = useState({ numero_nf: '', contrato_id: '', fornecedor_id: '', quantidade_recebida: '', valor_total: '', data_recebimento: '' });
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
+  const [xmlInfo, setXmlInfo] = useState('');
 
   async function load() {
     const [noteRows, contractRows, supplierRows] = await Promise.all([listNotes(), listContracts(), listTable('fornecedores')]);
@@ -238,17 +241,56 @@ function NotesPage() {
 
   async function submit(event) {
     event.preventDefault();
+    setError('');
     try {
       await createNote({ ...cleanPayload(form), quantidade_recebida: Number(form.quantidade_recebida || 0), valor_total: Number(form.valor_total || 0) });
       setForm({ numero_nf: '', contrato_id: '', fornecedor_id: '', quantidade_recebida: '', valor_total: '', data_recebimento: '' });
+      setXmlInfo('');
       await load();
     } catch (err) {
       setError(err.message);
     }
   }
 
+  async function importXml(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError('');
+    setXmlInfo('');
+
+    try {
+      const parsed = parseInvoiceXml(await file.text());
+      setForm((current) => ({
+        ...current,
+        numero_nf: parsed.numero_nf || current.numero_nf,
+        quantidade_recebida: parsed.quantidade_recebida || current.quantidade_recebida,
+        valor_total: parsed.valor_total || current.valor_total,
+        data_recebimento: parsed.data_recebimento || current.data_recebimento,
+      }));
+      setXmlInfo(`XML importado: NF ${parsed.numero_nf || 'sem numero'} | ${kg(parsed.quantidade_recebida)} | ${currency(parsed.valor_total)}.`);
+    } catch (err) {
+      setError(err.message || 'Nao foi possivel importar o XML.');
+    }
+  }
+
   return (
     <CrudShell title="Notas Fiscais" query={query} setQuery={setQuery} error={error}>
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Importar XML da NF-e</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Escolha o contrato e o fornecedor no formulario; o XML preenche numero, quantidade, valor e data.</p>
+          </div>
+          <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            <FileUp size={17} />
+            Importar XML
+            <input type="file" accept=".xml,text/xml,application/xml" onChange={importXml} className="sr-only" />
+          </label>
+        </div>
+        {xmlInfo && <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{xmlInfo}</p>}
+      </section>
       <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
         <Input label="Número da NF" value={form.numero_nf} onChange={(value) => setForm({ ...form, numero_nf: value })} required />
         <Select label="Contrato" value={form.contrato_id} onChange={(value) => setForm({ ...form, contrato_id: value })} options={contracts.map((item) => ({ id: item.id, nome: item.numero_contrato }))} required />
@@ -410,8 +452,9 @@ function getValue(row, path) {
   return path.split('.').reduce((value, key) => value?.[key], row);
 }
 
-function cleanPayload(payload) {
-  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value === '' ? null : value]));
+function cleanPayload(payload, allowedFields) {
+  const entries = allowedFields ? allowedFields.map((field) => [field, payload[field]]) : Object.entries(payload);
+  return Object.fromEntries(entries.map(([key, value]) => [key, value === '' ? null : value]));
 }
 
 function label(value) {
@@ -424,4 +467,37 @@ function formatCell(value, column) {
   if (column.includes('quantidade')) return kg(value);
   if (column.includes('data')) return dateBr(value);
   return String(value);
+}
+
+function parseInvoiceXml(xmlText) {
+  const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const parserError = xml.querySelector('parsererror');
+  if (parserError) throw new Error('XML invalido. Confira se o arquivo e uma NF-e em XML.');
+
+  const text = (...selectors) => {
+    for (const selector of selectors) {
+      const value = xml.querySelector(selector)?.textContent?.trim();
+      if (value) return value;
+    }
+    return '';
+  };
+
+  const number = (...selectors) => {
+    const parsed = Number(text(...selectors).replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const quantities = Array.from(xml.querySelectorAll('det prod')).map((prod) => {
+    const raw = prod.querySelector('qCom')?.textContent || prod.querySelector('qTrib')?.textContent || '0';
+    const parsed = Number(raw.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+  const dateValue = text('ide dhEmi', 'ide dEmi').slice(0, 10);
+
+  return {
+    numero_nf: text('ide nNF', 'infNFe ide nNF'),
+    quantidade_recebida: quantities.reduce((sum, value) => sum + value, 0),
+    valor_total: number('ICMSTot vNF', 'total ICMSTot vNF'),
+    data_recebimento: /^\d{4}-\d{2}-\d{2}$/.test(dateValue) ? dateValue : '',
+  };
 }

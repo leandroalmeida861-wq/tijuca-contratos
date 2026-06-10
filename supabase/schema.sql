@@ -27,6 +27,7 @@ create table if not exists public.fabricas (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid(),
   nome text not null,
+  cnpj text,
   cidade text,
   uf text,
   responsavel text,
