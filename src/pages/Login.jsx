@@ -1,4 +1,4 @@
-import { Lock, Mail, Sprout } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
@@ -36,9 +36,7 @@ export default function Login() {
     <main className="grid min-h-screen place-items-center bg-slate-100 px-4">
       <section className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-panel">
         <div className="mb-7 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-lg bg-tijuca-500 text-white">
-            <Sprout size={24} />
-          </div>
+          <img src="/agroflow-icon.png" alt="AgroFlow" className="h-12 w-12 rounded-xl object-cover" />
           <div>
             <h1 className="text-2xl font-black tracking-wide text-slate-950">AgroFlow</h1>
             <p className="text-sm font-medium text-slate-500">Gestão de contratos</p>

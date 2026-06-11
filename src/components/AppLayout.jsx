@@ -9,7 +9,6 @@ import {
   LogOut,
   Package,
   Receipt,
-  Sprout,
   Truck,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
@@ -35,9 +34,7 @@ export default function AppLayout() {
     <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_1fr]">
       <aside className="sticky top-0 z-20 flex h-auto flex-col border-r border-slate-800 bg-[#111820] px-3 py-5 text-white lg:h-screen">
         <div className="mb-7 flex items-center gap-3 px-2">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#31bf69]">
-            <Sprout size={22} />
-          </div>
+          <img src="/agroflow-icon.png" alt="AgroFlow" className="h-11 w-11 rounded-xl object-cover" />
           <div>
             <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
             <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">Gestão de contratos</p>
