@@ -1,6 +1,6 @@
 import { BarChart3, FileCheck2, Lock, Mail, ShieldCheck, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
 
 export default function Login() {
@@ -112,6 +112,13 @@ export default function Login() {
                 Criar senha
               </button>
             </div>
+
+            <Link
+              to="/acesso.html"
+              className="mb-5 grid h-11 place-items-center rounded-xl border border-teal-100 bg-teal-50 text-sm font-extrabold text-teal-800 transition hover:border-teal-200 hover:bg-teal-100"
+            >
+              Solicitar acesso ao sistema
+            </Link>
 
             <form onSubmit={handleSubmit} className="grid gap-4">
               <label className="grid gap-2 text-sm font-semibold text-slate-700">
