@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solicitar acesso</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-950">
+    <main class="mx-auto flex min-h-screen w-full max-w-2xl items-center px-5 py-10">
+      <section class="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-300/30 sm:p-8">
+        <div class="text-center">
+          <div class="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-teal-950 text-2xl font-black text-white shadow-md">A</div>
+          <h1 class="mt-6 text-2xl font-black text-slate-950">Solicitar acesso ao sistema</h1>
+          <p class="mt-2 text-sm font-medium leading-6 text-slate-500">Preencha os dados, crie uma senha e aguarde Leandro liberar seu acesso pelo link enviado no e-mail.</p>
+        </div>
+
+        <form name="pedido-acesso" method="POST" action="/login/obrigado.html" data-netlify="true" netlify-honeypot="bot-field" class="mt-8 space-y-5">
+          <input type="hidden" name="form-name" value="pedido-acesso" />
+          <p class="hidden">
+            <label>Nao preencher: <input name="bot-field" /></label>
+          </p>
+
+          <label class="block">
+            <span class="mb-2 block text-sm font-black text-slate-700">Nome do solicitante</span>
+            <input name="nome" required class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+          </label>
+
+          <label class="block">
+            <span class="mb-2 block text-sm font-black text-slate-700">E-mail do solicitante</span>
+            <input type="email" name="email" required class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+          </label>
+
+          <label class="block">
+            <span class="mb-2 block text-sm font-black text-slate-700">Telefone ou WhatsApp</span>
+            <input name="telefone" class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+          </label>
+
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-2 block text-sm font-black text-slate-700">Senha desejada</span>
+              <input type="password" name="senha" required minlength="6" class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+            </label>
+
+            <label class="block">
+              <span class="mb-2 block text-sm font-black text-slate-700">Confirmar senha</span>
+              <input type="password" name="confirmar_senha" required minlength="6" class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+            </label>
+          </div>
+
+          <label class="block">
+            <span class="mb-2 block text-sm font-black text-slate-700">Observacao para liberacao</span>
+            <textarea name="observacao" rows="4" required class="w-full resize-none rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100"></textarea>
+          </label>
+
+          <input type="hidden" name="link_liberacao" />
+          <input type="hidden" name="destinatario" value="leandroalmeida861@gmail.com" />
+          <button type="submit" class="h-12 w-full rounded-lg bg-gradient-to-r from-emerald-700 to-teal-600 text-sm font-black text-white shadow-lg shadow-teal-700/20 transition hover:from-emerald-800 hover:to-teal-700">Enviar pedido de acesso</button>
+        </form>
+
+        <a href="/login/" class="mt-5 block text-center text-sm font-black text-teal-700 hover:text-teal-900">Voltar para entrada</a>
+      </section>
+    </main>
+    <script>
+      const form = document.querySelector('form[name="pedido-acesso"]');
+      form.addEventListener('submit', (event) => {
+        const nome = form.elements.nome.value.trim();
+        const email = form.elements.email.value.trim().toLowerCase();
+        const senha = form.elements.senha.value;
+        const confirmar = form.elements.confirmar_senha.value;
+        if (senha.length < 6) {
+          event.preventDefault();
+          alert('A senha precisa ter pelo menos 6 caracteres.');
+          return;
+        }
+        if (senha !== confirmar) {
+          event.preventDefault();
+          alert('A confirmacao da senha nao confere.');
+          return;
+        }
+        const link = new URL('/login/', window.location.origin);
+        link.searchParams.set('aprovar_acesso', '1');
+        link.searchParams.set('email', email);
+        link.searchParams.set('nome', nome);
+        link.searchParams.set('senha', senha);
+        form.elements.link_liberacao.value = link.toString();
+      });
+    </script>
+  </body>
+</html>
