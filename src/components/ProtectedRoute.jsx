@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
-import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 export default function ProtectedRoute({ children }) {
-  const { loading, user, configured } = useAuth();
+  const { loading, user, authorized, configured } = useAuth();
 
   if (loading) {
     return (
@@ -12,7 +12,7 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (!configured || !user || user.email !== AUTHORIZED_EMAIL) {
+  if (!configured || !user || !authorized) {
     return <Navigate to="/login" replace />;
   }
 
