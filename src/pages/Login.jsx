@@ -13,46 +13,38 @@ const initialAccessForm = {
 };
 
 export default function Login() {
-  const { signIn, requestAccess, createPendingUser, approveAccess, user, authorized, configured } = useAuth();
+  const { signIn, approveLocalAccess, changeApprovedPassword, user, authorized, configured } = useAuth();
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState(AUTHORIZED_EMAIL);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [accessForm, setAccessForm] = useState(initialAccessForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const approvalToken = useMemo(() => new URLSearchParams(window.location.search).get('liberar'), []);
+  const approvalParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const approvalMode = approvalParams.get('aprovar_acesso') === '1';
 
   useEffect(() => {
-    if (!approvalToken) return;
+    if (!approvalMode) return;
 
-    async function approveFromLink() {
-      if (!user) {
-        setMode('login');
-        setMessage('Link de liberacao recebido. Entre com o e-mail administrador para liberar este acesso.');
-        return;
-      }
-
-      if (user.email !== AUTHORIZED_EMAIL) {
-        setMessage('Este link de liberacao so pode ser usado pelo administrador. Saia e entre com o e-mail do Leandro.');
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const result = await approveAccess(approvalToken);
-        setMessage(`Acesso liberado para ${result?.email || 'o solicitante'}. Agora a pessoa pode entrar usando a senha informada no pedido.`);
-        window.history.replaceState({}, '', '/login');
-      } catch (error) {
-        setMessage(error.message || 'Nao foi possivel liberar este acesso.');
-      } finally {
-        setLoading(false);
-      }
+    try {
+      const approved = approveLocalAccess({
+        email: approvalParams.get('email'),
+        name: approvalParams.get('nome'),
+        password: approvalParams.get('senha'),
+      });
+      setMode('login');
+      setEmail(approved.email);
+      setPassword('');
+      setMessage(`Acesso liberado para ${approved.email}. Agora esse usuario pode entrar com a senha cadastrada no pedido.`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (error) {
+      setMode('login');
+      setMessage(error.message || 'Nao foi possivel liberar este acesso.');
     }
+  }, [approvalMode, approvalParams, approveLocalAccess]);
 
-    approveFromLink();
-  }, [approvalToken, approveAccess, user]);
-
-  if (user && authorized && !approvalToken) return <Navigate to="/" replace />;
+  if (user && authorized && !approvalMode) return <Navigate to="/" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -63,6 +55,11 @@ export default function Login() {
 
       if (mode === 'login') {
         await signIn(email, password);
+      } else if (mode === 'reset') {
+        changeApprovedPassword(email, password, confirmPassword);
+        setMode('login');
+        setConfirmPassword('');
+        setMessage('Senha alterada. Agora clique em Entrar no sistema com este e-mail e senha.');
       } else {
         await submitAccessRequest();
       }
@@ -81,9 +78,11 @@ export default function Login() {
       throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
     }
 
-    const result = await requestAccess(accessForm);
-    await createPendingUser(accessForm.email, accessForm.password);
-    const approvalLink = `${window.location.origin}/login?liberar=${result.token}`;
+    const approvalLink = new URL('/login', window.location.origin);
+    approvalLink.searchParams.set('aprovar_acesso', '1');
+    approvalLink.searchParams.set('email', accessForm.email.trim().toLowerCase());
+    approvalLink.searchParams.set('nome', accessForm.nome.trim());
+    approvalLink.searchParams.set('senha', accessForm.password);
 
     submitNetlifyAccessEmail({
       nome: accessForm.nome,
@@ -92,8 +91,8 @@ export default function Login() {
       observacao: accessForm.observacao,
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
-      link_liberacao: approvalLink,
-      status_senha: 'Senha criada pelo solicitante no pedido de acesso. Por seguranca, a senha nao e enviada por e-mail.',
+      link_liberacao: approvalLink.toString(),
+      status_senha: 'Senha vai no link de aprovacao conforme fluxo localStorage do AgroFlow. Nao usa banco externo para liberar usuario.',
     });
 
     setAccessForm(initialAccessForm);
@@ -115,7 +114,9 @@ export default function Login() {
               <img src="/agroflow-icon.png" alt="AgroFlow" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-sm" />
               <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{mode === 'request' ? 'Solicitar acesso' : 'Bem-vindo de volta'}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
-                {mode === 'request'
+                {mode === 'reset'
+                  ? 'Altere a senha de um usuario que ja foi liberado neste navegador.'
+                  : mode === 'request'
                   ? 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.'
                   : 'Acesse sua area segura para controlar contratos e relatorios.'}
               </p>
@@ -129,6 +130,8 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="grid gap-4">
               {mode === 'request' ? (
                 <AccessRequestFields form={accessForm} update={updateAccessForm} />
+              ) : mode === 'reset' ? (
+                <ResetFields email={email} setEmail={setEmail} password={password} setPassword={setPassword} confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} />
               ) : (
                 <LoginFields mode={mode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} />
               )}
@@ -147,6 +150,13 @@ export default function Login() {
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
               Novo usuario escolhe a senha em Solicitar e so consegue entrar depois da liberacao.
             </p>
+            <button
+              type="button"
+              onClick={() => { setMode('reset'); setMessage(''); }}
+              className="mt-3 w-full text-center text-xs font-black text-teal-700 transition hover:text-teal-900"
+            >
+              Alterar senha de usuario liberado
+            </button>
           </section>
         </aside>
       </section>
@@ -250,6 +260,45 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
   );
 }
 
+function ResetFields({ email, setEmail, password, setPassword, confirmPassword, setConfirmPassword }) {
+  return (
+    <>
+      <Field label="E-mail liberado" icon={Mail}>
+        <input
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="email"
+          autoComplete="email"
+          required
+        />
+      </Field>
+      <Field label="Nova senha" icon={Lock}>
+        <input
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+      <Field label="Confirmar nova senha" icon={Lock}>
+        <input
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+    </>
+  );
+}
+
 function AccessRequestFields({ form, update }) {
   return (
     <>
@@ -317,6 +366,7 @@ function LoginMetric({ value, label }) {
 
 function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
+  if (mode === 'reset') return 'Alterar senha';
   return 'Enviar pedido de acesso';
 }
 

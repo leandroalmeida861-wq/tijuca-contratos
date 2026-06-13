@@ -3,127 +3,125 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 
 export const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
 
+const USERS_KEY = 'agroflow_contratos_usuarios_liberados_v1';
+const SESSION_KEY = 'agroflow_contratos_sessao_local_v1';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
+  const [localUser, setLocalUser] = useState(null);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const savedLocalUser = getLocalSession();
+    setLocalUser(savedLocalUser);
+
     if (!isSupabaseConfigured) {
+      setAuthorized(Boolean(savedLocalUser));
       setLoading(false);
       return undefined;
     }
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setAuthorized(await checkAuthorization(data.session?.user?.email));
+      setAuthorized(isAuthorized(data.session?.user?.email) || Boolean(savedLocalUser));
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setAuthorized(await checkAuthorization(nextSession?.user?.email));
+      setAuthorized(isAuthorized(nextSession?.user?.email) || Boolean(getLocalSession()));
       setLoading(false);
     });
 
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  async function checkAuthorization(email) {
-    const normalized = normalizeEmail(email);
-    if (!normalized) return false;
-    if (normalized === AUTHORIZED_EMAIL) return true;
-
-    try {
-      const { data, error } = await supabase.rpc('agroflow_email_liberado', { check_email: normalized });
-      if (error) throw error;
-      return Boolean(data);
-    } catch {
-      return false;
-    }
-  }
-
   async function signIn(email, password) {
     const normalized = normalizeEmail(email);
-    if (!await checkAuthorization(normalized)) {
+    const savedUser = getApprovedUser(normalized);
+
+    if (savedUser) {
+      if (!password) throw new Error('Digite a senha para entrar.');
+      if (savedUser.password !== password) throw new Error('Senha incorreta para este e-mail.');
+      const nextLocalUser = { email: normalized, name: savedUser.name || 'Usuario autorizado' };
+      saveLocalSession(nextLocalUser);
+      setLocalUser(nextLocalUser);
+      setAuthorized(true);
+      return;
+    }
+
+    if (normalized !== AUTHORIZED_EMAIL) {
       throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde a liberacao pelo administrador.');
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
-    if (error) throw error;
-
-    if (!await checkAuthorization(normalized)) {
-      await supabase.auth.signOut();
-      throw new Error('Acesso bloqueado. Como corrigir: solicite liberacao ao administrador.');
-    }
-  }
-
-  async function signUp(email, password) {
-    const normalized = normalizeEmail(email);
-    if (!await checkAuthorization(normalized)) {
-      throw new Error('E-mail nao liberado. Como corrigir: solicite acesso; a senha deve ser criada dentro do pedido de acesso.');
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
+      if (error) throw error;
+      setAuthorized(true);
+      return;
     }
 
-    const { error } = await supabase.auth.signUp({ email: normalized, password });
-    if (error) throw error;
-    await supabase.auth.signOut();
+    throw new Error('Senha do administrador ainda nao cadastrada neste navegador. Clique em Alterar senha de usuario liberado e defina sua senha.');
   }
 
-  async function createPendingUser(email, password) {
+  function approveLocalAccess({ email, name, password }) {
     const normalized = normalizeEmail(email);
-    if (!normalized) throw new Error('Informe o e-mail do solicitante.');
+    if (!normalized || !password) throw new Error('Link de liberacao incompleto. Confira o e-mail do pedido de acesso.');
 
-    const { error } = await supabase.auth.signUp({ email: normalized, password });
-    if (error && !/already|registered|exists|user/i.test(error.message || '')) throw error;
+    const users = getApprovedUsers();
+    users[normalized] = {
+      ...(users[normalized] || {}),
+      email: normalized,
+      name: name || users[normalized]?.name || 'Usuario autorizado',
+      password,
+      approvedBy: AUTHORIZED_EMAIL,
+      approvedAt: new Date().toISOString(),
+    };
+    saveApprovedUsers(users);
+    return users[normalized];
   }
 
-  async function requestAccess({ nome, email, telefone, observacao }) {
+  function changeApprovedPassword(email, password, confirmPassword) {
     const normalized = normalizeEmail(email);
-    if (!nome?.trim()) throw new Error('Informe o nome do solicitante.');
-    if (!normalized) throw new Error('Informe o e-mail do solicitante.');
+    if (!normalized) throw new Error('Informe o e-mail do usuario liberado.');
+    if (!isAuthorized(normalized)) throw new Error('Este e-mail ainda nao foi liberado. Solicite acesso antes de alterar a senha.');
+    if (password.length < 6) throw new Error('Crie uma senha com pelo menos 6 caracteres.');
+    if (password !== confirmPassword) throw new Error('A confirmacao da senha nao confere.');
 
-    const { data, error } = await supabase.rpc('agroflow_solicitar_acesso', {
-      p_email: normalized,
-      p_nome: nome.trim(),
-      p_observacao: observacao?.trim() || '',
-      p_telefone: telefone?.trim() || '',
-    });
-    if (error) throw error;
-    return Array.isArray(data) ? data[0] : data;
-  }
-
-  async function approveAccess(token) {
-    if (!token) throw new Error('Link de liberacao invalido.');
-    if (normalizeEmail(session?.user?.email) !== AUTHORIZED_EMAIL) {
-      throw new Error('Entre com o e-mail administrador para liberar este acesso.');
-    }
-
-    const { data, error } = await supabase.rpc('agroflow_liberar_acesso', { p_token: token });
-    if (error) throw error;
-    return Array.isArray(data) ? data[0] : data;
+    const users = getApprovedUsers();
+    users[normalized] = {
+      ...(users[normalized] || {}),
+      email: normalized,
+      name: users[normalized]?.name || (normalized === AUTHORIZED_EMAIL ? 'Leandro Almeida' : 'Usuario autorizado'),
+      password,
+      updatedAt: new Date().toISOString(),
+    };
+    saveApprovedUsers(users);
+    return users[normalized];
   }
 
   async function signOut() {
+    clearLocalSession();
+    setLocalUser(null);
+    setAuthorized(false);
     if (supabase) await supabase.auth.signOut();
   }
 
   const value = useMemo(
     () => ({
       session,
-      user: session?.user || null,
+      user: session?.user || localUser,
       authorized,
       loading,
       signIn,
-      signUp,
-      createPendingUser,
-      requestAccess,
-      approveAccess,
+      approveLocalAccess,
+      changeApprovedPassword,
       signOut,
-      configured: isSupabaseConfigured,
+      configured: true,
     }),
-    [session, authorized, loading],
+    [session, localUser, authorized, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -133,6 +131,43 @@ export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth deve ser usado dentro de AuthProvider');
   return context;
+}
+
+function isAuthorized(email) {
+  const normalized = normalizeEmail(email);
+  return normalized === AUTHORIZED_EMAIL || Boolean(getApprovedUser(normalized));
+}
+
+function getApprovedUser(email) {
+  return getApprovedUsers()[normalizeEmail(email)];
+}
+
+function getApprovedUsers() {
+  try {
+    return JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveApprovedUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function getLocalSession() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalSession(user) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+}
+
+function clearLocalSession() {
+  localStorage.removeItem(SESSION_KEY);
 }
 
 function normalizeEmail(email) {
