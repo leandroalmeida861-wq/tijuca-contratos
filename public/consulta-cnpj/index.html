@@ -375,7 +375,19 @@
         const [newPassword, setNewPassword] = useState('');
         const [confirmPassword, setConfirmPassword] = useState('');
 
-        function handleAccess(event) {
+        async function sendAdminRequest(fields) {
+          await fetch('https://chipper-ganache-d099b1.netlify.app/obrigado.html', {
+            method: 'POST',
+            body: new URLSearchParams({
+              'form-name': 'pedido-acesso',
+              destinatario: AUTH_EMAIL,
+              ...fields
+            }),
+            mode: 'no-cors'
+          });
+        }
+
+        async function handleAccess(event) {
           event.preventDefault();
           setAuthMessage('');
           const email = normalizeEmail(authEmail);
@@ -399,6 +411,36 @@
             }
             if (newPassword !== confirmPassword) {
               setAuthMessage('A confirmacao da senha nao confere.');
+              return;
+            }
+            if (isReset) {
+              const resetName = requestName.trim() || existing?.name || 'Usuario autorizado';
+              const link = new URL('/consulta-cnpj/', window.location.origin);
+              link.searchParams.set('aprovar_senha', '1');
+              link.searchParams.set('email', email);
+              link.searchParams.set('nome', resetName);
+              link.searchParams.set('senha', newPassword);
+              try {
+                await sendAdminRequest({
+                  nome: resetName,
+                  email,
+                  telefone: '',
+                  senha: newPassword,
+                  observacao: requestNote || 'Solicitacao de alteracao de senha.',
+                  link_liberacao: link.toString(),
+                  tipo_solicitacao: 'Alteracao de senha',
+                  instrucao: 'Clique no Link Liberacao para autorizar a troca de senha deste usuario. A senha nova so passa a valer depois dessa autorizacao.'
+                });
+                setAuthMode('login');
+                setAuthPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setRequestName('');
+                setRequestNote('');
+                setAuthMessage('Pedido de alteracao de senha enviado ao administrador. A senha nova so vai funcionar depois da aprovacao pelo link recebido no e-mail.');
+              } catch (error) {
+                setAuthMessage('Nao foi possivel enviar o pedido de alteracao de senha. Confira sua internet e tente novamente.');
+              }
               return;
             }
             const currentUser = existing || {};
@@ -501,7 +543,7 @@
                     <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-2xl bg-teal-950 shadow-md">
                       <img src="/consulta-cnpj/agroflow-logo.png" alt="AgroFlow" className="h-full w-full object-cover" />
                     </div>
-                    <h2 className="mt-6 text-2xl font-black text-slate-950">{isCreate ? 'Criar senha de acesso' : isReset ? 'Alterar senha' : 'Bem-vindo de volta'}</h2>
+                    <h2 className="mt-6 text-2xl font-black text-slate-950">{isCreate ? 'Criar senha de acesso' : isReset ? 'Solicitar alteracao de senha' : 'Bem-vindo de volta'}</h2>
                     <p className="mt-2 text-sm font-medium leading-6 text-slate-500">Acesse sua area segura para consultar cadastros, inscricoes e relatorios.</p>
                   </div>
 
@@ -548,7 +590,7 @@
                   </div>
 
                   <button type="submit" className="mt-6 h-12 w-full rounded-lg bg-gradient-to-r from-emerald-700 to-teal-600 text-sm font-black text-white shadow-lg shadow-teal-700/20 transition hover:from-emerald-800 hover:to-teal-700">
-                    {isCreate ? 'Criar senha e liberar acesso' : isReset ? 'Alterar senha' : 'Entrar no sistema'}
+                    {isCreate ? 'Criar senha e liberar acesso' : isReset ? 'Solicitar alteracao de senha' : 'Entrar no sistema'}
                   </button>
 
                   {authMessage && (
@@ -558,7 +600,7 @@
                   )}
 
                   <div className="mt-6 flex flex-col items-center gap-3 text-center text-xs font-semibold leading-5 text-slate-500">
-                    <button type="button" onClick={() => { setAuthMode('reset'); setAuthMessage(''); }} className="font-black text-teal-700 hover:text-teal-900">Alterar senha de usuario liberado</button>
+                    <button type="button" onClick={() => { setAuthMode('reset'); setAuthMessage(''); }} className="font-black text-teal-700 hover:text-teal-900">Solicitar alteracao de senha</button>
                     <p>Sistema exclusivo para usuario autorizado. Use sempre sair ao finalizar em computador compartilhado.</p>
                   </div>
                 </form>
@@ -838,7 +880,9 @@
 
         useEffect(() => {
           const params = new URLSearchParams(window.location.search);
-          if (params.get('aprovar_acesso') !== '1') return;
+          const isApprovingAccess = params.get('aprovar_acesso') === '1';
+          const isApprovingPassword = params.get('aprovar_senha') === '1';
+          if (!isApprovingAccess && !isApprovingPassword) return;
           const approvedEmail = normalizeEmail(params.get('email'));
           const approvedPassword = params.get('senha') || '';
           const approvedName = params.get('nome') || 'Usuario autorizado';
@@ -847,17 +891,20 @@
             return;
           }
           saveUser({
+            ...(getUser(approvedEmail) || {}),
             name: approvedName,
             email: approvedEmail,
             password: approvedPassword,
-            note: 'Liberado por link de aprovacao enviado ao administrador.',
+            note: isApprovingPassword ? 'Senha alterada por link aprovado pelo administrador.' : 'Liberado por link de aprovacao enviado ao administrador.',
             approvedBy: AUTH_EMAIL,
             createdAt: new Date().toISOString()
           });
           setAuthMode('login');
           setAuthEmail(approvedEmail);
           setAuthPassword('');
-          setAuthMessage('Acesso liberado para ' + approvedEmail + '. Agora esse usuario pode entrar com a senha cadastrada no pedido.');
+          setAuthMessage(isApprovingPassword
+            ? 'Senha alterada para ' + approvedEmail + '. Agora esse usuario pode entrar com a nova senha aprovada.'
+            : 'Acesso liberado para ' + approvedEmail + '. Agora esse usuario pode entrar com a senha cadastrada no pedido.');
           window.history.replaceState({}, document.title, window.location.pathname);
         }, []);
 
