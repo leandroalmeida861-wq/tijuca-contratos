@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test:access": "node scripts/test-access-flow.mjs"
+    "test:access": "node scripts/test-access-flow.mjs",
+    "test:backup": "node scripts/test-backup-import.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
