@@ -436,7 +436,7 @@
             setAuthMessage('Senha incorreta para este e-mail.');
             return;
           }
-          onLogin();
+          onLogin(email);
         }
 
         return (
@@ -822,6 +822,7 @@
 
       function App() {
         const [isAuthenticated, setIsAuthenticated] = useState(false);
+        const [currentUserEmail, setCurrentUserEmail] = useState('');
         const [authMode, setAuthMode] = useState('login');
         const [authEmail, setAuthEmail] = useState(AUTH_EMAIL);
         const [authPassword, setAuthPassword] = useState('');
@@ -911,7 +912,10 @@
               setAuthPassword={setAuthPassword}
               authMessage={authMessage}
               setAuthMessage={setAuthMessage}
-              onLogin={() => setIsAuthenticated(true)}
+              onLogin={(email) => {
+                setCurrentUserEmail(email);
+                setIsAuthenticated(true);
+              }}
             />
           );
         }
@@ -927,8 +931,8 @@
                     <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">Gere um relatorio executivo corporativo com leitura contabil, societaria e operacional a partir dos dados publicos do CNPJ.</p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <span className="rounded-md bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700">{AUTH_EMAIL}</span>
-                    <button type="button" onClick={() => { setIsAuthenticated(false); setAuthPassword(''); }} className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-100">Sair</button>
+                    <span className="rounded-md bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700">{currentUserEmail || authEmail}</span>
+                    <button type="button" onClick={() => { setIsAuthenticated(false); setCurrentUserEmail(''); setAuthPassword(''); }} className="rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-100">Sair</button>
                   </div>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
