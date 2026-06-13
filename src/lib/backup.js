@@ -50,7 +50,85 @@ export function exportAllCsv(data) {
   });
 }
 
-export { backupTables };
+export async function parseBackupFile(file, tableKey = '') {
+  if (!file) throw new Error('Selecione um arquivo de backup para importar.');
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'xlsx' || extension === 'xls') return parseExcelBackup(await file.arrayBuffer());
+  if (extension === 'csv') {
+    if (!tableKey) throw new Error('Escolha a área do CSV antes de importar. Como corrigir: selecione fornecedores, contratos, notas fiscais ou outra área no campo acima.');
+    return { [tableKey]: parseCsv(await file.text()) };
+  }
+
+  throw new Error('Formato de arquivo não aceito. Como corrigir: use um backup em Excel (.xlsx) ou CSV (.csv).');
+}
+
+export { backupTables, normalizeRows };
+
+function parseExcelBackup(arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  const result = {};
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const table = backupTables.find((item) => normalizeSheetName(item.label) === normalizeSheetName(sheetName)
+      || normalizeSheetName(item.key) === normalizeSheetName(sheetName));
+    if (!table) return;
+
+    result[table.key] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+  });
+
+  if (!Object.keys(result).length) {
+    throw new Error('Não encontrei abas válidas no Excel. Como corrigir: importe o arquivo gerado pelo Backup geral do AgroFlow.');
+  }
+
+  return result;
+}
+
+function parseCsv(csv) {
+  const rows = csv.split(/\r?\n/).filter((line) => line.trim());
+  if (!rows.length) return [];
+  const separator = rows[0].includes(';') ? ';' : ',';
+  const headers = splitCsvLine(rows[0], separator).map((header) => header.replace(/^\uFEFF/, '').trim());
+
+  return rows.slice(1).map((line) => {
+    const values = splitCsvLine(line, separator);
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']));
+  });
+}
+
+function splitCsvLine(line, separator) {
+  const cells = [];
+  let current = '';
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === separator && !quoted) {
+      cells.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  cells.push(current);
+  return cells;
+}
+
+function normalizeSheetName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
 
 function normalizeRows(tableKey, rows) {
   return rows.map((row) => {
