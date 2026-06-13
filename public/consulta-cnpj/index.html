@@ -424,7 +424,15 @@
             return;
           }
           const savedUser = getUser(email);
-          if (savedUser && savedUser.password !== authPassword) {
+          if (!savedUser?.password) {
+            if (email === AUTH_EMAIL) {
+              setAuthMessage('Senha do administrador ainda nao cadastrada neste navegador. Clique em Alterar senha de usuario liberado e defina sua senha antes de entrar.');
+            } else {
+              setAuthMessage('Este usuario ainda nao tem senha cadastrada. Use o link de liberacao enviado ao administrador ou solicite acesso novamente.');
+            }
+            return;
+          }
+          if (savedUser.password !== authPassword) {
             setAuthMessage('Senha incorreta para este e-mail.');
             return;
           }
