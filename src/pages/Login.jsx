@@ -7,11 +7,13 @@ const initialAccessForm = {
   nome: '',
   email: '',
   telefone: '',
+  password: '',
+  confirmPassword: '',
   observacao: '',
 };
 
 export default function Login() {
-  const { signIn, signUp, requestAccess, approveAccess, user, authorized, configured } = useAuth();
+  const { signIn, requestAccess, createPendingUser, approveAccess, user, authorized, configured } = useAuth();
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState(AUTHORIZED_EMAIL);
   const [password, setPassword] = useState('');
@@ -38,7 +40,7 @@ export default function Login() {
       setLoading(true);
       try {
         const result = await approveAccess(approvalToken);
-        setMessage(`Acesso liberado para ${result?.email || 'o solicitante'}. Agora a pessoa pode criar a senha na aba Criar senha.`);
+        setMessage(`Acesso liberado para ${result?.email || 'o solicitante'}. Agora a pessoa pode entrar usando a senha informada no pedido.`);
         window.history.replaceState({}, '', '/login');
       } catch (error) {
         setMessage(error.message || 'Nao foi possivel liberar este acesso.');
@@ -61,11 +63,6 @@ export default function Login() {
 
       if (mode === 'login') {
         await signIn(email, password);
-      } else if (mode === 'signup') {
-        await signUp(email, password);
-        setMode('login');
-        setPassword('');
-        setMessage('Senha criada. Se a confirmacao por e-mail estiver ativa no Supabase, confirme o e-mail antes de entrar.');
       } else {
         await submitAccessRequest();
       }
@@ -77,7 +74,15 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
+    if (accessForm.password.length < 6) {
+      throw new Error('A senha desejada deve ter pelo menos 6 caracteres.');
+    }
+    if (accessForm.password !== accessForm.confirmPassword) {
+      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
+    }
+
     const result = await requestAccess(accessForm);
+    await createPendingUser(accessForm.email, accessForm.password);
     const approvalLink = `${window.location.origin}/login?liberar=${result.token}`;
 
     submitNetlifyAccessEmail({
@@ -88,7 +93,11 @@ export default function Login() {
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: approvalLink,
+      status_senha: 'Senha criada pelo solicitante no pedido de acesso. Por seguranca, a senha nao e enviada por e-mail.',
     });
+
+    setAccessForm(initialAccessForm);
+    setMessage('Pedido registrado e senha criada. O administrador recebera o link de liberacao; depois da liberacao, o usuario ja podera entrar com essa senha.');
   }
 
   function updateAccessForm(field, value) {
@@ -112,9 +121,8 @@ export default function Login() {
               </p>
             </div>
 
-            <div className="mb-5 grid grid-cols-3 rounded-xl bg-slate-100 p-1">
+            <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
               <ModeButton active={mode === 'login'} onClick={() => setMode('login')}>Entrar</ModeButton>
-              <ModeButton active={mode === 'signup'} onClick={() => setMode('signup')}>Criar senha</ModeButton>
               <ModeButton active={mode === 'request'} onClick={() => setMode('request')}>Solicitar</ModeButton>
             </div>
 
@@ -137,7 +145,7 @@ export default function Login() {
             {message && <p className="mt-4 rounded-xl bg-slate-100 p-3 text-sm font-medium leading-5 text-slate-700">{message}</p>}
 
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
-              Novo usuario so cria senha depois que o administrador liberar o e-mail.
+              Novo usuario escolhe a senha em Solicitar e so consegue entrar depois da liberacao.
             </p>
           </section>
         </aside>
@@ -254,6 +262,14 @@ function AccessRequestFields({ form, update }) {
       <Field label="Telefone ou WhatsApp" icon={Phone}>
         <input value={form.telefone} onChange={(event) => update('telefone', event.target.value)} className="w-full border-0 bg-transparent outline-none" />
       </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Senha desejada" icon={Lock}>
+          <input value={form.password} onChange={(event) => update('password', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
+        </Field>
+        <Field label="Confirmar senha" icon={Lock}>
+          <input value={form.confirmPassword} onChange={(event) => update('confirmPassword', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
+        </Field>
+      </div>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         Observacao para liberacao
         <textarea
@@ -301,7 +317,6 @@ function LoginMetric({ value, label }) {
 
 function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
-  if (mode === 'signup') return 'Criar senha liberada';
   return 'Enviar pedido de acesso';
 }
 

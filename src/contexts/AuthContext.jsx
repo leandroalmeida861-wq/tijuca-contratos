@@ -63,12 +63,20 @@ export function AuthProvider({ children }) {
   async function signUp(email, password) {
     const normalized = normalizeEmail(email);
     if (!await checkAuthorization(normalized)) {
-      throw new Error('E-mail nao autorizado para criar senha. Como corrigir: solicite acesso e aguarde o link de liberacao ser aprovado pelo administrador.');
+      throw new Error('E-mail nao liberado. Como corrigir: solicite acesso; a senha deve ser criada dentro do pedido de acesso.');
     }
 
     const { error } = await supabase.auth.signUp({ email: normalized, password });
     if (error) throw error;
     await supabase.auth.signOut();
+  }
+
+  async function createPendingUser(email, password) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) throw new Error('Informe o e-mail do solicitante.');
+
+    const { error } = await supabase.auth.signUp({ email: normalized, password });
+    if (error && !/already|registered|exists|user/i.test(error.message || '')) throw error;
   }
 
   async function requestAccess({ nome, email, telefone, observacao }) {
@@ -109,6 +117,7 @@ export function AuthProvider({ children }) {
       loading,
       signIn,
       signUp,
+      createPendingUser,
       requestAccess,
       approveAccess,
       signOut,
