@@ -1,6 +1,6 @@
 import { Download, FileUp, FileSpreadsheet, RefreshCw, ShieldCheck, UploadCloud } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { backupSummary, backupTables, exportAllCsv, exportBackupExcel, exportTableCsv, exportTableExcel, parseBackupFile } from '../lib/backup.js';
+import { backupSummary, backupTables, exportBackupExcel, exportFullBackupJson, exportTableCsv, exportTableExcel, parseBackupFile } from '../lib/backup.js';
 import { importBackupData, listBackupData } from '../lib/api.js';
 
 export default function BackupPage() {
@@ -83,8 +83,8 @@ export default function BackupPage() {
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Backup geral</p>
               <h2 className="mt-1 text-xl font-extrabold text-slate-950">{loading ? 'Carregando dados...' : `${total} registros disponiveis`}</h2>
               <p className="mt-2 max-w-2xl text-sm font-medium text-slate-500">
-                O Excel geral baixa uma planilha unica com abas separadas para cada area do sistema.
-                O CSV geral baixa um arquivo por area.
+                O backup completo baixa um unico arquivo com todas as areas, pronto para restaurar depois.
+                O Excel geral tambem baixa tudo em uma planilha unica com abas separadas.
               </p>
             </div>
           </div>
@@ -92,20 +92,20 @@ export default function BackupPage() {
             <button
               type="button"
               disabled={disabled}
-              onClick={() => exportBackupExcel(data)}
+              onClick={() => exportFullBackupJson(data)}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              <FileSpreadsheet size={17} />
-              Baixar tudo em Excel
+              <Download size={17} />
+              Baixar backup completo
             </button>
             <button
               type="button"
               disabled={disabled}
-              onClick={() => exportAllCsv(data)}
+              onClick={() => exportBackupExcel(data)}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
-              <Download size={17} />
-              Baixar tudo em CSV
+              <FileSpreadsheet size={17} />
+              Baixar tudo em Excel
             </button>
           </div>
         </article>
@@ -130,20 +130,20 @@ export default function BackupPage() {
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Importar backup</p>
-            <h2 className="mt-1 text-xl font-extrabold text-slate-950">Restaurar Excel geral ou CSV por área</h2>
+            <h2 className="mt-1 text-xl font-extrabold text-slate-950">Restaurar backup completo</h2>
             <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-500">
-              Use o Excel baixado em “Baixar tudo em Excel” para importar todas as áreas de uma vez.
-              Para CSV, selecione a área correspondente antes de importar.
+              Use o arquivo “backup-agroflow-completo” para restaurar todas as áreas de uma vez.
+              Excel geral também funciona; CSV continua disponível apenas para importação por área.
             </p>
           </div>
         </div>
 
         <form onSubmit={submitImport} className="mt-5 grid gap-3 lg:grid-cols-[1fr_220px_auto] lg:items-end">
           <label className="grid gap-2 text-sm font-semibold text-slate-700">
-            Arquivo Excel ou CSV
+            Arquivo de backup
             <input
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".json,.xlsx,.xls,.csv"
               onChange={(event) => setImportFile(event.target.files?.[0] || null)}
               className="h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-white"
               required

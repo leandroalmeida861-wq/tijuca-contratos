@@ -72,8 +72,10 @@ async function validatePublishedBackupPage() {
   if (!assetMatch) return;
 
   const js = await fetch(new URL(assetMatch[1], SITE_URL)).then((asset) => asset.text());
+  assert('Bundle publicado contem Baixar backup completo', js.includes('Baixar backup completo'));
+  assert('Bundle publicado contem arquivo JSON completo', js.includes('backup-agroflow-completo'));
   assert('Bundle publicado contem Importar backup', js.includes('Importar backup'));
-  assert('Bundle publicado contem Arquivo Excel ou CSV', js.includes('Arquivo Excel ou CSV'));
+  assert('Bundle publicado contem Arquivo de backup', js.includes('Arquivo de backup'));
   assert('Bundle publicado contem parse de confirmar_senha anterior intacto', js.includes('confirmar_senha'));
 }
 

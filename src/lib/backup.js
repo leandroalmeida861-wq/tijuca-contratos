@@ -29,6 +29,22 @@ export function exportBackupExcel(data) {
   XLSX.writeFile(workbook, `backup-agroflow-${todayStamp()}.xlsx`);
 }
 
+export function exportFullBackupJson(data) {
+  const payload = {
+    app: 'AgroFlow',
+    type: 'full-backup',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    tables: backupTables.map((table) => table.key),
+    data: Object.fromEntries(backupTables.map((table) => [table.key, data?.[table.key] || []])),
+  };
+
+  downloadBlob(
+    new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' }),
+    `backup-agroflow-completo-${todayStamp()}.json`,
+  );
+}
+
 export function exportTableExcel(tableKey, data) {
   const table = backupTables.find((item) => item.key === tableKey);
   const rows = normalizeRows(tableKey, data?.[tableKey] || []);
@@ -54,16 +70,39 @@ export async function parseBackupFile(file, tableKey = '') {
   if (!file) throw new Error('Selecione um arquivo de backup para importar.');
 
   const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'json') return parseFullBackupJson(await file.text());
   if (extension === 'xlsx' || extension === 'xls') return parseExcelBackup(await file.arrayBuffer());
   if (extension === 'csv') {
     if (!tableKey) throw new Error('Escolha a área do CSV antes de importar. Como corrigir: selecione fornecedores, contratos, notas fiscais ou outra área no campo acima.');
     return { [tableKey]: parseCsv(await file.text()) };
   }
 
-  throw new Error('Formato de arquivo não aceito. Como corrigir: use um backup em Excel (.xlsx) ou CSV (.csv).');
+  throw new Error('Formato de arquivo não aceito. Como corrigir: use o backup completo (.json), Excel (.xlsx) ou CSV (.csv).');
 }
 
 export { backupTables, normalizeRows };
+
+function parseFullBackupJson(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('Arquivo JSON inválido. Como corrigir: importe o arquivo backup-agroflow-completo gerado pelo AgroFlow.');
+  }
+
+  const data = parsed?.data || parsed;
+  const result = {};
+
+  backupTables.forEach((table) => {
+    if (Array.isArray(data?.[table.key])) result[table.key] = data[table.key];
+  });
+
+  if (!Object.keys(result).length) {
+    throw new Error('Backup completo sem dados reconhecidos. Como corrigir: use o arquivo .json baixado na opção "Baixar backup completo".');
+  }
+
+  return result;
+}
 
 function parseExcelBackup(arrayBuffer) {
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
