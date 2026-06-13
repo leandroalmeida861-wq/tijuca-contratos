@@ -389,7 +389,7 @@ function toPortugueseError(error) {
     return 'E-mail ou senha incorretos. Como corrigir: confira o e-mail digitado e use a senha cadastrada para esse usuario.';
   }
   if (lowerMessage.includes('email not confirmed')) {
-    return 'E-mail ainda nao confirmado. Como corrigir: confirme o e-mail pelo link enviado pela plataforma antes de entrar.';
+    return 'E-mail ainda nao confirmado pelo Supabase. Como corrigir: abra o e-mail automático do Supabase recebido por este usuário e confirme; para não pedir isso nos próximos usuários, desative "Confirm email" em Authentication > Providers > Email no Supabase.';
   }
   if (lowerMessage.includes('function public') || lowerMessage.includes('schema cache') || lowerMessage.includes('does not exist')) {
     return 'Configuracao antiga do banco encontrada. Como corrigir: atualize a pagina; se continuar, aplique novamente o SQL mais recente no Supabase.';

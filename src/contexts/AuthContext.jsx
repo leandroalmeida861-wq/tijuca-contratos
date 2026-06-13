@@ -208,8 +208,17 @@ async function signInApprovedSupabaseUser(email, password) {
   const message = String(error.message || '').toLowerCase();
   if (!message.includes('invalid login credentials')) throw error;
 
-  const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+  const { data, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
+  });
   if (signUpError) throw signUpError;
+  if (data?.user && !data?.session) {
+    throw new Error('Cadastro criado no Supabase, mas o Supabase exigiu confirmação de e-mail. Como corrigir: abra o e-mail automático do Supabase recebido por este usuário e confirme; para não pedir isso nos próximos usuários, desative "Confirm email" em Authentication > Providers > Email no Supabase.');
+  }
   return Boolean(data?.session);
 }
 
