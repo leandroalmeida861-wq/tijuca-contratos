@@ -27,22 +27,29 @@ export default function Login() {
   useEffect(() => {
     if (!approvalMode) return;
 
-    try {
-      const approved = approveLocalAccess({
-        email: approvalParams.get('email'),
-        name: approvalParams.get('nome'),
-        password: approvalParams.get('senha'),
-      });
-      setMode('login');
-      setEmail(approved.email);
-      setPassword('');
-      setMessage(`Acesso liberado para ${approved.email}. Agora esse usuario pode entrar com a senha cadastrada no pedido.`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setApprovalMode(false);
-    } catch (error) {
-      setMode('login');
-      setMessage(error.message || 'Nao foi possivel liberar este acesso.');
-      setApprovalMode(false);
+    approveAccessFromLink();
+
+    async function approveAccessFromLink() {
+      try {
+        const approved = await approveLocalAccess({
+          email: approvalParams.get('email'),
+          name: approvalParams.get('nome'),
+          password: approvalParams.get('senha'),
+        });
+        const databaseMessage = approved.databaseApproval?.ok
+          ? ' O e-mail também foi liberado no banco de dados.'
+          : ' Atenção: para acessar dados do banco, entre como administrador antes de abrir o link de liberação ou aplique o SQL de liberação no Supabase.';
+        setMode('login');
+        setEmail(approved.email);
+        setPassword('');
+        setMessage(`Acesso liberado para ${approved.email}. Agora esse usuario pode entrar com a senha cadastrada no pedido.${databaseMessage}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setApprovalMode(false);
+      } catch (error) {
+        setMode('login');
+        setMessage(error.message || 'Nao foi possivel liberar este acesso.');
+        setApprovalMode(false);
+      }
     }
   }, [approvalMode, approvalParams, approveLocalAccess]);
 

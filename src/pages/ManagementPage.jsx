@@ -49,8 +49,6 @@ const pageConfig = {
     search: ['nome', 'tipo'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
-      { name: 'tipo', label: 'Tipo' },
-      { name: 'url', label: 'URL do arquivo', type: 'url' },
       { name: 'observacoes', label: 'Observações' },
     ],
     columns: ['nome', 'tipo', 'url', 'observacoes'],
@@ -107,7 +105,13 @@ function GenericPage({ config }) {
     event.preventDefault();
     setError('');
     try {
-      const payload = cleanPayload(form, config.fields.map((field) => field.name));
+      const payload = config.table === 'documentos'
+        ? cleanPayload({ ...form, tipo: 'PDF' }, ['nome', 'tipo', 'url', 'observacoes'])
+        : cleanPayload(form, config.fields.map((field) => field.name));
+      if (config.table === 'documentos' && !payload.url) {
+        setError('Importe um arquivo PDF antes de salvar. Como corrigir: clique em "Importar PDF" e selecione um documento em PDF.');
+        return;
+      }
       if (editingId) await updateRow(config.table, editingId, payload);
       else await createRow(config.table, payload);
       setForm(defaultForm(config.fields));
@@ -120,7 +124,9 @@ function GenericPage({ config }) {
 
   function edit(row) {
     setEditingId(row.id);
-    setForm(defaultForm(config.fields, row));
+    setForm(config.table === 'documentos'
+      ? { ...defaultForm(config.fields, row), tipo: 'PDF', url: row.url || '' }
+      : defaultForm(config.fields, row));
   }
 
   async function removeRow(id) {
@@ -167,6 +173,30 @@ function GenericPage({ config }) {
     }
   }
 
+  async function importDocumentPdf(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setError('');
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Apenas PDF é aceito em Documentos. Como corrigir: selecione um arquivo com extensão .pdf.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('PDF muito grande para salvar no sistema. Como corrigir: use um arquivo PDF com até 10 MB.');
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    setForm((current) => ({
+      ...current,
+      nome: current.nome || file.name.replace(/\.pdf$/i, ''),
+      tipo: 'PDF',
+      url: dataUrl,
+    }));
+  }
+
   return (
     <CrudShell title={config.title} query={query} setQuery={setQuery} error={error}>
       {config.table === 'fretes' && (
@@ -184,7 +214,18 @@ function GenericPage({ config }) {
           </div>
         </section>
       )}
-      <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
+      {config.table === 'documentos' ? (
+        <DocumentForm
+          form={form}
+          setForm={setForm}
+          editing={Boolean(editingId)}
+          onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }}
+          onSubmit={submit}
+          onFileChange={importDocumentPdf}
+        />
+      ) : (
+        <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
+      )}
       <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={removeRow} />
     </CrudShell>
   );
@@ -648,6 +689,29 @@ function CrudShell({ title, query, setQuery, error, children }) {
   );
 }
 
+function DocumentForm({ form, setForm, editing, onCancel, onSubmit, onFileChange }) {
+  return (
+    <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
+      <Input label="Nome" value={form.nome || ''} required onChange={(value) => setForm({ ...form, nome: value })} />
+      <label className="grid gap-2 text-sm font-semibold text-slate-700">
+        Arquivo PDF
+        <span className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+          <FileUp size={17} />
+          {form.url ? 'PDF importado' : 'Importar PDF'}
+          <input type="file" accept="application/pdf,.pdf" onChange={onFileChange} className="sr-only" />
+        </span>
+      </label>
+      <Input label="Observações" value={form.observacoes || ''} onChange={(value) => setForm({ ...form, observacoes: value })} />
+      <div className="flex items-end gap-2 xl:col-span-3">
+        <button className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700">
+          {editing ? <Save size={17} /> : <Plus size={17} />} {editing ? 'Salvar alterações' : 'Cadastrar PDF'}
+        </button>
+        {editing && <CancelButton onClick={onCancel} />}
+      </div>
+    </form>
+  );
+}
+
 function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, selectOptions = {} }) {
   return (
     <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
@@ -741,6 +805,15 @@ function defaultForm(fields, row = {}) {
   return fields.reduce((acc, field) => ({ ...acc, [field.name]: row[field.name] ?? field.defaultValue ?? '' }), {});
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Não foi possível ler o PDF. Como corrigir: selecione o arquivo novamente.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function defaultContractForm(row = {}) {
   return {
     numero_contrato: row.numero_contrato || '',
@@ -788,6 +861,7 @@ function label(value) {
 
 function formatCell(value, column, row = {}) {
   if (value === null || value === undefined || value === '') return '-';
+  if (column === 'url') return <a href={String(value)} target="_blank" rel="noreferrer" className="font-bold text-tijuca-700 hover:underline">Abrir PDF</a>;
   if (column.includes('valor_unitario')) return unitCurrency(value, row.valor_unitario_decimais);
   if (column.includes('custo_kg') || column.includes('custo_medio_com_frete')) return unitCurrency(value, 4);
   if (column.includes('valor') || column.includes('custo') || column.includes('saldo_financeiro')) return currency(value);
