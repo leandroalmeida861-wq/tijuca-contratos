@@ -70,11 +70,13 @@ as $$
   select public.agroflow_email_liberado(auth.email());
 $$;
 
+drop function if exists public.agroflow_solicitar_acesso(text, text, text, text);
+
 create or replace function public.agroflow_solicitar_acesso(
-  p_nome text,
   p_email text,
-  p_telefone text,
-  p_observacao text
+  p_nome text,
+  p_observacao text,
+  p_telefone text
 )
 returns table (token uuid, email text)
 language plpgsql
@@ -158,3 +160,5 @@ using (public.agroflow_is_admin());
 grant execute on function public.agroflow_email_liberado(text) to anon, authenticated;
 grant execute on function public.agroflow_solicitar_acesso(text, text, text, text) to anon, authenticated;
 grant execute on function public.agroflow_liberar_acesso(uuid) to authenticated;
+
+notify pgrst, 'reload schema';

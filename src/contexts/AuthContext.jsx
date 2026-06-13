@@ -85,10 +85,10 @@ export function AuthProvider({ children }) {
     if (!normalized) throw new Error('Informe o e-mail do solicitante.');
 
     const { data, error } = await supabase.rpc('agroflow_solicitar_acesso', {
-      p_nome: nome.trim(),
       p_email: normalized,
-      p_telefone: telefone?.trim() || '',
+      p_nome: nome.trim(),
       p_observacao: observacao?.trim() || '',
+      p_telefone: telefone?.trim() || '',
     });
     if (error) throw error;
     return Array.isArray(data) ? data[0] : data;
