@@ -22,7 +22,7 @@ export default function Login() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const approvalParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const approvalMode = approvalParams.get('aprovar_acesso') === '1';
+  const [approvalMode, setApprovalMode] = useState(() => approvalParams.get('aprovar_acesso') === '1');
 
   useEffect(() => {
     if (!approvalMode) return;
@@ -38,9 +38,11 @@ export default function Login() {
       setPassword('');
       setMessage(`Acesso liberado para ${approved.email}. Agora esse usuario pode entrar com a senha cadastrada no pedido.`);
       window.history.replaceState({}, document.title, window.location.pathname);
+      setApprovalMode(false);
     } catch (error) {
       setMode('login');
       setMessage(error.message || 'Nao foi possivel liberar este acesso.');
+      setApprovalMode(false);
     }
   }, [approvalMode, approvalParams, approveLocalAccess]);
 
