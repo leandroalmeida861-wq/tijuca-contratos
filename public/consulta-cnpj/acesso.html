@@ -44,7 +44,7 @@
 
             <label class="block">
               <span class="mb-2 block text-sm font-black text-slate-700">Confirmar senha</span>
-              <input type="password" name="confirmar_senha" required minlength="6" class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
+              <input type="password" id="confirmar_senha" required minlength="6" class="h-12 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-teal-700 focus:ring-4 focus:ring-teal-100" />
             </label>
           </div>
 
@@ -55,6 +55,7 @@
 
           <input type="hidden" name="link_liberacao" />
           <input type="hidden" name="destinatario" value="leandroalmeida861@gmail.com" />
+          <input type="hidden" name="instrucao" value="Clique no Link Liberacao para aprovar este usuario. Depois da aprovacao, ele entra usando exatamente a senha informada no pedido." />
           <button type="submit" class="h-12 w-full rounded-lg bg-gradient-to-r from-emerald-700 to-teal-600 text-sm font-black text-white shadow-lg shadow-teal-700/20 transition hover:from-emerald-800 hover:to-teal-700 disabled:cursor-not-allowed disabled:opacity-70">Enviar pedido de acesso</button>
         </form>
 
@@ -70,7 +71,7 @@
         const nome = form.elements.nome.value.trim();
         const email = form.elements.email.value.trim().toLowerCase();
         const senha = form.elements.senha.value;
-        const confirmar = form.elements.confirmar_senha.value;
+        const confirmar = document.getElementById('confirmar_senha').value;
         if (senha.length < 6) {
           alert('A senha precisa ter pelo menos 6 caracteres.');
           return;
