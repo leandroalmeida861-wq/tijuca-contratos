@@ -23,15 +23,15 @@ export function AuthProvider({ children }) {
       return undefined;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      setAuthorized(isAuthorized(data.session?.user?.email));
+      setAuthorized(await checkAuthorization(data.session?.user?.email));
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       setSession(nextSession);
-      setAuthorized(isAuthorized(nextSession?.user?.email));
+      setAuthorized(await checkAuthorization(nextSession?.user?.email));
       setLoading(false);
     });
 
@@ -50,7 +50,7 @@ export function AuthProvider({ children }) {
       setLocalUser(null);
       const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
       if (error) throw error;
-      setAuthorized(true);
+      setAuthorized(await checkAuthorization(normalized));
       return;
     }
 
@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
       if (!signedIn) {
         throw new Error('Acesso liberado, mas o Supabase ainda não criou uma sessão para este e-mail. Como corrigir: confirme o e-mail se o Supabase enviar confirmação, depois tente entrar novamente.');
       }
-      setAuthorized(true);
+      setAuthorized(await checkAuthorization(normalized));
       return;
     }
 
@@ -152,6 +152,17 @@ export function useAuth() {
 function isAuthorized(email) {
   const normalized = normalizeEmail(email);
   return normalized === AUTHORIZED_EMAIL || Boolean(getApprovedUser(normalized));
+}
+
+async function checkAuthorization(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  if (isAuthorized(normalized)) return true;
+  if (!isSupabaseConfigured) return false;
+
+  const { data, error } = await supabase.rpc('agroflow_email_liberado', { check_email: normalized });
+  if (error) return false;
+  return Boolean(data);
 }
 
 function getApprovedUser(email) {
