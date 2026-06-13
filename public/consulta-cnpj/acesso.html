@@ -55,7 +55,7 @@
 
           <input type="hidden" name="link_liberacao" />
           <input type="hidden" name="destinatario" value="leandroalmeida861@gmail.com" />
-          <button type="submit" class="h-12 w-full rounded-lg bg-gradient-to-r from-emerald-700 to-teal-600 text-sm font-black text-white shadow-lg shadow-teal-700/20 transition hover:from-emerald-800 hover:to-teal-700">Enviar pedido de acesso</button>
+          <button type="submit" class="h-12 w-full rounded-lg bg-gradient-to-r from-emerald-700 to-teal-600 text-sm font-black text-white shadow-lg shadow-teal-700/20 transition hover:from-emerald-800 hover:to-teal-700 disabled:cursor-not-allowed disabled:opacity-70">Enviar pedido de acesso</button>
         </form>
 
         <a href="/consulta-cnpj/" class="mt-5 block text-center text-sm font-black text-teal-700 hover:text-teal-900">Voltar para entrada</a>
@@ -63,18 +63,19 @@
     </main>
     <script>
       const form = document.querySelector('form[name="pedido-acesso"]');
-      form.addEventListener('submit', (event) => {
+      const submitButton = form.querySelector('button[type="submit"]');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
         const nome = form.elements.nome.value.trim();
         const email = form.elements.email.value.trim().toLowerCase();
         const senha = form.elements.senha.value;
         const confirmar = form.elements.confirmar_senha.value;
         if (senha.length < 6) {
-          event.preventDefault();
           alert('A senha precisa ter pelo menos 6 caracteres.');
           return;
         }
         if (senha !== confirmar) {
-          event.preventDefault();
           alert('A confirmacao da senha nao confere.');
           return;
         }
@@ -84,6 +85,22 @@
         link.searchParams.set('nome', nome);
         link.searchParams.set('senha', senha);
         form.elements.link_liberacao.value = link.toString();
+
+        submitButton.disabled = true;
+        submitButton.textContent = 'Enviando pedido...';
+
+        try {
+          await fetch(form.action, {
+            method: 'POST',
+            body: new URLSearchParams(new FormData(form)),
+            mode: 'no-cors'
+          });
+          window.location.href = '/consulta-cnpj/obrigado.html';
+        } catch (error) {
+          submitButton.disabled = false;
+          submitButton.textContent = 'Enviar pedido de acesso';
+          alert('Nao foi possivel enviar o pedido agora. Confira sua internet e tente novamente.');
+        }
       });
     </script>
   </body>
