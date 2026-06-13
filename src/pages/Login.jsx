@@ -66,7 +66,7 @@ export default function Login() {
         await submitAccessRequest();
       }
     } catch (error) {
-      setMessage(error.message || 'Nao foi possivel concluir a operacao.');
+      setMessage(toPortugueseError(error));
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function Login() {
 
   async function submitAccessRequest() {
     if (accessForm.password.length < 6) {
-      throw new Error('A senha desejada deve ter pelo menos 6 caracteres.');
+      throw new Error('A senha desejada deve ter pelo menos 6 caracteres. Como corrigir: escolha uma senha maior antes de enviar o pedido.');
     }
     if (accessForm.password !== accessForm.confirmPassword) {
       throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
@@ -370,6 +370,23 @@ function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
   if (mode === 'reset') return 'Alterar senha';
   return 'Enviar pedido de acesso';
+}
+
+function toPortugueseError(error) {
+  const message = error?.message || '';
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('invalid login credentials')) {
+    return 'E-mail ou senha incorretos. Como corrigir: confira o e-mail digitado e use a senha cadastrada para esse usuario.';
+  }
+  if (lowerMessage.includes('email not confirmed')) {
+    return 'E-mail ainda nao confirmado. Como corrigir: confirme o e-mail pelo link enviado pela plataforma antes de entrar.';
+  }
+  if (lowerMessage.includes('function public') || lowerMessage.includes('schema cache') || lowerMessage.includes('does not exist')) {
+    return 'Configuracao antiga do banco encontrada. Como corrigir: atualize a pagina; se continuar, aplique novamente o SQL mais recente no Supabase.';
+  }
+  if (message) return message;
+  return 'Nao foi possivel concluir a operacao. Como corrigir: confira os dados preenchidos e tente novamente.';
 }
 
 function submitNetlifyAccessEmail(fields) {

@@ -43,8 +43,8 @@ export function AuthProvider({ children }) {
     const savedUser = getApprovedUser(normalized);
 
     if (savedUser) {
-      if (!password) throw new Error('Digite a senha para entrar.');
-      if (savedUser.password !== password) throw new Error('Senha incorreta para este e-mail.');
+      if (!password) throw new Error('Digite a senha para entrar. Como corrigir: informe a senha cadastrada no pedido de acesso.');
+      if (savedUser.password !== password) throw new Error('Senha incorreta para este e-mail. Como corrigir: confira se digitou a senha criada em Solicitar acesso ou use Alterar senha de usuario liberado.');
       const nextLocalUser = { email: normalized, name: savedUser.name || 'Usuario autorizado' };
       saveLocalSession(nextLocalUser);
       setLocalUser(nextLocalUser);
@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
 
   function approveLocalAccess({ email, name, password }) {
     const normalized = normalizeEmail(email);
-    if (!normalized || !password) throw new Error('Link de liberacao incompleto. Confira o e-mail do pedido de acesso.');
+    if (!normalized || !password) throw new Error('Link de liberacao incompleto. Como corrigir: abra o link completo recebido no e-mail de pedido de acesso.');
 
     const users = getApprovedUsers();
     users[normalized] = {
@@ -85,10 +85,10 @@ export function AuthProvider({ children }) {
 
   function changeApprovedPassword(email, password, confirmPassword) {
     const normalized = normalizeEmail(email);
-    if (!normalized) throw new Error('Informe o e-mail do usuario liberado.');
-    if (!isAuthorized(normalized)) throw new Error('Este e-mail ainda nao foi liberado. Solicite acesso antes de alterar a senha.');
-    if (password.length < 6) throw new Error('Crie uma senha com pelo menos 6 caracteres.');
-    if (password !== confirmPassword) throw new Error('A confirmacao da senha nao confere.');
+    if (!normalized) throw new Error('Informe o e-mail do usuario liberado. Como corrigir: digite o mesmo e-mail que foi aprovado pelo administrador.');
+    if (!isAuthorized(normalized)) throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde o administrador abrir o link de liberacao.');
+    if (password.length < 6) throw new Error('Crie uma senha com pelo menos 6 caracteres. Como corrigir: use uma senha maior antes de salvar.');
+    if (password !== confirmPassword) throw new Error('A confirmacao da senha nao confere. Como corrigir: digite a mesma senha nos dois campos.');
 
     const users = getApprovedUsers();
     users[normalized] = {
