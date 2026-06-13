@@ -33,6 +33,12 @@ begin
         liberado_em = now(),
         ativo = true;
 
+  update public.solicitacoes_acesso
+     set status = 'liberado',
+         liberado_em = now()
+   where lower(email) = v_email
+     and status <> 'liberado';
+
   return query select v_email, v_nome, 'liberado'::text;
 end;
 $$;

@@ -44,8 +44,22 @@ export function AuthProvider({ children }) {
 
     if (!password) throw new Error('Digite a senha para entrar. Como corrigir: informe a senha cadastrada para este e-mail.');
 
+    if (!isSupabaseConfigured) {
+      if (!savedUser && normalized !== AUTHORIZED_EMAIL) {
+        throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde a liberacao pelo administrador.');
+      }
+      if (savedUser && savedUser.password !== password) {
+        throw new Error('Senha incorreta para este e-mail. Como corrigir: confira se digitou a senha criada em Solicitar acesso ou use Alterar senha de usuario liberado.');
+      }
+
+      const nextLocalUser = { email: normalized, name: savedUser?.name || 'Usuario autorizado' };
+      saveLocalSession(nextLocalUser);
+      setLocalUser(nextLocalUser);
+      setAuthorized(true);
+      return;
+    }
+
     if (normalized === AUTHORIZED_EMAIL) {
-      if (!isSupabaseConfigured) throw new Error('Supabase não configurado. Como corrigir: confira as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
       clearLocalSession();
       setLocalUser(null);
       const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
@@ -54,29 +68,26 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    if (savedUser) {
-      if (savedUser.password !== password) throw new Error('Senha incorreta para este e-mail. Como corrigir: confira se digitou a senha criada em Solicitar acesso ou use Alterar senha de usuario liberado.');
-
-      if (!isSupabaseConfigured) {
-        const nextLocalUser = { email: normalized, name: savedUser.name || 'Usuario autorizado' };
-        saveLocalSession(nextLocalUser);
-        setLocalUser(nextLocalUser);
-        setAuthorized(true);
-        return;
-      }
+    const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
+    if (error) {
+      const isInvalidCredentials = String(error.message || '').toLowerCase().includes('invalid login credentials');
+      if (!isInvalidCredentials || !savedUser || savedUser.password !== password) throw error;
 
       const signedIn = await signInApprovedSupabaseUser(normalized, password);
       if (!signedIn) {
-        throw new Error('Acesso liberado, mas o Supabase ainda não criou uma sessão para este e-mail. Como corrigir: confirme o e-mail se o Supabase enviar confirmação, depois tente entrar novamente.');
+        throw new Error('Acesso liberado, mas o Supabase ainda nao criou uma sessao para este e-mail. Como corrigir: confirme o e-mail se o Supabase enviar confirmacao, depois tente entrar novamente.');
       }
-      setAuthorized(await checkAuthorization(normalized));
-      return;
     }
 
-    if (normalized !== AUTHORIZED_EMAIL) {
-      throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde a liberacao pelo administrador.');
+    const allowed = await checkAuthorization(normalized);
+    if (!allowed) {
+      await supabase.auth.signOut();
+      throw new Error('Este e-mail ainda nao foi liberado pelo administrador. Como corrigir: aguarde a aprovacao do acesso e tente novamente.');
     }
-    throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde a liberacao pelo administrador.');
+
+    clearLocalSession();
+    setLocalUser(null);
+    setAuthorized(true);
   }
 
   async function approveLocalAccess({ email, name, password }) {
@@ -101,7 +112,7 @@ export function AuthProvider({ children }) {
   function changeApprovedPassword(email, password, confirmPassword) {
     const normalized = normalizeEmail(email);
     if (!normalized) throw new Error('Informe o e-mail do usuario liberado. Como corrigir: digite o mesmo e-mail que foi aprovado pelo administrador.');
-    if (normalized === AUTHORIZED_EMAIL && isSupabaseConfigured) throw new Error('A senha do administrador é a senha do Supabase. Como corrigir: entre com a senha cadastrada no Supabase ou redefina a senha pela tela de autenticação do Supabase.');
+    if (normalized === AUTHORIZED_EMAIL && isSupabaseConfigured) throw new Error('A senha do administrador e a senha do Supabase. Como corrigir: entre com a senha cadastrada no Supabase ou redefina a senha pela tela de autenticacao do Supabase.');
     if (!isAuthorized(normalized)) throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde o administrador abrir o link de liberacao.');
     if (password.length < 6) throw new Error('Crie uma senha com pelo menos 6 caracteres. Como corrigir: use uma senha maior antes de salvar.');
     if (password !== confirmPassword) throw new Error('A confirmacao da senha nao confere. Como corrigir: digite a mesma senha nos dois campos.');
@@ -157,8 +168,8 @@ function isAuthorized(email) {
 async function checkAuthorization(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return false;
-  if (isAuthorized(normalized)) return true;
-  if (!isSupabaseConfigured) return false;
+  if (normalized === AUTHORIZED_EMAIL) return true;
+  if (!isSupabaseConfigured) return Boolean(getApprovedUser(normalized));
 
   const { data, error } = await supabase.rpc('agroflow_email_liberado', { check_email: normalized });
   if (error) return false;
@@ -217,7 +228,7 @@ async function signInApprovedSupabaseUser(email, password) {
   });
   if (signUpError) throw signUpError;
   if (data?.user && !data?.session) {
-    throw new Error('Cadastro criado no Supabase, mas o Supabase exigiu confirmação de e-mail. Como corrigir: abra o e-mail automático do Supabase recebido por este usuário e confirme; para não pedir isso nos próximos usuários, desative "Confirm email" em Authentication > Providers > Email no Supabase.');
+    throw new Error('Cadastro criado no Supabase, mas o Supabase exigiu confirmacao de e-mail. Como corrigir: abra o e-mail automatico do Supabase recebido por este usuario e confirme; para nao pedir isso nos proximos usuarios, desative "Confirm email" em Authentication > Providers > Email no Supabase.');
   }
   return Boolean(data?.session);
 }

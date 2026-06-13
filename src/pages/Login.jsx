@@ -2,6 +2,7 @@ import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, User
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 
 const initialAccessForm = {
   nome: '',
@@ -93,6 +94,8 @@ export default function Login() {
     approvalLink.searchParams.set('nome', accessForm.nome.trim());
     approvalLink.searchParams.set('senha', accessForm.password);
 
+    const databaseRequest = await registerAccessRequestInSupabase(accessForm);
+
     submitNetlifyAccessEmail({
       nome: accessForm.nome,
       email: accessForm.email,
@@ -103,11 +106,18 @@ export default function Login() {
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: approvalLink.toString(),
-      status_senha: 'Senha vai no link de aprovacao conforme fluxo localStorage do AgroFlow. Nao usa banco externo para liberar usuario.',
+      status_senha: 'Senha enviada nos campos senha e confirmar_senha. O login consulta usuarios_autorizados no Supabase apos aprovacao.',
+      status_banco: databaseRequest.requestSaved
+        ? 'Solicitacao gravada no Supabase em solicitacoes_acesso.'
+        : `Solicitacao enviada por e-mail. Aviso banco: ${databaseRequest.warning}`,
     });
 
     setAccessForm(initialAccessForm);
-    setMessage('Pedido registrado e senha criada. O administrador recebera o link de liberacao; depois da liberacao, o usuario ja podera entrar com essa senha.');
+    setMessage(
+      databaseRequest.requestSaved
+        ? 'Pedido registrado no banco e enviado ao administrador. Depois da liberacao, o usuario podera entrar com essa senha.'
+        : `Pedido enviado ao administrador. Atencao: nao foi possivel registrar no banco agora (${databaseRequest.warning}). Se o usuario nao acessar apos aprovacao, aplique o SQL mais recente no Supabase.`,
+    );
   }
 
   function updateAccessForm(field, value) {
@@ -379,6 +389,56 @@ function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
   if (mode === 'reset') return 'Alterar senha';
   return 'Enviar pedido de acesso';
+}
+
+async function registerAccessRequestInSupabase(form) {
+  if (!isSupabaseConfigured) return { requestSaved: false, warning: 'Supabase nao configurado' };
+
+  const email = form.email.trim().toLowerCase();
+  let warning = '';
+
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password: form.password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
+  });
+
+  if (signUpData?.session) {
+    await supabase.auth.signOut();
+  }
+
+  if (signUpError && !isExistingAuthUserError(signUpError)) {
+    warning = signUpError.message || 'falha ao preparar usuario no Supabase Auth';
+  }
+
+  const { error } = await supabase.rpc('agroflow_solicitar_acesso', {
+    p_email: email,
+    p_nome: form.nome.trim(),
+    p_observacao: form.observacao.trim(),
+    p_telefone: form.telefone.trim(),
+  });
+
+  if (error) {
+    const message = error.message || 'falha ao gravar solicitacao';
+    if (isAlreadyApprovedError(error)) {
+      return { requestSaved: true, warning: 'e-mail ja estava liberado no banco' };
+    }
+    return { requestSaved: false, warning: warning ? `${warning}; ${message}` : message };
+  }
+
+  return { requestSaved: true, warning };
+}
+
+function isExistingAuthUserError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('already registered') || message.includes('already exists') || message.includes('user already');
+}
+
+function isAlreadyApprovedError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('ja esta liberado') || message.includes('ja liberado') || message.includes('already approved');
 }
 
 function toPortugueseError(error) {
