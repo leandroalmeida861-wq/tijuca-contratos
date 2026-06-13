@@ -7,8 +7,6 @@ const initialAccessForm = {
   nome: '',
   email: '',
   telefone: '',
-  password: '',
-  confirmPassword: '',
   observacao: '',
 };
 
@@ -65,6 +63,8 @@ export default function Login() {
         await signIn(email, password);
       } else if (mode === 'signup') {
         await signUp(email, password);
+        setMode('login');
+        setPassword('');
         setMessage('Senha criada. Se a confirmacao por e-mail estiver ativa no Supabase, confirme o e-mail antes de entrar.');
       } else {
         await submitAccessRequest();
@@ -77,34 +77,18 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
-    if (accessForm.password.length < 6) {
-      throw new Error('A senha desejada deve ter pelo menos 6 caracteres.');
-    }
-    if (accessForm.password !== accessForm.confirmPassword) {
-      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
-    }
-
     const result = await requestAccess(accessForm);
     const approvalLink = `${window.location.origin}/login?liberar=${result.token}`;
-    const subject = encodeURIComponent(`Liberar acesso AgroFlow - ${accessForm.nome}`);
-    const body = encodeURIComponent([
-      'Novo pedido de acesso ao AgroFlow.',
-      '',
-      `Nome: ${accessForm.nome}`,
-      `E-mail: ${accessForm.email}`,
-      `Telefone/WhatsApp: ${accessForm.telefone || '-'}`,
-      `Observacao: ${accessForm.observacao || '-'}`,
-      '',
-      'Link de liberacao:',
-      approvalLink,
-      '',
-      'Importante: por seguranca, a senha desejada nao e enviada por e-mail.',
-      'Depois que voce liberar, o solicitante deve clicar em Criar senha usando o mesmo e-mail.',
-    ].join('\n'));
 
-    window.open(`mailto:${AUTHORIZED_EMAIL}?subject=${subject}&body=${body}`, '_blank');
-    setAccessForm(initialAccessForm);
-    setMessage('Pedido registrado. Um e-mail para o administrador foi aberto com o link de liberacao. Envie esse e-mail para concluir a solicitacao.');
+    submitNetlifyAccessEmail({
+      nome: accessForm.nome,
+      email: accessForm.email,
+      telefone: accessForm.telefone,
+      observacao: accessForm.observacao,
+      destinatario: AUTHORIZED_EMAIL,
+      origem: 'agroflow-contratos-login',
+      link_liberacao: approvalLink,
+    });
   }
 
   function updateAccessForm(field, value) {
@@ -123,7 +107,7 @@ export default function Login() {
               <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{mode === 'request' ? 'Solicitar acesso' : 'Bem-vindo de volta'}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
                 {mode === 'request'
-                  ? 'Preencha os dados, escolha uma senha e aguarde a liberacao pelo link enviado ao administrador.'
+                  ? 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.'
                   : 'Acesse sua area segura para controlar contratos e relatorios.'}
               </p>
             </div>
@@ -270,14 +254,6 @@ function AccessRequestFields({ form, update }) {
       <Field label="Telefone ou WhatsApp" icon={Phone}>
         <input value={form.telefone} onChange={(event) => update('telefone', event.target.value)} className="w-full border-0 bg-transparent outline-none" />
       </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Senha desejada" icon={Lock}>
-          <input value={form.password} onChange={(event) => update('password', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
-        </Field>
-        <Field label="Confirmar senha" icon={Lock}>
-          <input value={form.confirmPassword} onChange={(event) => update('confirmPassword', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
-        </Field>
-      </div>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         Observacao para liberacao
         <textarea
@@ -327,4 +303,27 @@ function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
   if (mode === 'signup') return 'Criar senha liberada';
   return 'Enviar pedido de acesso';
+}
+
+function submitNetlifyAccessEmail(fields) {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'https://chipper-ganache-d099b1.netlify.app/obrigado.html';
+  form.style.display = 'none';
+
+  const allFields = {
+    'form-name': 'pedido-acesso',
+    ...fields,
+  };
+
+  Object.entries(allFields).forEach(([name, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value || '';
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
 }

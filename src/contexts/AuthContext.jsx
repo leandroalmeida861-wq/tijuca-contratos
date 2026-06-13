@@ -68,6 +68,7 @@ export function AuthProvider({ children }) {
 
     const { error } = await supabase.auth.signUp({ email: normalized, password });
     if (error) throw error;
+    await supabase.auth.signOut();
   }
 
   async function requestAccess({ nome, email, telefone, observacao }) {
