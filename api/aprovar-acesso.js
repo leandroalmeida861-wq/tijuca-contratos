@@ -88,11 +88,24 @@ export default async function handler(request, response) {
     response.end();
   } catch (error) {
     console.error('Erro ao aprovar acesso AgroFlow:', error);
-    redirectError(response, 'falha_aprovacao');
+    redirectError(response, approvalErrorCode(error));
   }
 }
 
 function redirectError(response, code) {
   response.writeHead(302, { Location: `${ERROR_REDIRECT}${encodeURIComponent(code)}` });
   response.end();
+}
+
+function approvalErrorCode(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+
+  if (code.includes('over_email_send_rate_limit') || message.includes('rate limit')) {
+    return 'limite_email_supabase';
+  }
+  if (code.includes('email_address_invalid') || message.includes('email address') || message.includes('invalid')) {
+    return 'email_invalido_supabase';
+  }
+  return 'falha_aprovacao';
 }

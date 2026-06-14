@@ -24,6 +24,10 @@ Sistema web em React + Vite + Tailwind CSS + Supabase para gestao de contratos, 
 4. Va em `Authentication > Providers > Email`.
 5. Deixe o provedor de e-mail ativado.
 6. O `Confirm email` pode ficar ativado. Usuarios aprovados recebem convite oficial do Supabase para criar senha.
+7. Em `Authentication > URL Configuration`, configure:
+   - Site URL: `https://agroflow-contratos.vercel.app`
+   - Redirect URL: `https://agroflow-contratos.vercel.app/login`
+8. Se aparecer limite de envio de e-mail, configure SMTP proprio em `Authentication > SMTP Settings`.
 
 ## 2. Configurar variaveis de ambiente
 

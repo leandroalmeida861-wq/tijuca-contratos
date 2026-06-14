@@ -14,6 +14,8 @@ const errors = {
   pedido_ja_processado: 'Este pedido ja foi aprovado, expirado ou cancelado.',
   token_expirado: 'O token expirou. Peca para o usuario solicitar acesso novamente.',
   email_invalido: 'O pedido esta sem e-mail valido. Crie uma nova solicitacao.',
+  email_invalido_supabase: 'O Supabase recusou este e-mail como invalido. Use um e-mail real e ativo, como Gmail, Outlook ou e-mail corporativo.',
+  limite_email_supabase: 'O Supabase bloqueou temporariamente o envio de convites por limite de e-mail. Aguarde alguns minutos e tente novamente, ou configure SMTP proprio no Supabase Auth.',
   falha_aprovacao: 'Nao foi possivel aprovar agora. Confira a SERVICE_ROLE_KEY na Vercel e tente novamente.',
 };
 
