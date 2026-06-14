@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 export const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'leandroalmeida861@gmail.com');
 
 export function getSupabaseAdmin() {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL');
+  const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY');
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Variaveis SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nao configuradas na Vercel.');
@@ -19,8 +19,8 @@ export function getSupabaseAdmin() {
 }
 
 export function getSupabasePublic() {
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const supabaseUrl = readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL');
+  const anonKey = readEnv('SUPABASE_ANON_KEY') || readEnv('VITE_SUPABASE_ANON_KEY');
 
   if (!supabaseUrl || !anonKey) {
     throw new Error('Variaveis SUPABASE_URL e SUPABASE_ANON_KEY nao configuradas na Vercel.');
@@ -36,6 +36,10 @@ export function getSupabasePublic() {
 
 export function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function readEnv(name) {
+  return String(process.env[name] || '').trim().replace(/^['"]|['"]$/g, '');
 }
 
 export function sendJson(response, status, body) {
