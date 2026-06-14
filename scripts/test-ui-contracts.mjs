@@ -34,9 +34,15 @@ async function main() {
     assert('Bundle bloqueia arquivo que nao seja PDF', js.includes('Apenas PDF'));
     assert('Bundle nao orienta usuario a confirmar e-mail manualmente no Supabase', !js.includes('E-mail ainda nao confirmado pelo Supabase') && !js.includes('Confirm email'));
     assert('Bundle usa rota segura de pedido de acesso', js.includes('/api/solicitar-acesso'));
-    assert('Bundle usa rota segura de aprovacao', js.includes('/api/aprovar-acesso'));
+    assert('Bundle nao aprova usuario pelo frontend', !js.includes('/api/approve-access') && !js.includes('aprovar_acesso=1'));
     assert('Bundle contem backup completo', js.includes('Baixar backup completo'));
   }
+
+  const requestApi = await fetch(`${SITE_URL}/api/solicitar-acesso`, { method: 'HEAD' });
+  assert('API publicada de solicitacao existe e aceita POST', requestApi.status === 405 && requestApi.headers.get('allow')?.includes('POST'), `status ${requestApi.status}`);
+
+  const approveApi = await fetch(`${SITE_URL}/api/aprovar-acesso?token=teste`, { method: 'HEAD' });
+  assert('API publicada de aprovacao existe e aceita GET', approveApi.status === 405 && approveApi.headers.get('allow')?.includes('GET'), `status ${approveApi.status}`);
 
   console.log('\nBATERIA DE ROTAS E INTERFACE');
   for (const result of results) {
