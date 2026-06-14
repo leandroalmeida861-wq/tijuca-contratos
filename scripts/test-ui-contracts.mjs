@@ -33,8 +33,8 @@ async function main() {
     assert('Bundle contem Importar PDF', js.includes('Importar PDF'));
     assert('Bundle bloqueia arquivo que nao seja PDF', js.includes('Apenas PDF'));
     assert('Bundle nao orienta usuario a confirmar e-mail manualmente no Supabase', !js.includes('E-mail ainda nao confirmado pelo Supabase') && !js.includes('Confirm email'));
-    assert('Bundle usa rota segura de pedido de acesso', js.includes('/api/request-access'));
-    assert('Bundle usa rota segura de aprovacao', js.includes('/api/approve-access'));
+    assert('Bundle usa rota segura de pedido de acesso', js.includes('/api/solicitar-acesso'));
+    assert('Bundle usa rota segura de aprovacao', js.includes('/api/aprovar-acesso'));
     assert('Bundle contem backup completo', js.includes('Baixar backup completo'));
   }
 

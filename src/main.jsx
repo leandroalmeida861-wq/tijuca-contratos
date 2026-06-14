@@ -5,6 +5,7 @@ import AppLayout from './components/AppLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import BackupPage from './pages/BackupPage.jsx';
+import AdminSolicitacoes from './pages/AdminSolicitacoes.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="documentos" element={<ManagementPage type="documentos" />} />
             <Route path="rel-financeiro" element={<ManagementPage type="financeiro" />} />
             <Route path="backup" element={<BackupPage />} />
+            <Route path="admin/solicitacoes" element={<AdminSolicitacoes />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

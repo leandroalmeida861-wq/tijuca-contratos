@@ -1,54 +1,25 @@
 import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
-import { supabase } from '../lib/supabase.js';
 
 const initialAccessForm = {
   nome: '',
   email: '',
   telefone: '',
-  password: '',
-  confirmPassword: '',
   observacao: '',
 };
 
 export default function Login() {
-  const { signIn, changeApprovedPassword, user, authorized, configured } = useAuth();
+  const { signIn, user, authorized, configured } = useAuth();
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState(AUTHORIZED_EMAIL);
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [accessForm, setAccessForm] = useState(initialAccessForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const approvalParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const [approvalMode, setApprovalMode] = useState(() => approvalParams.get('aprovar_acesso') === '1');
-  const approvalToken = approvalParams.get('token') || approvalParams.get('aprovar_acesso');
 
-  useEffect(() => {
-    if (!approvalMode) return;
-
-    approveAccessFromLink();
-
-    async function approveAccessFromLink() {
-      try {
-        const approved = await approveAccessWithToken(approvalToken);
-        setMode('login');
-        setEmail(approved.email);
-        setPassword('');
-        setMessage(`Acesso liberado para ${approved.email}. O usuario ja pode entrar com a senha criada no pedido, sem confirmar outro e-mail do Supabase.`);
-        window.history.replaceState({}, document.title, window.location.pathname);
-        setApprovalMode(false);
-      } catch (error) {
-        setMode('login');
-        setMessage(toPortugueseError(error));
-        setApprovalMode(String(error?.message || '').includes('Entre como administrador'));
-      }
-    }
-  }, [approvalMode, approvalToken, user]);
-
-  if (user && authorized && !approvalMode) return <Navigate to="/" replace />;
+  if (user && authorized) return <Navigate to="/" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -59,11 +30,6 @@ export default function Login() {
 
       if (mode === 'login') {
         await signIn(email, password);
-      } else if (mode === 'reset') {
-        changeApprovedPassword(email, password, confirmPassword);
-        setMode('login');
-        setConfirmPassword('');
-        setMessage('Senha alterada. Agora clique em Entrar no sistema com este e-mail e senha.');
       } else {
         await submitAccessRequest();
       }
@@ -75,18 +41,7 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
-    if (accessForm.password.length < 6) {
-      throw new Error('A senha desejada deve ter pelo menos 6 caracteres. Como corrigir: escolha uma senha maior antes de enviar o pedido.');
-    }
-    if (accessForm.password !== accessForm.confirmPassword) {
-      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
-    }
-
-    const approvalLink = new URL('/login', window.location.origin);
-    approvalLink.searchParams.set('aprovar_acesso', '1');
-
     const databaseRequest = await registerAccessRequestInSupabase(accessForm);
-    approvalLink.searchParams.set('token', databaseRequest.token);
 
     submitNetlifyAccessEmail({
       nome: accessForm.nome,
@@ -95,13 +50,13 @@ export default function Login() {
       observacao: accessForm.observacao,
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
-      link_liberacao: approvalLink.toString(),
-      status_senha: 'Senha nao enviada por e-mail e nao aparece no link. Foi tratada pela funcao segura da Vercel.',
-      status_banco: 'Solicitacao gravada no Supabase em solicitacoes_acesso. Usuario preparado no Supabase Auth com e-mail confirmado.',
+      link_liberacao: databaseRequest.approvalUrl,
+      status_senha: 'Senha nao enviada por e-mail nem por link. O usuario criara a senha pelo convite oficial do Supabase depois da aprovacao.',
+      status_banco: 'Solicitacao gravada no Supabase em solicitacoes_acesso. A aprovacao usa token seguro e service role apenas no backend.',
     });
 
     setAccessForm(initialAccessForm);
-    setMessage('Pedido registrado e enviado ao administrador. Depois da liberacao, o usuario podera entrar com a senha criada aqui.');
+    setMessage('Pedido registrado e enviado ao administrador. Depois da aprovacao, o usuario recebera um convite do Supabase para criar a senha.');
   }
 
   function updateAccessForm(field, value) {
@@ -119,9 +74,7 @@ export default function Login() {
               <img src="/agroflow-icon.png" alt="AgroFlow" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-sm" />
               <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{mode === 'request' ? 'Solicitar acesso' : 'Bem-vindo de volta'}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
-                {mode === 'reset'
-                  ? 'Altere a senha de um usuario que ja foi liberado neste navegador.'
-                  : mode === 'request'
+                {mode === 'request'
                   ? 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.'
                   : 'Acesse sua area segura para controlar contratos e relatorios.'}
               </p>
@@ -135,8 +88,6 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="grid gap-4">
               {mode === 'request' ? (
                 <AccessRequestFields form={accessForm} update={updateAccessForm} />
-              ) : mode === 'reset' ? (
-                <ResetFields email={email} setEmail={setEmail} password={password} setPassword={setPassword} confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} />
               ) : (
                 <LoginFields mode={mode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} />
               )}
@@ -153,15 +104,8 @@ export default function Login() {
             {message && <p className="mt-4 rounded-xl bg-slate-100 p-3 text-sm font-medium leading-5 text-slate-700">{message}</p>}
 
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
-              Novo usuario escolhe a senha em Solicitar e so consegue entrar depois da liberacao.
+              Novo usuario solicita acesso e cria a senha pelo convite oficial enviado apos a aprovacao.
             </p>
-            <button
-              type="button"
-              onClick={() => { setMode('reset'); setMessage(''); }}
-              className="mt-3 w-full text-center text-xs font-black text-teal-700 transition hover:text-teal-900"
-            >
-              Alterar senha de usuario liberado
-            </button>
           </section>
         </aside>
       </section>
@@ -265,45 +209,6 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
   );
 }
 
-function ResetFields({ email, setEmail, password, setPassword, confirmPassword, setConfirmPassword }) {
-  return (
-    <>
-      <Field label="E-mail liberado" icon={Mail}>
-        <input
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="email"
-          autoComplete="email"
-          required
-        />
-      </Field>
-      <Field label="Nova senha" icon={Lock}>
-        <input
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="password"
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-      </Field>
-      <Field label="Confirmar nova senha" icon={Lock}>
-        <input
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="password"
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-      </Field>
-    </>
-  );
-}
-
 function AccessRequestFields({ form, update }) {
   return (
     <>
@@ -316,14 +221,6 @@ function AccessRequestFields({ form, update }) {
       <Field label="Telefone ou WhatsApp" icon={Phone}>
         <input value={form.telefone} onChange={(event) => update('telefone', event.target.value)} className="w-full border-0 bg-transparent outline-none" />
       </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Senha desejada" icon={Lock}>
-          <input value={form.password} onChange={(event) => update('password', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
-        </Field>
-        <Field label="Confirmar senha" icon={Lock}>
-          <input value={form.confirmPassword} onChange={(event) => update('confirmPassword', event.target.value)} className="w-full border-0 bg-transparent outline-none" type="password" minLength={6} required />
-        </Field>
-      </div>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         Observacao para liberacao
         <textarea
@@ -371,12 +268,11 @@ function LoginMetric({ value, label }) {
 
 function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
-  if (mode === 'reset') return 'Alterar senha';
   return 'Enviar pedido de acesso';
 }
 
 async function registerAccessRequestInSupabase(form) {
-  const response = await fetch('/api/request-access', {
+  const response = await fetch('/api/solicitar-acesso', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -384,38 +280,11 @@ async function registerAccessRequestInSupabase(form) {
       email: form.email.trim().toLowerCase(),
       telefone: form.telefone.trim(),
       observacao: form.observacao.trim(),
-      password: form.password,
     }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.token) {
+  if (!response.ok || !payload?.approvalUrl) {
     throw new Error(payload?.error || 'Nao foi possivel registrar o pedido de acesso. Como corrigir: confira os dados e tente novamente.');
-  }
-  return payload;
-}
-
-async function approveAccessWithToken(token) {
-  if (!token || token === '1') {
-    throw new Error('Link de aprovacao incompleto. Como corrigir: use o link mais recente recebido no e-mail de solicitacao.');
-  }
-
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data?.session?.access_token;
-  if (!accessToken) {
-    throw new Error('Entre como administrador antes de aprovar. Como corrigir: faca login com o e-mail administrador e abra o link de aprovacao novamente.');
-  }
-
-  const response = await fetch('/api/approve-access', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ token }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.error || 'Nao foi possivel aprovar este acesso.');
   }
   return payload;
 }
@@ -428,7 +297,7 @@ function toPortugueseError(error) {
     return 'E-mail ou senha incorretos. Como corrigir: confira o e-mail digitado e use a senha cadastrada para esse usuario.';
   }
   if (lowerMessage.includes('email not confirmed')) {
-    return 'Cadastro ainda nao finalizado. Como corrigir: solicite acesso novamente e aguarde a aprovacao do administrador; o sistema vai regularizar a confirmacao automaticamente.';
+    return 'Cadastro ainda nao finalizado. Como corrigir: abra o convite oficial do Supabase enviado depois da aprovacao e crie sua senha por ele.';
   }
   if (lowerMessage.includes('function public') || lowerMessage.includes('schema cache') || lowerMessage.includes('does not exist')) {
     return 'Configuracao antiga do banco encontrada. Como corrigir: atualize a pagina; se continuar, aplique novamente o SQL mais recente no Supabase.';

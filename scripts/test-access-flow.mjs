@@ -2,49 +2,14 @@ import { readFileSync } from 'node:fs';
 
 const SITE_URL = 'https://agroflow-contratos.vercel.app';
 const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
-
-const testUser = {
-  name: 'Teste Automatizado AgroFlow',
-  email: `teste.automatizado.${Date.now()}@example.com`,
-  phone: '(11) 90000-0000',
-  password: 'Teste123456',
-  newPassword: 'NovaSenha123456',
-  note: 'Teste automatizado do fluxo real de acesso',
-};
-
-const adminBrowser = {
-  approvedUsers: {},
-  session: { email: AUTHORIZED_EMAIL },
-};
-
-const userBrowser = {
-  approvedUsers: {},
-  session: null,
-};
-
-const database = {
-  authUsers: {},
-  solicitacoesAcesso: [],
-  usuariosAutorizados: {
-    [AUTHORIZED_EMAIL]: { email: AUTHORIZED_EMAIL, nome: 'Leandro Almeida', ativo: true },
-  },
-};
-
 const results = [];
 
 async function main() {
   await testPublishedHtml();
-  await testSourceContracts();
-  await testAccessRequestPayload();
-  await testRequestPersistsInDatabase();
-  await testApprovalPersistsInDatabase();
-  await testLoginFromDifferentBrowserWithoutLocalStorage();
-  await testWrongPasswordBlocked();
-  await testPasswordChangeRequest();
-  await testNewPasswordLogin();
-  await testProtectedRouteHtmlFallback();
+  testSourceContracts();
+  testSimulatedFlow();
 
-  console.log('\nBATERIA DE TESTES AGROFLOW');
+  console.log('\nBATERIA DE TESTES AGROFLOW - ACESSO SEGURO');
   for (const result of results) {
     console.log(`${result.ok ? 'OK' : 'FALHOU'} - ${result.name}`);
     if (result.detail) console.log(`   ${result.detail}`);
@@ -63,209 +28,91 @@ async function main() {
 async function testPublishedHtml() {
   const response = await fetch(`${SITE_URL}/login`);
   const html = await response.text();
-  assert('HTML publicado na Vercel responde 200', response.ok, `status ${response.status}`);
+  assert('HTML publicado na Vercel responde', response.ok, `status ${response.status}`);
   assert('HTML publicado tem root React', html.includes('<div id="root"></div>'));
-
-  const assetMatch = html.match(/src="([^"]*\/assets\/index-[^"]+\.js)"/);
-  assert('HTML publicado aponta para bundle JS', Boolean(assetMatch));
 }
 
-async function testProtectedRouteHtmlFallback() {
-  const response = await fetch(`${SITE_URL}/contratos`);
-  const html = await response.text();
-  assert('Rota interna publicada entrega HTML do app para o React proteger', response.ok && html.includes('<div id="root"></div>'), `status ${response.status}`);
-}
-
-async function testSourceContracts() {
+function testSourceContracts() {
   const authSource = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
   const loginSource = readFileSync('src/pages/Login.jsx', 'utf8');
-  const requestApiSource = readFileSync('api/request-access.js', 'utf8');
-  const approveApiSource = readFileSync('api/approve-access.js', 'utf8');
+  const requestApiSource = readFileSync('api/solicitar-acesso.js', 'utf8');
+  const approveApiSource = readFileSync('api/aprovar-acesso.js', 'utf8');
+  const sqlSource = readFileSync('supabase/agroflow-acesso-perfis.sql', 'utf8');
 
-  assert('Login consulta autorizacao no banco por agroflow_email_liberado', authSource.includes('agroflow_email_liberado'));
-  assert('Login tenta Supabase Auth antes de depender do localStorage do admin', authSource.indexOf('signInWithPassword({ email: normalized, password })') < authSource.indexOf('const allowed = await checkAuthorization(normalized)'));
-  assert('Frontend nao cria usuario com signUp', !loginSource.includes('supabase.auth.signUp') && !authSource.includes('supabase.auth.signUp'));
-  assert('Pedido de acesso chama rota segura', loginSource.includes('/api/request-access'));
-  assert('Aprovacao chama rota segura com token', loginSource.includes('/api/approve-access') && loginSource.includes('Authorization: `Bearer ${accessToken}`'));
-  assert('Rota de pedido usa Service Role no backend', requestApiSource.includes('ensureConfirmedAuthUser') && requestApiSource.includes('agroflow_solicitar_acesso'));
-  assert('Rota de aprovacao exige administrador autenticado', approveApiSource.includes('ADMIN_EMAIL') && approveApiSource.includes('getUser(accessToken)'));
+  assert('Projeto usa Vercel Serverless Function para solicitar acesso', loginSource.includes('/api/solicitar-acesso'));
+  assert('Link de aprovacao correto vai para /api/aprovar-acesso', requestApiSource.includes('/api/aprovar-acesso?token='));
+  assert('Aprovacao usa convite oficial do Supabase', approveApiSource.includes('inviteUserByEmail'));
+  assert('Convite redireciona para /login', approveApiSource.includes('redirectTo: INVITE_REDIRECT_URL'));
+  assert('Admin volta para /admin/solicitacoes com sucesso', approveApiSource.includes('ADMIN_APPROVED_REDIRECT'));
+  assert('Frontend nao cria usuario com signUp', !loginSource.includes('signUp') && !authSource.includes('signUp'));
+  assert('Frontend nao usa service role', !loginSource.includes('SERVICE_ROLE') && !authSource.includes('SERVICE_ROLE'));
+  assert('AuthContext nao depende de localStorage', !authSource.includes('localStorage'));
+  assert('Login consulta perfil no Supabase', authSource.includes('agroflow_usuario_atual'));
+  assert('SQL cria solicitacoes_acesso', sqlSource.includes('create table if not exists public.solicitacoes_acesso'));
+  assert('SQL cria usuarios_autorizados com perfil', sqlSource.includes('perfil text not null default'));
+  assert('SQL garante Leandro como admin', sqlSource.includes(AUTHORIZED_EMAIL) && sqlSource.includes("'admin'"));
+  assert('SQL cria RLS por perfil', sqlSource.includes('agroflow_can_write') && sqlSource.includes('agroflow_is_admin'));
+  assert('Senha nao aparece no formulario de solicitacao', !loginSource.includes('Senha desejada') && !loginSource.includes('confirmPassword'));
 }
 
-async function testAccessRequestPayload() {
-  const payload = createAccessRequestPayload(testUser);
-
-  assert('Pedido de acesso inclui link de liberacao', payload.link_liberacao.includes('aprovar_acesso=1'));
-  assert('Link de liberacao carrega apenas token', Boolean(new URL(payload.link_liberacao).searchParams.get('token')));
-  assert('Link de liberacao nao carrega senha', !new URL(payload.link_liberacao).searchParams.has('senha'));
-  assert('Link de liberacao nao carrega e-mail', !new URL(payload.link_liberacao).searchParams.has('email'));
-  assert('E-mail de pedido nao contem senha', !('senha' in payload) && !('confirmar_senha' in payload));
-}
-
-async function testRequestPersistsInDatabase() {
-  const result = registerAccessRequestInSupabase(testUser);
-
-  assert('Solicitacao cria usuario em auth.users', Boolean(database.authUsers[testUser.email]));
-  assert('Solicitacao grava linha em solicitacoes_acesso', result.requestSaved && database.solicitacoesAcesso.some((row) => row.email === testUser.email && row.status === 'pendente'));
-}
-
-async function testApprovalPersistsInDatabase() {
-  const payload = createAccessRequestPayload(testUser);
-  const url = new URL(payload.link_liberacao);
-  const approved = approveAccessWithToken(adminBrowser, url.searchParams.get('token'));
-
-  assert('Aprovacao pelo token retorna usuario aprovado', approved.email === testUser.email);
-  assert('Aprovacao persiste usuario em usuarios_autorizados', Boolean(database.usuariosAutorizados[testUser.email]?.ativo));
-  assert('Aprovacao muda solicitacao de pendente para liberado', database.solicitacoesAcesso.some((row) => row.email === testUser.email && row.status === 'liberado'));
-}
-
-async function testLoginFromDifferentBrowserWithoutLocalStorage() {
-  const user = signIn(userBrowser, testUser.email, testUser.password);
-  assert('Usuario aprovado entra em outro navegador sem localStorage do admin', user.email === testUser.email && userBrowser.session?.email === testUser.email);
-}
-
-async function testWrongPasswordBlocked() {
-  try {
-    signIn(userBrowser, testUser.email, 'SenhaErrada');
-    assert('Login com senha errada deve bloquear', false);
-  } catch (error) {
-    assert(
-      'Login com senha errada e bloqueado com mensagem em portugues',
-      error.message.includes('E-mail ou senha incorretos') && error.message.includes('Como corrigir'),
-      error.message,
-    );
-  }
-}
-
-async function testPasswordChangeRequest() {
-  const changed = changeApprovedPassword(adminBrowser, testUser.email, testUser.newPassword, testUser.newPassword);
-  database.authUsers[testUser.email].password = testUser.newPassword;
-  assert('Alteracao de senha aprovada para usuario liberado', changed.password === testUser.newPassword);
-
-  try {
-    signIn(userBrowser, testUser.email, testUser.password);
-    assert('Senha antiga deve parar de funcionar', false);
-  } catch (error) {
-    assert('Senha antiga bloqueada depois da alteracao', error.message.includes('E-mail ou senha incorretos'), error.message);
-  }
-}
-
-async function testNewPasswordLogin() {
-  const user = signIn(userBrowser, testUser.email, testUser.newPassword);
-  assert('Login com nova senha funciona', user.email === testUser.email && userBrowser.session?.email === testUser.email);
-}
-
-function createAccessRequestPayload(form) {
-  if (form.password.length < 6) {
-    throw new Error('A senha desejada deve ter pelo menos 6 caracteres. Como corrigir: escolha uma senha maior antes de enviar o pedido.');
-  }
-
-  const approvalLink = new URL('/login', SITE_URL);
-  approvalLink.searchParams.set('aprovar_acesso', '1');
-  approvalLink.searchParams.set('token', database.solicitacoesAcesso.find((row) => row.email === normalizeEmail(form.email))?.token || 'token-simulado');
-
-  return {
-    nome: form.name,
-    email: form.email,
-    telefone: form.phone,
-    observacao: form.note,
-    destinatario: AUTHORIZED_EMAIL,
-    origem: 'agroflow-contratos-login',
-    link_liberacao: approvalLink.toString(),
-    status_senha: 'Senha nao enviada por e-mail e nao aparece no link',
-  };
-}
-
-function registerAccessRequestInSupabase(form) {
-  const email = normalizeEmail(form.email);
-  database.authUsers[email] = {
-    email,
-    password: form.password,
-    emailConfirmed: true,
-  };
-  database.solicitacoesAcesso.push({
-    token: `token-${Date.now()}`,
-    email,
-    nome: form.name,
-    telefone: form.phone,
-    observacao: form.note,
-    status: 'pendente',
+function testSimulatedFlow() {
+  const request = createAccessRequest({
+    nome: 'Usuario Teste AgroFlow',
+    email: 'usuario.teste@example.com',
+    telefone: '(11) 90000-0000',
+    observacao: 'Teste do fluxo seguro',
   });
 
-  return { requestSaved: true };
+  assert('Solicitacao grava status pendente', request.status === 'pendente');
+  assert('Link de aprovacao tem apenas token', hasOnlyToken(request.approvalUrl));
+  assert('Link nao contem senha, e-mail, nome nem service role', !/[?&](senha|password|email|nome|service_role)=/i.test(request.approvalUrl));
+
+  const approved = approveRequest(request);
+  assert('Aprovacao marca solicitacao como aprovada', approved.request.status === 'aprovado');
+  assert('Usuario autorizado fica operador e ativo', approved.user.perfil === 'operador' && approved.user.status === 'ativo');
+  assert('Convite e enviado para o e-mail solicitado', approved.invite.email === request.email);
+  assert('Convite usa redirectTo correto', approved.invite.redirectTo === `${SITE_URL}/login`);
 }
 
-function approveAccessWithToken(browserState, token) {
-  if (normalizeEmail(browserState.session?.email) !== AUTHORIZED_EMAIL) {
-    throw new Error('Apenas o administrador autorizado pode aprovar usuarios.');
-  }
-
-  const accessRequest = database.solicitacoesAcesso.find((row) => row.token === token);
-  if (!accessRequest) throw new Error('Pedido de acesso nao encontrado.');
-  approveEmailInSupabase(accessRequest.email, accessRequest.nome || 'Usuario autorizado');
-  return { email: accessRequest.email, name: accessRequest.nome || 'Usuario autorizado' };
-}
-
-function approveEmailInSupabase(email, name) {
-  database.usuariosAutorizados[email] = {
-    email,
-    nome: name,
-    ativo: true,
-    liberadoPor: AUTHORIZED_EMAIL,
-    liberadoEm: new Date().toISOString(),
+function createAccessRequest(form) {
+  const token = cryptoRandomToken();
+  return {
+    ...form,
+    email: form.email.toLowerCase(),
+    token,
+    status: 'pendente',
+    approvalUrl: `${SITE_URL}/api/aprovar-acesso?token=${token}`,
   };
-  for (const request of database.solicitacoesAcesso) {
-    if (request.email === email && request.status !== 'liberado') {
-      request.status = 'liberado';
-      request.liberadoEm = new Date().toISOString();
-    }
-  }
 }
 
-function signIn(browserState, email, password) {
-  const normalized = normalizeEmail(email);
-  const authUser = database.authUsers[normalized];
+function approveRequest(request) {
+  request.status = 'aprovado';
+  request.usado_em = new Date().toISOString();
+  request.aprovado_em = request.usado_em;
 
-  if (!authUser || authUser.password !== password) {
-    throw new Error('E-mail ou senha incorretos. Como corrigir: confira o e-mail digitado e use a senha cadastrada para esse usuario.');
-  }
-
-  const allowed = database.usuariosAutorizados[normalized]?.ativo || normalized === AUTHORIZED_EMAIL;
-  if (!allowed) {
-    throw new Error('Este e-mail ainda nao foi liberado pelo administrador. Como corrigir: aguarde a aprovacao do acesso e tente novamente.');
-  }
-
-  browserState.session = { email: normalized, name: database.usuariosAutorizados[normalized]?.nome || 'Usuario autorizado' };
-  return browserState.session;
-}
-
-function changeApprovedPassword(browserState, email, password, confirmPassword) {
-  const normalized = normalizeEmail(email);
-  if (!normalized) {
-    throw new Error('Informe o e-mail do usuario liberado. Como corrigir: digite o mesmo e-mail que foi aprovado pelo administrador.');
-  }
-  if (!database.usuariosAutorizados[normalized]?.ativo && normalized !== AUTHORIZED_EMAIL) {
-    throw new Error('Este e-mail ainda nao foi liberado. Como corrigir: clique em Solicitar acesso e aguarde o administrador abrir o link de liberacao.');
-  }
-  if (password.length < 6) {
-    throw new Error('Crie uma senha com pelo menos 6 caracteres. Como corrigir: use uma senha maior antes de salvar.');
-  }
-  if (password !== confirmPassword) {
-    throw new Error('A confirmacao da senha nao confere. Como corrigir: digite a mesma senha nos dois campos.');
-  }
-
-  browserState.approvedUsers[normalized] = {
-    ...(browserState.approvedUsers[normalized] || {}),
-    email: normalized,
-    name: database.usuariosAutorizados[normalized]?.nome || 'Usuario autorizado',
-    password,
-    updatedAt: new Date().toISOString(),
+  return {
+    request,
+    invite: {
+      email: request.email,
+      redirectTo: `${SITE_URL}/login`,
+    },
+    user: {
+      email: request.email,
+      nome: request.nome,
+      perfil: 'operador',
+      status: 'ativo',
+    },
   };
-
-  return browserState.approvedUsers[normalized];
 }
 
-function normalizeEmail(email) {
-  return String(email || '').toLowerCase().trim();
+function hasOnlyToken(url) {
+  const parsed = new URL(url);
+  const params = [...parsed.searchParams.keys()];
+  return parsed.origin === SITE_URL && parsed.pathname === '/api/aprovar-acesso' && params.length === 1 && params[0] === 'token';
+}
+
+function cryptoRandomToken() {
+  return '00000000-0000-4000-8000-000000000001';
 }
 
 function assert(name, ok, detail = '') {

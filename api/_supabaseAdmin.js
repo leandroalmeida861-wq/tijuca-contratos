@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 export const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'leandroalmeida861@gmail.com');
+export const APP_URL = 'https://agroflow-contratos.vercel.app';
+export const INVITE_REDIRECT_URL = `${APP_URL}/login`;
+export const ADMIN_APPROVED_REDIRECT = `${APP_URL}/admin/solicitacoes?sucesso=usuario_aprovado`;
 
 export function getSupabaseAdmin() {
   const supabaseUrl = readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL');
@@ -79,39 +82,4 @@ export async function findAuthUserByEmail(supabaseAdmin, email) {
   }
 
   return null;
-}
-
-export async function ensureConfirmedAuthUser(supabaseAdmin, { email, password, name, phone }) {
-  const normalized = normalizeEmail(email);
-  const metadata = {
-    name: name || 'Usuario autorizado',
-    phone: phone || '',
-    approved_flow: 'agroflow_access_request',
-  };
-
-  const existing = await findAuthUserByEmail(supabaseAdmin, normalized);
-  if (existing) {
-    const updatePayload = {
-      email_confirm: true,
-      user_metadata: {
-        ...(existing.user_metadata || {}),
-        ...metadata,
-      },
-    };
-
-    if (password) updatePayload.password = password;
-
-    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, updatePayload);
-    if (error) throw error;
-    return data.user;
-  }
-
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email: normalized,
-    password,
-    email_confirm: true,
-    user_metadata: metadata,
-  });
-  if (error) throw error;
-  return data.user;
 }

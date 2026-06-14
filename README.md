@@ -6,8 +6,9 @@ Sistema web em React + Vite + Tailwind CSS + Supabase para gestao de contratos, 
 
 - Login via Supabase Auth.
 - Solicitacao de acesso com aprovacao do administrador.
-- Criacao/confirmacao de usuarios por funcao segura da Vercel usando `SUPABASE_SERVICE_ROLE_KEY`.
+- Convite oficial do Supabase enviado pela funcao segura da Vercel usando `SUPABASE_SERVICE_ROLE_KEY`.
 - Rotas protegidas: usuarios nao autenticados voltam para `/login`.
+- Perfis `admin`, `operador` e `consulta`.
 - Dashboard responsivo com cards, graficos, alertas de vencimento e tabela de contratos.
 - CRUD de fornecedores, fabricas, produtos, contratos, notas fiscais, documentos e fretes.
 - Notas fiscais vinculadas a contratos.
@@ -19,10 +20,10 @@ Sistema web em React + Vite + Tailwind CSS + Supabase para gestao de contratos, 
 
 1. Acesse [Supabase](https://supabase.com/) e crie um projeto gratuito.
 2. No painel do projeto, abra `SQL Editor`.
-3. Execute o SQL principal do projeto e os arquivos de correcao em `supabase/`, quando aplicavel.
+3. Execute o SQL principal do projeto e depois `supabase/agroflow-acesso-perfis.sql`.
 4. Va em `Authentication > Providers > Email`.
 5. Deixe o provedor de e-mail ativado.
-6. O `Confirm email` pode ficar ativado. Usuarios aprovados pelo fluxo do AgroFlow sao criados/regularizados pela funcao segura da Vercel com e-mail confirmado.
+6. O `Confirm email` pode ficar ativado. Usuarios aprovados recebem convite oficial do Supabase para criar senha.
 
 ## 2. Configurar variaveis de ambiente
 
@@ -69,23 +70,44 @@ Acesse o endereco exibido pelo Vite, normalmente `http://localhost:5173`.
 
 1. O novo usuario abre `/login`.
 2. Clica em `Solicitar`.
-3. Informa nome, e-mail, telefone e cria uma senha.
-4. O sistema envia ao administrador um link de aprovacao com token seguro.
-5. A senha nao vai no e-mail, nao vai no link e nao aparece na query string.
-6. O administrador entra com `leandroalmeida861@gmail.com` e abre o link de aprovacao.
-7. A funcao `/api/approve-access` valida a sessao do administrador, ativa o usuario em `usuarios_autorizados` e garante e-mail confirmado no Supabase Auth.
-8. O usuario aprovado entra com a senha criada no pedido, sem confirmar outro e-mail do Supabase.
+3. Informa nome, e-mail, telefone e observacao.
+4. O sistema grava o pedido em `solicitacoes_acesso`.
+5. O administrador recebe um link neste formato:
+
+```text
+https://agroflow-contratos.vercel.app/api/aprovar-acesso?token=TOKEN
+```
+
+6. O link tem somente token. Nunca envie senha, e-mail, nome ou `service_role` por query string.
+7. A funcao `/api/aprovar-acesso` usa `SUPABASE_SERVICE_ROLE_KEY` apenas no backend, aprova o pedido, cria/atualiza `usuarios_autorizados` com perfil `operador` e envia convite do Supabase.
+8. O usuario recebe o convite, cria a senha e entra em `https://agroflow-contratos.vercel.app/login`.
+9. O login consulta `usuarios_autorizados`; usuarios sem `status = ativo` sao bloqueados.
 
 ## Estrutura
 
 ```text
 api/
-  approve-access.js
-  request-access.js
+  aprovar-acesso.js
+  solicitar-acesso.js
+  approve-access.js      # compatibilidade
+  request-access.js      # compatibilidade
 src/
   components/
   contexts/
   lib/
   pages/
 supabase/
+  agroflow-acesso-perfis.sql
 ```
+
+## Checklist rapido de teste
+
+1. Solicite acesso com um e-mail novo pela tela `/login`.
+2. Confirme no Supabase que a linha entrou em `solicitacoes_acesso` com `status = pendente`.
+3. Abra o link recebido pelo administrador.
+4. Confirme que o navegador redirecionou para `/admin/solicitacoes?sucesso=usuario_aprovado`.
+5. Confirme em `usuarios_autorizados` que o e-mail ficou com `perfil = operador` e `status = ativo`.
+6. Confirme em `Authentication > Users` que o usuario foi convidado.
+7. Abra o convite no e-mail do usuario, crie a senha e entre no sistema.
+8. Confirme que nao aparece erro de e-mail nao confirmado.
+9. Confirme que usuario `operador` consegue cadastrar/editar dados operacionais e nao acessa funcoes restritas de admin.
