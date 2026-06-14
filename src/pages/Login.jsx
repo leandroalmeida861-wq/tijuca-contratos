@@ -2,6 +2,7 @@ import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, User
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
+import { supabase } from '../lib/supabase.js';
 
 const initialAccessForm = {
   nome: '',
@@ -12,14 +13,15 @@ const initialAccessForm = {
 
 export default function Login() {
   const { signIn, user, authorized, configured } = useAuth();
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState(() => (hasPasswordSetupToken() ? 'setPassword' : 'login'));
   const [email, setEmail] = useState(AUTHORIZED_EMAIL);
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [accessForm, setAccessForm] = useState(initialAccessForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user && authorized) return <Navigate to="/" replace />;
+  if (user && authorized && mode !== 'setPassword') return <Navigate to="/" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -30,6 +32,8 @@ export default function Login() {
 
       if (mode === 'login') {
         await signIn(email, password);
+      } else if (mode === 'setPassword') {
+        await submitPasswordSetup();
       } else {
         await submitAccessRequest();
       }
@@ -59,6 +63,24 @@ export default function Login() {
     setMessage('Pedido registrado e enviado ao administrador. Depois da aprovacao, o usuario recebera um convite do Supabase para criar a senha.');
   }
 
+  async function submitPasswordSetup() {
+    if (password.length < 6) {
+      throw new Error('Crie uma senha com pelo menos 6 caracteres. Como corrigir: digite uma senha maior antes de continuar.');
+    }
+    if (password !== confirmPassword) {
+      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+
+    window.history.replaceState({}, document.title, '/login');
+    setPassword('');
+    setConfirmPassword('');
+    setMode('login');
+    setMessage('Senha criada com sucesso. Agora entre no AgroFlow usando seu e-mail e a senha criada.');
+  }
+
   function updateAccessForm(field, value) {
     setAccessForm((current) => ({ ...current, [field]: value }));
   }
@@ -72,22 +94,24 @@ export default function Login() {
           <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
             <div className="mb-6 text-center">
               <img src="/agroflow-icon.png" alt="AgroFlow" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-sm" />
-              <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{mode === 'request' ? 'Solicitar acesso' : 'Bem-vindo de volta'}</h2>
+              <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{titleForMode(mode)}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
-                {mode === 'request'
-                  ? 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.'
-                  : 'Acesse sua area segura para controlar contratos e relatorios.'}
+                {descriptionForMode(mode)}
               </p>
             </div>
 
-            <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
-              <ModeButton active={mode === 'login'} onClick={() => setMode('login')}>Entrar</ModeButton>
-              <ModeButton active={mode === 'request'} onClick={() => setMode('request')}>Solicitar</ModeButton>
-            </div>
+            {mode !== 'setPassword' && (
+              <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+                <ModeButton active={mode === 'login'} onClick={() => setMode('login')}>Entrar</ModeButton>
+                <ModeButton active={mode === 'request'} onClick={() => setMode('request')}>Solicitar</ModeButton>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="grid gap-4">
               {mode === 'request' ? (
                 <AccessRequestFields form={accessForm} update={updateAccessForm} />
+              ) : mode === 'setPassword' ? (
+                <PasswordSetupFields password={password} setPassword={setPassword} confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} />
               ) : (
                 <LoginFields mode={mode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} />
               )}
@@ -209,6 +233,35 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
   );
 }
 
+function PasswordSetupFields({ password, setPassword, confirmPassword, setConfirmPassword }) {
+  return (
+    <>
+      <Field label="Nova senha" icon={Lock}>
+        <input
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+      <Field label="Confirmar nova senha" icon={Lock}>
+        <input
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+    </>
+  );
+}
+
 function AccessRequestFields({ form, update }) {
   return (
     <>
@@ -268,7 +321,27 @@ function LoginMetric({ value, label }) {
 
 function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
+  if (mode === 'setPassword') return 'Criar senha';
   return 'Enviar pedido de acesso';
+}
+
+function titleForMode(mode) {
+  if (mode === 'request') return 'Solicitar acesso';
+  if (mode === 'setPassword') return 'Criar senha de acesso';
+  return 'Bem-vindo de volta';
+}
+
+function descriptionForMode(mode) {
+  if (mode === 'request') return 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.';
+  if (mode === 'setPassword') return 'Seu convite foi aprovado. Crie uma senha para entrar no AgroFlow.';
+  return 'Acesse sua area segura para controlar contratos e relatorios.';
+}
+
+function hasPasswordSetupToken() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const query = new URLSearchParams(window.location.search);
+  const type = params.get('type') || query.get('type');
+  return type === 'invite' || type === 'recovery';
 }
 
 async function registerAccessRequestInSupabase(form) {

@@ -52,7 +52,8 @@ function testSourceContracts() {
   assert('SQL cria usuarios_autorizados com perfil', sqlSource.includes('perfil text not null default'));
   assert('SQL garante Leandro como admin', sqlSource.includes(AUTHORIZED_EMAIL) && sqlSource.includes("'admin'"));
   assert('SQL cria RLS por perfil', sqlSource.includes('agroflow_can_write') && sqlSource.includes('agroflow_is_admin'));
-  assert('Senha nao aparece no formulario de solicitacao', !loginSource.includes('Senha desejada') && !loginSource.includes('confirmPassword'));
+  assert('Formulario de solicitacao nao pede senha desejada', !loginSource.includes('Senha desejada'));
+  assert('Convite abre criacao de senha em portugues', loginSource.includes('Criar senha de acesso') && loginSource.includes('hasPasswordSetupToken'));
 }
 
 function testSimulatedFlow() {
