@@ -14,6 +14,7 @@ const testUser = {
 
 const adminBrowser = {
   approvedUsers: {},
+  session: { email: AUTHORIZED_EMAIL },
 };
 
 const userBrowser = {
@@ -78,23 +79,26 @@ async function testProtectedRouteHtmlFallback() {
 async function testSourceContracts() {
   const authSource = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
   const loginSource = readFileSync('src/pages/Login.jsx', 'utf8');
-  const sqlSource = readFileSync('supabase/liberar-email-direto.sql', 'utf8');
+  const requestApiSource = readFileSync('api/request-access.js', 'utf8');
+  const approveApiSource = readFileSync('api/approve-access.js', 'utf8');
 
   assert('Login consulta autorizacao no banco por agroflow_email_liberado', authSource.includes('agroflow_email_liberado'));
   assert('Login tenta Supabase Auth antes de depender do localStorage do admin', authSource.indexOf('signInWithPassword({ email: normalized, password })') < authSource.indexOf('const allowed = await checkAuthorization(normalized)'));
-  assert('Pedido de acesso grava solicitacao no Supabase', loginSource.includes('agroflow_solicitar_acesso'));
-  assert('Pedido de acesso prepara usuario no Supabase Auth', loginSource.includes('supabase.auth.signUp'));
-  assert('Aprovacao direta atualiza solicitacoes_acesso para liberado', sqlSource.includes("status = 'liberado'"));
+  assert('Frontend nao cria usuario com signUp', !loginSource.includes('supabase.auth.signUp') && !authSource.includes('supabase.auth.signUp'));
+  assert('Pedido de acesso chama rota segura', loginSource.includes('/api/request-access'));
+  assert('Aprovacao chama rota segura com token', loginSource.includes('/api/approve-access') && loginSource.includes('Authorization: `Bearer ${accessToken}`'));
+  assert('Rota de pedido usa Service Role no backend', requestApiSource.includes('ensureConfirmedAuthUser') && requestApiSource.includes('agroflow_solicitar_acesso'));
+  assert('Rota de aprovacao exige administrador autenticado', approveApiSource.includes('ADMIN_EMAIL') && approveApiSource.includes('getUser(accessToken)'));
 }
 
 async function testAccessRequestPayload() {
   const payload = createAccessRequestPayload(testUser);
 
-  assert('Pedido de acesso inclui senha do solicitante', payload.senha === testUser.password);
-  assert('Pedido de acesso inclui confirmar_senha', payload.confirmar_senha === testUser.password);
   assert('Pedido de acesso inclui link de liberacao', payload.link_liberacao.includes('aprovar_acesso=1'));
-  assert('Link de liberacao carrega a senha', new URL(payload.link_liberacao).searchParams.get('senha') === testUser.password);
-  assert('Link de liberacao carrega o e-mail correto', new URL(payload.link_liberacao).searchParams.get('email') === testUser.email);
+  assert('Link de liberacao carrega apenas token', Boolean(new URL(payload.link_liberacao).searchParams.get('token')));
+  assert('Link de liberacao nao carrega senha', !new URL(payload.link_liberacao).searchParams.has('senha'));
+  assert('Link de liberacao nao carrega e-mail', !new URL(payload.link_liberacao).searchParams.has('email'));
+  assert('E-mail de pedido nao contem senha', !('senha' in payload) && !('confirmar_senha' in payload));
 }
 
 async function testRequestPersistsInDatabase() {
@@ -107,13 +111,9 @@ async function testRequestPersistsInDatabase() {
 async function testApprovalPersistsInDatabase() {
   const payload = createAccessRequestPayload(testUser);
   const url = new URL(payload.link_liberacao);
-  const approved = approveLocalAccess(adminBrowser, {
-    email: url.searchParams.get('email'),
-    name: url.searchParams.get('nome'),
-    password: url.searchParams.get('senha'),
-  });
+  const approved = approveAccessWithToken(adminBrowser, url.searchParams.get('token'));
 
-  assert('Aprovacao pelo link salva usuario no navegador do admin', approved.email === testUser.email);
+  assert('Aprovacao pelo token retorna usuario aprovado', approved.email === testUser.email);
   assert('Aprovacao persiste usuario em usuarios_autorizados', Boolean(database.usuariosAutorizados[testUser.email]?.ativo));
   assert('Aprovacao muda solicitacao de pendente para liberado', database.solicitacoesAcesso.some((row) => row.email === testUser.email && row.status === 'liberado'));
 }
@@ -161,21 +161,17 @@ function createAccessRequestPayload(form) {
 
   const approvalLink = new URL('/login', SITE_URL);
   approvalLink.searchParams.set('aprovar_acesso', '1');
-  approvalLink.searchParams.set('email', form.email.trim().toLowerCase());
-  approvalLink.searchParams.set('nome', form.name.trim());
-  approvalLink.searchParams.set('senha', form.password);
+  approvalLink.searchParams.set('token', database.solicitacoesAcesso.find((row) => row.email === normalizeEmail(form.email))?.token || 'token-simulado');
 
   return {
     nome: form.name,
     email: form.email,
     telefone: form.phone,
-    senha: form.password,
-    confirmar_senha: form.password,
     observacao: form.note,
     destinatario: AUTHORIZED_EMAIL,
     origem: 'agroflow-contratos-login',
     link_liberacao: approvalLink.toString(),
-    status_senha: 'Senha enviada nos campos senha e confirmar_senha',
+    status_senha: 'Senha nao enviada por e-mail e nao aparece no link',
   };
 }
 
@@ -187,6 +183,7 @@ function registerAccessRequestInSupabase(form) {
     emailConfirmed: true,
   };
   database.solicitacoesAcesso.push({
+    token: `token-${Date.now()}`,
     email,
     nome: form.name,
     telefone: form.phone,
@@ -197,23 +194,15 @@ function registerAccessRequestInSupabase(form) {
   return { requestSaved: true };
 }
 
-function approveLocalAccess(browserState, { email, name, password }) {
-  const normalized = normalizeEmail(email);
-  if (!normalized || !password) {
-    throw new Error('Link de liberacao incompleto. Como corrigir: abra o link completo recebido no e-mail de pedido de acesso.');
+function approveAccessWithToken(browserState, token) {
+  if (normalizeEmail(browserState.session?.email) !== AUTHORIZED_EMAIL) {
+    throw new Error('Apenas o administrador autorizado pode aprovar usuarios.');
   }
 
-  browserState.approvedUsers[normalized] = {
-    ...(browserState.approvedUsers[normalized] || {}),
-    email: normalized,
-    name: name || 'Usuario autorizado',
-    password,
-    approvedBy: AUTHORIZED_EMAIL,
-    approvedAt: new Date().toISOString(),
-  };
-
-  approveEmailInSupabase(normalized, name || 'Usuario autorizado');
-  return browserState.approvedUsers[normalized];
+  const accessRequest = database.solicitacoesAcesso.find((row) => row.token === token);
+  if (!accessRequest) throw new Error('Pedido de acesso nao encontrado.');
+  approveEmailInSupabase(accessRequest.email, accessRequest.nome || 'Usuario autorizado');
+  return { email: accessRequest.email, name: accessRequest.nome || 'Usuario autorizado' };
 }
 
 function approveEmailInSupabase(email, name) {

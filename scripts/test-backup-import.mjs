@@ -76,7 +76,7 @@ async function validatePublishedBackupPage() {
   assert('Bundle publicado contem arquivo JSON completo', js.includes('backup-agroflow-completo'));
   assert('Bundle publicado contem Importar backup', js.includes('Importar backup'));
   assert('Bundle publicado contem Arquivo de backup', js.includes('Arquivo de backup'));
-  assert('Bundle publicado contem parse de confirmar_senha anterior intacto', js.includes('confirmar_senha'));
+  assert('Bundle publicado nao expoe senha do pedido no e-mail', !js.includes('status_senha:"Senha enviada nos campos senha e confirmar_senha'));
 }
 
 function simulateImport(tables) {

@@ -32,9 +32,9 @@ async function main() {
     assert('Bundle contem menu Documentos', js.includes('Documentos'));
     assert('Bundle contem Importar PDF', js.includes('Importar PDF'));
     assert('Bundle bloqueia arquivo que nao seja PDF', js.includes('Apenas PDF'));
-    assert('Bundle contem mensagem de email nao confirmado pelo Supabase', js.includes('E-mail ainda nao confirmado pelo Supabase'));
-    assert('Bundle contem orientacao de Confirm email', js.includes('Confirm email'));
-    assert('Bundle contem funcao de liberar email direto', js.includes('agroflow_liberar_email_direto'));
+    assert('Bundle nao orienta usuario a confirmar e-mail manualmente no Supabase', !js.includes('E-mail ainda nao confirmado pelo Supabase') && !js.includes('Confirm email'));
+    assert('Bundle usa rota segura de pedido de acesso', js.includes('/api/request-access'));
+    assert('Bundle usa rota segura de aprovacao', js.includes('/api/approve-access'));
     assert('Bundle contem backup completo', js.includes('Baixar backup completo'));
   }
 

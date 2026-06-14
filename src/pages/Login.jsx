@@ -2,7 +2,7 @@ import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, User
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
-import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
+import { supabase } from '../lib/supabase.js';
 
 const initialAccessForm = {
   nome: '',
@@ -14,7 +14,7 @@ const initialAccessForm = {
 };
 
 export default function Login() {
-  const { signIn, approveLocalAccess, changeApprovedPassword, user, authorized, configured } = useAuth();
+  const { signIn, changeApprovedPassword, user, authorized, configured } = useAuth();
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState(AUTHORIZED_EMAIL);
   const [password, setPassword] = useState('');
@@ -24,6 +24,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const approvalParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const [approvalMode, setApprovalMode] = useState(() => approvalParams.get('aprovar_acesso') === '1');
+  const approvalToken = approvalParams.get('token') || approvalParams.get('aprovar_acesso');
 
   useEffect(() => {
     if (!approvalMode) return;
@@ -32,27 +33,20 @@ export default function Login() {
 
     async function approveAccessFromLink() {
       try {
-        const approved = await approveLocalAccess({
-          email: approvalParams.get('email'),
-          name: approvalParams.get('nome'),
-          password: approvalParams.get('senha'),
-        });
-        const databaseMessage = approved.databaseApproval?.ok
-          ? ' O e-mail também foi liberado no banco de dados.'
-          : ' Atenção: para acessar dados do banco, entre como administrador antes de abrir o link de liberação ou aplique o SQL de liberação no Supabase.';
+        const approved = await approveAccessWithToken(approvalToken);
         setMode('login');
         setEmail(approved.email);
         setPassword('');
-        setMessage(`Acesso liberado para ${approved.email}. Agora esse usuario pode entrar com a senha cadastrada no pedido.${databaseMessage}`);
+        setMessage(`Acesso liberado para ${approved.email}. O usuario ja pode entrar com a senha criada no pedido, sem confirmar outro e-mail do Supabase.`);
         window.history.replaceState({}, document.title, window.location.pathname);
         setApprovalMode(false);
       } catch (error) {
         setMode('login');
-        setMessage(error.message || 'Nao foi possivel liberar este acesso.');
-        setApprovalMode(false);
+        setMessage(toPortugueseError(error));
+        setApprovalMode(String(error?.message || '').includes('Entre como administrador'));
       }
     }
-  }, [approvalMode, approvalParams, approveLocalAccess]);
+  }, [approvalMode, approvalToken, user]);
 
   if (user && authorized && !approvalMode) return <Navigate to="/" replace />;
 
@@ -90,34 +84,24 @@ export default function Login() {
 
     const approvalLink = new URL('/login', window.location.origin);
     approvalLink.searchParams.set('aprovar_acesso', '1');
-    approvalLink.searchParams.set('email', accessForm.email.trim().toLowerCase());
-    approvalLink.searchParams.set('nome', accessForm.nome.trim());
-    approvalLink.searchParams.set('senha', accessForm.password);
 
     const databaseRequest = await registerAccessRequestInSupabase(accessForm);
+    approvalLink.searchParams.set('token', databaseRequest.token);
 
     submitNetlifyAccessEmail({
       nome: accessForm.nome,
       email: accessForm.email,
       telefone: accessForm.telefone,
-      senha: accessForm.password,
-      confirmar_senha: accessForm.confirmPassword,
       observacao: accessForm.observacao,
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: approvalLink.toString(),
-      status_senha: 'Senha enviada nos campos senha e confirmar_senha. O login consulta usuarios_autorizados no Supabase apos aprovacao.',
-      status_banco: databaseRequest.requestSaved
-        ? 'Solicitacao gravada no Supabase em solicitacoes_acesso.'
-        : `Solicitacao enviada por e-mail. Aviso banco: ${databaseRequest.warning}`,
+      status_senha: 'Senha nao enviada por e-mail e nao aparece no link. Foi tratada pela funcao segura da Vercel.',
+      status_banco: 'Solicitacao gravada no Supabase em solicitacoes_acesso. Usuario preparado no Supabase Auth com e-mail confirmado.',
     });
 
     setAccessForm(initialAccessForm);
-    setMessage(
-      databaseRequest.requestSaved
-        ? 'Pedido registrado no banco e enviado ao administrador. Depois da liberacao, o usuario podera entrar com essa senha.'
-        : `Pedido enviado ao administrador. Atencao: nao foi possivel registrar no banco agora (${databaseRequest.warning}). Se o usuario nao acessar apos aprovacao, aplique o SQL mais recente no Supabase.`,
-    );
+    setMessage('Pedido registrado e enviado ao administrador. Depois da liberacao, o usuario podera entrar com a senha criada aqui.');
   }
 
   function updateAccessForm(field, value) {
@@ -392,53 +376,48 @@ function submitLabel(mode) {
 }
 
 async function registerAccessRequestInSupabase(form) {
-  if (!isSupabaseConfigured) return { requestSaved: false, warning: 'Supabase nao configurado' };
+  const response = await fetch('/api/request-access', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      nome: form.nome.trim(),
+      email: form.email.trim().toLowerCase(),
+      telefone: form.telefone.trim(),
+      observacao: form.observacao.trim(),
+      password: form.password,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.token) {
+    throw new Error(payload?.error || 'Nao foi possivel registrar o pedido de acesso. Como corrigir: confira os dados e tente novamente.');
+  }
+  return payload;
+}
 
-  const email = form.email.trim().toLowerCase();
-  let warning = '';
+async function approveAccessWithToken(token) {
+  if (!token || token === '1') {
+    throw new Error('Link de aprovacao incompleto. Como corrigir: use o link mais recente recebido no e-mail de solicitacao.');
+  }
 
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password: form.password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login`,
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (!accessToken) {
+    throw new Error('Entre como administrador antes de aprovar. Como corrigir: faca login com o e-mail administrador e abra o link de aprovacao novamente.');
+  }
+
+  const response = await fetch('/api/approve-access', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
     },
+    body: JSON.stringify({ token }),
   });
-
-  if (signUpData?.session) {
-    await supabase.auth.signOut();
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Nao foi possivel aprovar este acesso.');
   }
-
-  if (signUpError && !isExistingAuthUserError(signUpError)) {
-    warning = signUpError.message || 'falha ao preparar usuario no Supabase Auth';
-  }
-
-  const { error } = await supabase.rpc('agroflow_solicitar_acesso', {
-    p_email: email,
-    p_nome: form.nome.trim(),
-    p_observacao: form.observacao.trim(),
-    p_telefone: form.telefone.trim(),
-  });
-
-  if (error) {
-    const message = error.message || 'falha ao gravar solicitacao';
-    if (isAlreadyApprovedError(error)) {
-      return { requestSaved: true, warning: 'e-mail ja estava liberado no banco' };
-    }
-    return { requestSaved: false, warning: warning ? `${warning}; ${message}` : message };
-  }
-
-  return { requestSaved: true, warning };
-}
-
-function isExistingAuthUserError(error) {
-  const message = String(error?.message || '').toLowerCase();
-  return message.includes('already registered') || message.includes('already exists') || message.includes('user already');
-}
-
-function isAlreadyApprovedError(error) {
-  const message = String(error?.message || '').toLowerCase();
-  return message.includes('ja esta liberado') || message.includes('ja liberado') || message.includes('already approved');
+  return payload;
 }
 
 function toPortugueseError(error) {
@@ -449,7 +428,7 @@ function toPortugueseError(error) {
     return 'E-mail ou senha incorretos. Como corrigir: confira o e-mail digitado e use a senha cadastrada para esse usuario.';
   }
   if (lowerMessage.includes('email not confirmed')) {
-    return 'E-mail ainda nao confirmado pelo Supabase. Como corrigir: abra o e-mail automático do Supabase recebido por este usuário e confirme; para não pedir isso nos próximos usuários, desative "Confirm email" em Authentication > Providers > Email no Supabase.';
+    return 'Cadastro ainda nao finalizado. Como corrigir: solicite acesso novamente e aguarde a aprovacao do administrador; o sistema vai regularizar a confirmacao automaticamente.';
   }
   if (lowerMessage.includes('function public') || lowerMessage.includes('schema cache') || lowerMessage.includes('does not exist')) {
     return 'Configuracao antiga do banco encontrada. Como corrigir: atualize a pagina; se continuar, aplique novamente o SQL mais recente no Supabase.';

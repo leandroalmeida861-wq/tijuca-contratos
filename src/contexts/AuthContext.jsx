@@ -70,13 +70,7 @@ export function AuthProvider({ children }) {
 
     const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
     if (error) {
-      const isInvalidCredentials = String(error.message || '').toLowerCase().includes('invalid login credentials');
-      if (!isInvalidCredentials || !savedUser || savedUser.password !== password) throw error;
-
-      const signedIn = await signInApprovedSupabaseUser(normalized, password);
-      if (!signedIn) {
-        throw new Error('Acesso liberado, mas o Supabase ainda nao criou uma sessao para este e-mail. Como corrigir: confirme o e-mail se o Supabase enviar confirmacao, depois tente entrar novamente.');
-      }
+      throw error;
     }
 
     const allowed = await checkAuthorization(normalized);
@@ -88,25 +82,6 @@ export function AuthProvider({ children }) {
     clearLocalSession();
     setLocalUser(null);
     setAuthorized(true);
-  }
-
-  async function approveLocalAccess({ email, name, password }) {
-    const normalized = normalizeEmail(email);
-    if (!normalized || !password) throw new Error('Link de liberacao incompleto. Como corrigir: abra o link completo recebido no e-mail de pedido de acesso.');
-
-    const users = getApprovedUsers();
-    users[normalized] = {
-      ...(users[normalized] || {}),
-      email: normalized,
-      name: name || users[normalized]?.name || 'Usuario autorizado',
-      password,
-      approvedBy: AUTHORIZED_EMAIL,
-      approvedAt: new Date().toISOString(),
-    };
-    saveApprovedUsers(users);
-
-    const databaseApproval = await approveEmailInSupabase(normalized, users[normalized].name);
-    return { ...users[normalized], databaseApproval };
   }
 
   function changeApprovedPassword(email, password, confirmPassword) {
@@ -143,7 +118,6 @@ export function AuthProvider({ children }) {
       authorized,
       loading,
       signIn,
-      approveLocalAccess,
       changeApprovedPassword,
       signOut,
       configured: true,
@@ -210,40 +184,4 @@ function clearLocalSession() {
 
 function normalizeEmail(email) {
   return String(email || '').toLowerCase().trim();
-}
-
-async function signInApprovedSupabaseUser(email, password) {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (!error) return true;
-
-  const message = String(error.message || '').toLowerCase();
-  if (!message.includes('invalid login credentials')) throw error;
-
-  const { data, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login`,
-    },
-  });
-  if (signUpError) throw signUpError;
-  if (data?.user && !data?.session) {
-    throw new Error('Cadastro criado no Supabase, mas o Supabase exigiu confirmacao de e-mail. Como corrigir: abra o e-mail automatico do Supabase recebido por este usuario e confirme; para nao pedir isso nos proximos usuarios, desative "Confirm email" em Authentication > Providers > Email no Supabase.');
-  }
-  return Boolean(data?.session);
-}
-
-async function approveEmailInSupabase(email, name) {
-  if (!isSupabaseConfigured) return { ok: false, reason: 'supabase-desligado' };
-
-  const { data: sessionData } = await supabase.auth.getSession();
-  const currentEmail = normalizeEmail(sessionData?.session?.user?.email);
-  if (currentEmail !== AUTHORIZED_EMAIL) return { ok: false, reason: 'admin-sem-sessao' };
-
-  const { error } = await supabase.rpc('agroflow_liberar_email_direto', {
-    p_email: email,
-    p_nome: name || 'Usuario autorizado',
-  });
-  if (error) return { ok: false, reason: error.message };
-  return { ok: true };
 }
