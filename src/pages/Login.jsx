@@ -1,5 +1,5 @@
 import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
 import { supabase } from '../lib/supabase.js';
@@ -20,6 +20,22 @@ export default function Login() {
   const [accessForm, setAccessForm] = useState(initialAccessForm);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (hasPasswordSetupToken()) {
+      setMode('setPassword');
+      return;
+    }
+
+    if (!supabase) return undefined;
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'USER_UPDATED') return;
+      if (event === 'SIGNED_IN' && isPasswordSetupFlow()) setMode('setPassword');
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   if (user && authorized && mode !== 'setPassword') return <Navigate to="/" replace />;
 
@@ -71,6 +87,11 @@ export default function Login() {
     }
     if (password !== confirmPassword) {
       throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) {
+      throw new Error('Convite ainda nao carregou a sessao. Como corrigir: aguarde alguns segundos nesta tela ou abra novamente o link do convite recebido no e-mail.');
     }
 
     const { error } = await supabase.auth.updateUser({ password });
@@ -403,10 +424,24 @@ function descriptionForMode(mode) {
 }
 
 function hasPasswordSetupToken() {
-  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const query = new URLSearchParams(window.location.search);
-  const type = params.get('type') || query.get('type');
-  return type === 'invite' || type === 'recovery';
+  return isPasswordSetupFlow();
+}
+
+function isPasswordSetupFlow() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  const type = hashParams.get('type') || queryParams.get('type');
+
+  if (type === 'invite' || type === 'recovery' || type === 'signup') return true;
+
+  return Boolean(
+    hashParams.get('access_token')
+      || hashParams.get('refresh_token')
+      || hashParams.get('token_hash')
+      || queryParams.get('code')
+      || queryParams.get('token_hash')
+      || queryParams.get('confirmation_url'),
+  );
 }
 
 async function registerAccessRequestInSupabase(form) {

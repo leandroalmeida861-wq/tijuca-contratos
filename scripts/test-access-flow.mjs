@@ -54,6 +54,8 @@ function testSourceContracts() {
   assert('SQL cria RLS por perfil', sqlSource.includes('agroflow_can_write') && sqlSource.includes('agroflow_is_admin'));
   assert('Formulario de solicitacao nao pede senha desejada', !loginSource.includes('Senha desejada'));
   assert('Convite abre criacao de senha em portugues', loginSource.includes('Criar senha de acesso') && loginSource.includes('hasPasswordSetupToken'));
+  assert('Convite reconhece formatos atuais do Supabase', loginSource.includes("queryParams.get('code')") && loginSource.includes("hashParams.get('access_token')") && loginSource.includes("queryParams.get('token_hash')"));
+  assert('Criacao de senha valida sessao do convite', loginSource.includes('supabase.auth.getSession()') && loginSource.includes('Convite ainda nao carregou a sessao'));
   assert('Login tem recuperacao segura de senha', loginSource.includes('Alterar ou recuperar senha') && loginSource.includes('resetPasswordForEmail'));
 }
 
