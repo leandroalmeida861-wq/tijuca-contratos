@@ -34,6 +34,8 @@ export default function Login() {
         await signIn(email, password);
       } else if (mode === 'setPassword') {
         await submitPasswordSetup();
+      } else if (mode === 'forgotPassword') {
+        await submitForgotPassword();
       } else {
         await submitAccessRequest();
       }
@@ -81,6 +83,22 @@ export default function Login() {
     setMessage('Senha criada com sucesso. Agora entre no AgroFlow usando seu e-mail e a senha criada.');
   }
 
+  async function submitForgotPassword() {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) {
+      throw new Error('Informe o e-mail aprovado. Como corrigir: digite o mesmo e-mail usado para acessar o AgroFlow.');
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+      redirectTo: 'https://agroflow-contratos.vercel.app/login',
+    });
+    if (error) throw error;
+
+    setMode('login');
+    setPassword('');
+    setMessage('Enviamos um link para alterar a senha. Abra o e-mail recebido e crie uma nova senha pelo AgroFlow.');
+  }
+
   function updateAccessForm(field, value) {
     setAccessForm((current) => ({ ...current, [field]: value }));
   }
@@ -112,6 +130,8 @@ export default function Login() {
                 <AccessRequestFields form={accessForm} update={updateAccessForm} />
               ) : mode === 'setPassword' ? (
                 <PasswordSetupFields password={password} setPassword={setPassword} confirmPassword={confirmPassword} setConfirmPassword={setConfirmPassword} />
+              ) : mode === 'forgotPassword' ? (
+                <ForgotPasswordFields email={email} setEmail={setEmail} />
               ) : (
                 <LoginFields mode={mode} email={email} setEmail={setEmail} password={password} setPassword={setPassword} />
               )}
@@ -128,8 +148,35 @@ export default function Login() {
             {message && <p className="mt-4 rounded-xl bg-slate-100 p-3 text-sm font-medium leading-5 text-slate-700">{message}</p>}
 
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
-              Novo usuario solicita acesso e cria a senha pelo convite oficial enviado apos a aprovacao.
+              {mode === 'request'
+                ? 'A senha sera criada pelo convite oficial enviado apos a aprovacao.'
+                : 'Novo usuario solicita acesso e cria a senha pelo convite oficial enviado apos a aprovacao.'}
             </p>
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('forgotPassword');
+                  setMessage('');
+                  setPassword('');
+                }}
+                className="mt-3 w-full text-center text-xs font-black text-teal-700 transition hover:text-teal-900"
+              >
+                Alterar ou recuperar senha
+              </button>
+            )}
+            {mode === 'forgotPassword' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setMessage('');
+                }}
+                className="mt-3 w-full text-center text-xs font-black text-teal-700 transition hover:text-teal-900"
+              >
+                Voltar para entrar
+              </button>
+            )}
           </section>
         </aside>
       </section>
@@ -262,6 +309,21 @@ function PasswordSetupFields({ password, setPassword, confirmPassword, setConfir
   );
 }
 
+function ForgotPasswordFields({ email, setEmail }) {
+  return (
+    <Field label="E-mail aprovado" icon={Mail}>
+      <input
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+        className="w-full border-0 bg-transparent outline-none"
+        type="email"
+        autoComplete="email"
+        required
+      />
+    </Field>
+  );
+}
+
 function AccessRequestFields({ form, update }) {
   return (
     <>
@@ -322,18 +384,21 @@ function LoginMetric({ value, label }) {
 function submitLabel(mode) {
   if (mode === 'login') return 'Entrar no sistema';
   if (mode === 'setPassword') return 'Criar senha';
+  if (mode === 'forgotPassword') return 'Enviar link para alterar senha';
   return 'Enviar pedido de acesso';
 }
 
 function titleForMode(mode) {
   if (mode === 'request') return 'Solicitar acesso';
   if (mode === 'setPassword') return 'Criar senha de acesso';
+  if (mode === 'forgotPassword') return 'Alterar senha';
   return 'Bem-vindo de volta';
 }
 
 function descriptionForMode(mode) {
   if (mode === 'request') return 'Preencha os dados para que Leandro receba o link de liberacao no e-mail dele.';
   if (mode === 'setPassword') return 'Seu convite foi aprovado. Crie uma senha para entrar no AgroFlow.';
+  if (mode === 'forgotPassword') return 'Informe seu e-mail aprovado para receber um link seguro de alteracao de senha.';
   return 'Acesse sua area segura para controlar contratos e relatorios.';
 }
 
