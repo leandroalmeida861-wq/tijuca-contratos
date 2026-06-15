@@ -10,6 +10,8 @@ const initialAccessForm = {
   email: '',
   telefone: '',
   observacao: '',
+  senha: '',
+  confirmarSenha: '',
 };
 
 export default function Login() {
@@ -64,6 +66,12 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
+    if (accessForm.senha.length < 6) {
+      throw new Error('Crie uma senha com pelo menos 6 caracteres.');
+    }
+    if (accessForm.senha !== accessForm.confirmarSenha) {
+      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
+    }
     const databaseRequest = await registerAccessRequestInSupabase(accessForm);
 
     submitNetlifyAccessEmail({
@@ -366,6 +374,28 @@ function AccessRequestFields({ form, update }) {
           className="min-h-24 rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100"
         />
       </label>
+      <Field label="Senha" icon={Lock}>
+        <input
+          value={form.senha}
+          onChange={(event) => update('senha', event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
+      <Field label="Confirmar senha" icon={Lock}>
+        <input
+          value={form.confirmarSenha}
+          onChange={(event) => update('confirmarSenha', event.target.value)}
+          className="w-full border-0 bg-transparent outline-none"
+          type="password"
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+      </Field>
     </>
   );
 }
