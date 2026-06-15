@@ -1,3 +1,4 @@
+// Login v2 - suporte a criacao de senha por convite
 import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
