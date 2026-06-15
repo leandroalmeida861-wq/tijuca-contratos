@@ -79,6 +79,7 @@ export default function Login() {
       email: accessForm.email,
       telefone: accessForm.telefone,
       observacao: accessForm.observacao,
+      senha: accessForm.senha,
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: databaseRequest.approvalUrl,
