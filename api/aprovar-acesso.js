@@ -2,6 +2,7 @@ import {
   ADMIN_APPROVED_REDIRECT,
   INVITE_REDIRECT_URL,
   findAuthUserByEmail,
+  getSupabasePublic,
   getSupabaseAdmin,
   normalizeEmail,
 } from './_supabaseAdmin.js';
@@ -43,7 +44,16 @@ export default async function handler(request, response) {
     const email = normalizeEmail(requestRow.email);
     if (!email) return redirectError(response, 'email_invalido');
 
+    const now = new Date().toISOString();
+
     let authUser = await findAuthUserByEmail(supabaseAdmin, email);
+    await upsertAuthorizedUser(supabaseAdmin, {
+      userId: authUser?.id || null,
+      nome: requestRow.nome || 'Usuario autorizado',
+      email,
+      now,
+    });
+
     if (!authUser) {
       const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
         redirectTo: INVITE_REDIRECT_URL,
@@ -56,23 +66,22 @@ export default async function handler(request, response) {
       });
       if (inviteError) throw inviteError;
       authUser = inviteData?.user || null;
-    }
 
-    const now = new Date().toISOString();
-    const { error: upsertError } = await supabaseAdmin
-      .from('usuarios_autorizados')
-      .upsert(
-        {
-          user_id: authUser?.id || null,
+      if (authUser?.id) {
+        await upsertAuthorizedUser(supabaseAdmin, {
+          userId: authUser.id,
           nome: requestRow.nome || 'Usuario autorizado',
           email,
-          perfil: 'operador',
-          status: 'ativo',
-          updated_at: now,
-        },
-        { onConflict: 'email' },
-      );
-    if (upsertError) throw upsertError;
+          now,
+        });
+      }
+    } else {
+      const supabasePublic = getSupabasePublic();
+      const { error: resetError } = await supabasePublic.auth.resetPasswordForEmail(email, {
+        redirectTo: INVITE_REDIRECT_URL,
+      });
+      if (resetError) throw resetError;
+    }
 
     const { error: updateError } = await supabaseAdmin
       .from('solicitacoes_acesso')
@@ -108,4 +117,21 @@ function approvalErrorCode(error) {
     return 'email_invalido_supabase';
   }
   return 'falha_aprovacao';
+}
+
+async function upsertAuthorizedUser(supabaseAdmin, { userId, nome, email, now }) {
+  const { error } = await supabaseAdmin
+    .from('usuarios_autorizados')
+    .upsert(
+      {
+        user_id: userId,
+        nome,
+        email,
+        perfil: 'operador',
+        status: 'ativo',
+        updated_at: now,
+      },
+      { onConflict: 'email' },
+    );
+  if (error) throw error;
 }

@@ -42,6 +42,8 @@ function testSourceContracts() {
   assert('Projeto usa Vercel Serverless Function para solicitar acesso', loginSource.includes('/api/solicitar-acesso'));
   assert('Link de aprovacao correto vai para /api/aprovar-acesso', requestApiSource.includes('/api/aprovar-acesso?token='));
   assert('Aprovacao usa convite oficial do Supabase', approveApiSource.includes('inviteUserByEmail'));
+  assert('Aprovacao ativa usuario antes de enviar convite', approveApiSource.indexOf('await upsertAuthorizedUser') < approveApiSource.indexOf('inviteUserByEmail'));
+  assert('Aprovacao reenvia senha para usuario ja existente', approveApiSource.includes('resetPasswordForEmail'));
   assert('Convite redireciona para /login', approveApiSource.includes('redirectTo: INVITE_REDIRECT_URL'));
   assert('Admin volta para /admin/solicitacoes com sucesso', approveApiSource.includes('ADMIN_APPROVED_REDIRECT'));
   assert('Frontend nao cria usuario com signUp', !loginSource.includes('signUp') && !authSource.includes('signUp'));
