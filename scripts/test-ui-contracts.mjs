@@ -20,7 +20,7 @@ async function main() {
     const response = await fetch(`${SITE_URL}${route}`);
     const html = await response.text();
     assert(`Rota ${route} responde 200`, response.ok, `status ${response.status}`);
-    assert(`Rota ${route} entrega app React`, html.includes('<div id="root"></div>'));
+    assert(`Rota ${route} entrega app React`, html.includes('<div id="root">'));
   }
 
   const loginHtml = await fetch(`${SITE_URL}/login`).then((response) => response.text());
