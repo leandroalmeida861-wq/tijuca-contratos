@@ -6,29 +6,33 @@ import {
   FileArchive,
   Factory,
   Grid2X2,
+  History,
   LogOut,
   Package,
   Receipt,
+  ShieldCheck,
   Truck,
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: Grid2X2 },
-  { to: '/fornecedores', label: 'Fornecedores', icon: Building2 },
-  { to: '/fabricas', label: 'Fábricas', icon: Factory },
-  { to: '/produtos', label: 'Produtos', icon: Package },
-  { to: '/contratos', label: 'Contratos', icon: ClipboardList },
-  { to: '/notas-fiscais', label: 'Notas Fiscais', icon: Receipt },
-  { to: '/frete', label: 'Frete', icon: Truck },
-  { to: '/documentos', label: 'Documentos', icon: FileArchive },
-  { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3 },
-  { to: '/backup', label: 'Backup', icon: Database },
+  { to: '/', label: 'Dashboard', icon: Grid2X2, menu: 'dashboard' },
+  { to: '/fornecedores', label: 'Fornecedores', icon: Building2, menu: 'fornecedores' },
+  { to: '/fabricas', label: 'Fábricas', icon: Factory, menu: 'fabricas' },
+  { to: '/produtos', label: 'Produtos', icon: Package, menu: 'produtos' },
+  { to: '/contratos', label: 'Contratos', icon: ClipboardList, menu: 'contratos' },
+  { to: '/notas-fiscais', label: 'Notas Fiscais', icon: Receipt, menu: 'notas_fiscais' },
+  { to: '/frete', label: 'Frete', icon: Truck, menu: 'fretes' },
+  { to: '/documentos', label: 'Documentos', icon: FileArchive, menu: 'documentos' },
+  { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3, menu: 'financeiro' },
+  { to: '/backup', label: 'Backup', icon: Database, menu: 'backup' },
+  { to: '/admin/acessos', label: 'Usuários e permissões', icon: ShieldCheck, menu: 'usuarios' },
+  { to: '/admin/auditoria', label: 'Auditoria', icon: History, menu: 'auditoria' },
 ];
 
 export default function AppLayout() {
-  const { signOut } = useAuth();
+  const { signOut, can, profileData } = useAuth();
 
   return (
     <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_1fr]">
@@ -42,7 +46,7 @@ export default function AppLayout() {
         </div>
 
         <nav className="grid gap-1">
-          {navItems.map((item) => (
+          {navItems.filter((item) => can(item.menu, 'visualizar')).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -59,6 +63,11 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="mt-5 border-t border-slate-800 px-4 pt-4 text-xs text-slate-400">
+          <p className="truncate font-semibold text-slate-200">{profileData?.nome || profileData?.email}</p>
+          <p className="mt-1 uppercase">{profileData?.perfil || 'usuário'}</p>
+        </div>
 
         <button
           type="button"

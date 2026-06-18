@@ -19,7 +19,6 @@ export default async function handler(request, response) {
     const email = normalizeEmail(body.email);
     const telefone = String(body.telefone || '').trim();
     const observacao = String(body.observacao || '').trim();
-
     if (!nome || !email) {
       return sendJson(response, 400, {
         error: 'Nome e e-mail sao obrigatorios. Como corrigir: preencha o nome do solicitante e um e-mail valido.',

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 const messages = {
   usuario_aprovado: {
     title: 'Usuario aprovado',
-    text: 'O convite do Supabase foi enviado para o usuario criar a senha e acessar o AgroFlow.',
+    text: 'O convite oficial do Supabase foi enviado para o usuario criar a senha e acessar o AgroFlow.',
   },
 };
 

@@ -13,12 +13,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.jsx';
 import { deleteRow, exportContractsCsv, exportContractsExcel, listContracts, listFreights, listTable } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 
 const chartColors = ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#e2b849', '#d8783d'];
 
 export default function Dashboard() {
+  const { can } = useAuth();
   const [contracts, setContracts] = useState([]);
   const [freights, setFreights] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -165,12 +167,12 @@ export default function Dashboard() {
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Todos os contratos ({filteredContracts.length})</h2>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <button onClick={() => exportContractsCsv(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            {can('contratos', 'exportar') && <button onClick={() => exportContractsCsv(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
               <Download size={16} /> CSV
-            </button>
-            <button onClick={() => exportContractsExcel(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            </button>}
+            {can('contratos', 'exportar') && <button onClick={() => exportContractsExcel(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
               <Download size={16} /> Excel
-            </button>
+            </button>}
             <label className="flex h-10 min-w-64 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500">
               <Search size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full border-0 outline-none" placeholder="Buscar contratos..." />
@@ -214,12 +216,12 @@ export default function Dashboard() {
                       <Link to="/contratos" className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Visualizar">
                         <Eye size={17} />
                       </Link>
-                      <Link to="/contratos" className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar">
+                      {can('contratos', 'editar') && <Link to="/contratos" className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar">
                         <Edit size={17} />
-                      </Link>
-                      <button onClick={() => removeContract(contract.id)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir">
+                      </Link>}
+                      {can('contratos', 'excluir') && <button onClick={() => removeContract(contract.id)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir">
                         <Trash2 size={17} />
-                      </button>
+                      </button>}
                     </div>
                   </td>
                 </tr>

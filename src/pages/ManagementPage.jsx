@@ -1,6 +1,7 @@
 import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { createNote, createRow, deleteNote, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { auditAction, createNote, createRow, deleteNote, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
 import { deleteDocumentPdf, openDocumentPdf, uploadDocumentPdf } from '../lib/documentStorage.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { exportSimplePdf } from '../lib/pdf.js';
@@ -79,6 +80,8 @@ export default function ManagementPage({ type }) {
 }
 
 function GenericPage({ config }) {
+  const { can } = useAuth();
+  const menu = config.table === 'fretes' ? 'fretes' : config.table;
   const [rows, setRows] = useState([]);
   const [selectOptions, setSelectOptions] = useState({});
   const [form, setForm] = useState(defaultForm(config.fields));
@@ -226,7 +229,7 @@ function GenericPage({ config }) {
 
   return (
     <CrudShell title={config.title} query={query} setQuery={setQuery} error={error}>
-      {config.table === 'fretes' && (
+      {config.table === 'fretes' && can(menu, 'cadastrar') && (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -241,7 +244,7 @@ function GenericPage({ config }) {
           </div>
         </section>
       )}
-      {config.table === 'documentos' ? (
+      {can(menu, editingId ? 'editar' : 'cadastrar') && (config.table === 'documentos' ? (
         <DocumentForm
           form={form}
           setForm={setForm}
@@ -252,12 +255,12 @@ function GenericPage({ config }) {
         />
       ) : (
         <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
-      )}
+      ))}
       <DataTable
         rows={filtered}
         columns={config.columns}
-        onEdit={edit}
-        onDelete={removeRow}
+        onEdit={can(menu, 'editar') ? edit : undefined}
+        onDelete={can(menu, 'excluir') ? removeRow : undefined}
         onOpenDocument={config.table === 'documentos' ? openDocument : undefined}
       />
     </CrudShell>
@@ -265,6 +268,7 @@ function GenericPage({ config }) {
 }
 
 function ContractsPage() {
+  const { can } = useAuth();
   const [contracts, setContracts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [factories, setFactories] = useState([]);
@@ -315,7 +319,7 @@ function ContractsPage() {
 
   return (
     <CrudShell title="Contratos" query={query} setQuery={setQuery} error={error}>
-      <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-4">
+      {can('contratos', editingId ? 'editar' : 'cadastrar') && <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-4">
         <Input label="Número do contrato" value={form.numero_contrato} onChange={(value) => setForm({ ...form, numero_contrato: value })} required />
         <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => setForm({ ...form, fornecedor_id: value })} options={suppliers} required />
         <Select label="Produto" value={form.produto_id} onChange={(value) => setForm({ ...form, produto_id: value })} options={products} required />
@@ -330,7 +334,7 @@ function ContractsPage() {
           </button>
           {editingId && <CancelButton onClick={() => { setEditingId(null); setForm(defaultContractForm()); }} />}
         </div>
-      </form>
+      </form>}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
         <table className="w-full min-w-[1120px] text-left text-sm">
@@ -350,7 +354,7 @@ function ContractsPage() {
                 <td className="px-4 py-3">{percent(contract.percentual)}</td>
                 <td className="px-4 py-3">{dateBr(contract.data_vencimento)}</td>
                 <td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-bold ring-1 ${statusClass(contract.status_calculado)}`}>{contract.status_calculado}</span></td>
-                <td className="px-4 py-3"><RowActions onEdit={() => { setEditingId(contract.id); setForm(defaultContractForm(contract)); }} onDelete={() => deleteRow('contratos', contract.id).then(load).catch((err) => setError(toUserError('excluir-contrato', err)))} /></td>
+                <td className="px-4 py-3"><RowActions onEdit={can('contratos', 'editar') ? () => { setEditingId(contract.id); setForm(defaultContractForm(contract)); } : undefined} onDelete={can('contratos', 'excluir') ? () => deleteRow('contratos', contract.id).then(load).catch((err) => setError(toUserError('excluir-contrato', err))) : undefined} /></td>
               </tr>
             ))}
           </tbody>
@@ -361,6 +365,7 @@ function ContractsPage() {
 }
 
 function NotesPage() {
+  const { can } = useAuth();
   const [notes, setNotes] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -479,6 +484,7 @@ function NotesPage() {
   }
 
   function exportNotesPdf() {
+    auditAction('exportar', 'notas_fiscais', null, { formato: 'pdf', total: reportRows.length });
     exportSimplePdf({
       title: 'AgroFlow - Relatorio de Notas Fiscais',
       subtitle: 'Notas filtradas por contrato e fornecedor',
@@ -514,11 +520,11 @@ function NotesPage() {
       <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-[1fr_1fr_auto]">
         <Select label="Relatorio por contrato" value={reportFilters.contrato_id} onChange={(value) => setReportFilters({ ...reportFilters, contrato_id: value })} options={contracts.map((item) => ({ id: item.id, nome: item.numero_contrato }))} />
         <Select label="Relatorio por fornecedor" value={reportFilters.fornecedor_id} onChange={(value) => setReportFilters({ ...reportFilters, fornecedor_id: value })} options={suppliers} />
-        <button type="button" onClick={exportNotesPdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+        {can('notas_fiscais', 'exportar') && <button type="button" onClick={exportNotesPdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
           <Download size={17} /> PDF
-        </button>
+        </button>}
       </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+      {can('notas_fiscais', 'cadastrar') && <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Importar XML da NF-e</h2>
@@ -562,8 +568,8 @@ function NotesPage() {
           />
         </div>
         {xmlInfo && <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{xmlInfo}</p>}
-      </section>
-      <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
+      </section>}
+      {can('notas_fiscais', 'cadastrar') && <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
         <Input label="Número da NF" value={form.numero_nf} onChange={(value) => setForm({ ...form, numero_nf: value })} required />
         <Select label="Contrato" value={form.contrato_id} onChange={(value) => setForm({ ...form, contrato_id: value })} options={contracts.map((item) => ({ id: item.id, nome: item.numero_contrato }))} required />
         <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => setForm({ ...form, fornecedor_id: value })} options={suppliers} required />
@@ -573,13 +579,14 @@ function NotesPage() {
         <button className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 xl:col-span-3">
           <Save size={17} /> Registrar nota fiscal
         </button>
-      </form>
-      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_unitario', 'valor_total', 'data_recebimento']} onDelete={(id, row) => removeNote(row)} />
+      </form>}
+      <DataTable rows={filtered} columns={['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome', 'quantidade_recebida', 'valor_unitario', 'valor_total', 'data_recebimento']} onDelete={can('notas_fiscais', 'excluir') ? (id, row) => removeNote(row) : undefined} />
     </CrudShell>
   );
 }
 
 function FinancePage() {
+  const { can } = useAuth();
   const [contracts, setContracts] = useState([]);
   const [freights, setFreights] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -616,6 +623,7 @@ function FinancePage() {
   const averageWithFreight = totalKg > 0 ? totalWithFreight / totalKg : 0;
 
   function exportFinancePdf() {
+    auditAction('exportar', 'financeiro', null, { formato: 'pdf', total: filteredContracts.length });
     exportSimplePdf({
       title: 'AgroFlow - Relatorio Financeiro',
       subtitle: 'Relatorio filtrado por fornecedor e contrato',
@@ -665,9 +673,9 @@ function FinancePage() {
       <section className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-[1fr_1fr_auto]">
         <Select label="Fornecedor" value={filters.fornecedor_id} onChange={(value) => setFilters({ ...filters, fornecedor_id: value, contrato_id: '' })} options={suppliers} />
         <Select label="Contrato" value={filters.contrato_id} onChange={(value) => setFilters({ ...filters, contrato_id: value })} options={contracts.filter((contract) => !filters.fornecedor_id || contract.fornecedor_id === filters.fornecedor_id).map((contract) => ({ id: contract.id, nome: contract.numero_contrato }))} />
-        <button type="button" onClick={exportFinancePdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+        {can('financeiro', 'exportar') && <button type="button" onClick={exportFinancePdf} className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
           <Download size={17} /> PDF
-        </button>
+        </button>}
       </section>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric label="Valor contratado" value={currency(total)} />

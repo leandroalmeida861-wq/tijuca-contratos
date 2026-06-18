@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
+import { permissionsToMap } from '../lib/permissions.js';
 
 export const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
 
@@ -9,6 +10,8 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [authorized, setAuthorized] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [profileData, setProfileData] = useState(null);
+  const [permissions, setPermissions] = useState({});
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,6 +19,8 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured) {
       setAuthorized(false);
       setProfile(null);
+      setProfileData(null);
+      setPermissions({});
       setAccess(null);
       setLoading(false);
       return undefined;
@@ -58,12 +63,17 @@ export function AuthProvider({ children }) {
 
     setAuthorized(true);
     setProfile(authorization.profile);
+    setProfileData(authorization.profileData);
+    setPermissions(authorization.permissions);
     setAccess(authorization.access);
+    await supabase.rpc('agroflow_auditar', { action_name: 'login', table_name: 'auth', record_id: null, old_data: null, new_data: null });
   }
 
   async function signOut() {
     setAuthorized(false);
     setProfile(null);
+    setProfileData(null);
+    setPermissions({});
     setAccess(null);
     if (supabase) await supabase.auth.signOut();
   }
@@ -72,7 +82,14 @@ export function AuthProvider({ children }) {
     const authorization = await loadAuthorization(email);
     setAuthorized(Boolean(authorization?.authorized));
     setProfile(authorization?.profile || null);
+    setProfileData(authorization?.profileData || null);
+    setPermissions(authorization?.permissions || {});
     setAccess(authorization?.access || null);
+  }
+
+  function can(menu, action = 'visualizar') {
+    if (profile === 'admin') return true;
+    return Boolean(permissions?.[menu]?.[action]);
   }
 
   const value = useMemo(
@@ -81,13 +98,16 @@ export function AuthProvider({ children }) {
       user: session?.user || null,
       authorized,
       profile,
+      profileData,
+      permissions,
+      can,
       access,
       loading,
       signIn,
       signOut,
       configured: isSupabaseConfigured,
     }),
-    [session, authorized, profile, access, loading],
+    [session, authorized, profile, profileData, permissions, access, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -103,14 +123,20 @@ async function loadAuthorization(email) {
   const normalized = normalizeEmail(email);
   if (!normalized || !isSupabaseConfigured) return { authorized: false };
 
-  const { data, error } = await supabase.rpc('agroflow_usuario_atual');
-  if (error) return { authorized: normalized === AUTHORIZED_EMAIL, profile: 'admin' };
+  await supabase.rpc('agroflow_ensure_profile');
+  const [{ data, error }, { data: permissionRows, error: permissionError }] = await Promise.all([
+    supabase.rpc('agroflow_profile_atual'),
+    supabase.rpc('agroflow_permissoes_atuais'),
+  ]);
+  if (error || permissionError) return { authorized: normalized === AUTHORIZED_EMAIL, profile: 'admin', permissions: {} };
 
   const row = Array.isArray(data) ? data[0] : data;
-  if (row?.status === 'ativo') {
+  if (row?.ativo) {
     return {
       authorized: true,
       profile: row.perfil || (normalized === AUTHORIZED_EMAIL ? 'admin' : 'operador'),
+      profileData: row,
+      permissions: permissionsToMap(permissionRows || []),
       access: row,
     };
   }

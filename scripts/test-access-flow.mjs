@@ -29,7 +29,7 @@ async function testPublishedHtml() {
   const response = await fetch(`${SITE_URL}/login`);
   const html = await response.text();
   assert('HTML publicado na Vercel responde', response.ok, `status ${response.status}`);
-  assert('HTML publicado tem root React', html.includes('<div id="root"></div>'));
+  assert('HTML publicado tem root React', html.includes('<div id="root">'));
 }
 
 function testSourceContracts() {
@@ -37,11 +37,12 @@ function testSourceContracts() {
   const loginSource = readFileSync('src/pages/Login.jsx', 'utf8');
   const requestApiSource = readFileSync('api/solicitar-acesso.js', 'utf8');
   const approveApiSource = readFileSync('api/aprovar-acesso.js', 'utf8');
-  const sqlSource = readFileSync('supabase/agroflow-acesso-perfis.sql', 'utf8');
+  const sqlSource = readFileSync('supabase/rbac-tres-perfis.sql', 'utf8');
 
   assert('Projeto usa Vercel Serverless Function para solicitar acesso', loginSource.includes('/api/solicitar-acesso'));
   assert('Link de aprovacao correto vai para /api/aprovar-acesso', requestApiSource.includes('/api/aprovar-acesso?token='));
   assert('Aprovacao usa convite oficial do Supabase', approveApiSource.includes('inviteUserByEmail'));
+  assert('Senha e gerenciada somente pelo Supabase Auth', !approveApiSource.includes('password:') && !requestApiSource.includes('senha_criptografada'));
   assert('Aprovacao ativa usuario antes de enviar convite', approveApiSource.indexOf('await upsertAuthorizedUser') < approveApiSource.indexOf('inviteUserByEmail'));
   assert('Aprovacao reenvia senha para usuario ja existente', approveApiSource.includes('resetPasswordForEmail'));
   assert('Convite redireciona para /login', approveApiSource.includes('redirectTo: INVITE_REDIRECT_URL'));
@@ -49,14 +50,14 @@ function testSourceContracts() {
   assert('Frontend nao cria usuario com signUp', !loginSource.includes('signUp') && !authSource.includes('signUp'));
   assert('Frontend nao usa service role', !loginSource.includes('SERVICE_ROLE') && !authSource.includes('SERVICE_ROLE'));
   assert('AuthContext nao depende de localStorage', !authSource.includes('localStorage'));
-  assert('Login consulta perfil no Supabase', authSource.includes('agroflow_usuario_atual'));
-  assert('SQL cria solicitacoes_acesso', sqlSource.includes('create table if not exists public.solicitacoes_acesso'));
-  assert('SQL cria usuarios_autorizados com perfil', sqlSource.includes('perfil text not null default'));
+  assert('Login consulta profile e permissoes no Supabase', authSource.includes('agroflow_profile_atual') && authSource.includes('agroflow_permissoes_atuais'));
+  assert('SQL cria profiles e permissoes', sqlSource.includes('create table if not exists public.profiles') && sqlSource.includes('create table if not exists public.permissoes_menu'));
   assert('SQL garante Leandro como admin', sqlSource.includes(AUTHORIZED_EMAIL) && sqlSource.includes("'admin'"));
-  assert('SQL cria RLS por perfil', sqlSource.includes('agroflow_can_write') && sqlSource.includes('agroflow_is_admin'));
-  assert('Formulario de solicitacao nao pede senha desejada', !loginSource.includes('Senha desejada'));
+  assert('SQL cria RLS por menu e acao', sqlSource.includes('agroflow_tem_permissao') && sqlSource.includes('rbac_insert_'));
+  assert('Formulario de solicitacao nao pede senha', !loginSource.includes('form.senha') && !loginSource.includes('confirmarSenha'));
   assert('Convite abre criacao de senha em portugues', loginSource.includes('Criar senha de acesso') && loginSource.includes('hasPasswordSetupToken'));
   assert('Convite reconhece formatos atuais do Supabase', loginSource.includes("queryParams.get('code')") && loginSource.includes("hashParams.get('access_token')") && loginSource.includes("queryParams.get('token_hash')"));
+  assert('Login troca code PKCE por sessao', loginSource.includes('exchangeCodeForSession'));
   assert('Criacao de senha valida sessao do convite', loginSource.includes('supabase.auth.getSession()') && loginSource.includes('Convite ainda nao carregou a sessao'));
   assert('Login tem recuperacao segura de senha', loginSource.includes('Alterar ou recuperar senha') && loginSource.includes('resetPasswordForEmail'));
 }

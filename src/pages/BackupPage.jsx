@@ -1,9 +1,11 @@
 import { Download, FileUp, FileSpreadsheet, RefreshCw, ShieldCheck, UploadCloud } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext.jsx';
 import { backupSummary, backupTables, exportBackupExcel, exportFullBackupJson, exportTableCsv, exportTableExcel, parseBackupFile } from '../lib/backup.js';
-import { importBackupData, listBackupData } from '../lib/api.js';
+import { auditAction, importBackupData, listBackupData } from '../lib/api.js';
 
 export default function BackupPage() {
+  const { can } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -88,11 +90,11 @@ export default function BackupPage() {
               </p>
             </div>
           </div>
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          {can('backup', 'exportar') && <div className="mt-5 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
               disabled={disabled}
-              onClick={() => exportFullBackupJson(data)}
+              onClick={() => { auditAction('exportar', 'backup', null, { formato: 'json' }); exportFullBackupJson(data); }}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <Download size={17} />
@@ -101,13 +103,13 @@ export default function BackupPage() {
             <button
               type="button"
               disabled={disabled}
-              onClick={() => exportBackupExcel(data)}
+              onClick={() => { auditAction('exportar', 'backup', null, { formato: 'xlsx' }); exportBackupExcel(data); }}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
             >
               <FileSpreadsheet size={17} />
               Baixar tudo em Excel
             </button>
-          </div>
+          </div>}
         </article>
 
         <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
@@ -123,7 +125,7 @@ export default function BackupPage() {
         </article>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+      {can('backup', 'cadastrar') && <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
         <div className="flex items-start gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-lg bg-sky-50 text-sky-700">
             <UploadCloud size={22} />
@@ -172,7 +174,7 @@ export default function BackupPage() {
             {importing ? 'Importando...' : 'Importar backup'}
           </button>
         </form>
-      </section>
+      </section>}
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-panel">
         <div className="border-b border-slate-200 px-5 py-4">

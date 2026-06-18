@@ -1,6 +1,14 @@
 {
-  "buildCommand": "npm run test:documents && npm run test:resilience && npm run build",
+  "buildCommand": "npm run test:documents && npm run test:rbac && npm run test:resilience && npm run build",
   "rewrites": [
+    {
+      "source": "/consulta-cnpj",
+      "destination": "/login"
+    },
+    {
+      "source": "/consulta-cnpj/(.*)",
+      "destination": "/login"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"

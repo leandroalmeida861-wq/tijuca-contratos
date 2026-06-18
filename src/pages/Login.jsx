@@ -10,8 +10,6 @@ const initialAccessForm = {
   email: '',
   telefone: '',
   observacao: '',
-  senha: '',
-  confirmarSenha: '',
 };
 
 export default function Login() {
@@ -25,19 +23,49 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (hasPasswordSetupToken()) {
-      setMode('setPassword');
-      return;
+    let cancelled = false;
+
+    async function bootstrapAuthCallback() {
+      if (!supabase) return;
+
+      const queryParams = new URLSearchParams(window.location.search);
+      const code = queryParams.get('code');
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!cancelled && !error) {
+          setMode('setPassword');
+          window.history.replaceState({}, document.title, '/login');
+        }
+        return;
+      }
+
+      if (hasPasswordSetupToken()) {
+        const { data } = await supabase.auth.getSession();
+        if (!cancelled && data?.session) {
+          setMode('setPassword');
+        }
+      }
     }
+
+    bootstrapAuthCallback();
 
     if (!supabase) return undefined;
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'USER_UPDATED') return;
-      if (event === 'SIGNED_IN' && isPasswordSetupFlow()) setMode('setPassword');
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('setPassword');
+        return;
+      }
+      if (event === 'SIGNED_IN' && isPasswordSetupFlow()) {
+        setMode('setPassword');
+      }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   if (user && authorized && mode !== 'setPassword') return <Navigate to="/" replace />;
@@ -66,12 +94,6 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
-    if (accessForm.senha.length < 6) {
-      throw new Error('Crie uma senha com pelo menos 6 caracteres.');
-    }
-    if (accessForm.senha !== accessForm.confirmarSenha) {
-      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
-    }
     const databaseRequest = await registerAccessRequestInSupabase(accessForm);
 
     submitNetlifyAccessEmail({
@@ -79,16 +101,15 @@ export default function Login() {
       email: accessForm.email,
       telefone: accessForm.telefone,
       observacao: accessForm.observacao,
-      senha: accessForm.senha,
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: databaseRequest.approvalUrl,
-      status_senha: 'Senha nao enviada por e-mail nem por link. O usuario criara a senha pelo convite oficial do Supabase depois da aprovacao.',
+      status_senha: 'A senha sera definida somente pelo convite oficial do Supabase depois da aprovacao.',
       status_banco: 'Solicitacao gravada no Supabase em solicitacoes_acesso. A aprovacao usa token seguro e service role apenas no backend.',
     });
 
     setAccessForm(initialAccessForm);
-    setMessage('Pedido registrado e enviado ao administrador. Depois da aprovacao, o usuario recebera um convite do Supabase para criar a senha.');
+    setMessage('Pedido registrado. Depois da aprovacao, o Supabase enviara um convite seguro para voce criar sua senha.');
   }
 
   async function submitPasswordSetup() {
@@ -180,8 +201,8 @@ export default function Login() {
 
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
               {mode === 'request'
-                ? 'A senha sera criada pelo convite oficial enviado apos a aprovacao.'
-                : 'Novo usuario solicita acesso e cria a senha pelo convite oficial enviado apos a aprovacao.'}
+                ? 'A senha sera criada somente pelo convite oficial enviado apos a aprovacao.'
+                : 'Novo usuario solicita acesso e cria a senha pelo convite oficial do Supabase.'}
             </p>
             {mode === 'login' && (
               <button
@@ -375,28 +396,6 @@ function AccessRequestFields({ form, update }) {
           className="min-h-24 rounded-xl border border-slate-300 bg-white px-3 py-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100"
         />
       </label>
-      <Field label="Senha" icon={Lock}>
-        <input
-          value={form.senha}
-          onChange={(event) => update('senha', event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="password"
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-      </Field>
-      <Field label="Confirmar senha" icon={Lock}>
-        <input
-          value={form.confirmarSenha}
-          onChange={(event) => update('confirmarSenha', event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="password"
-          autoComplete="new-password"
-          minLength={6}
-          required
-        />
-      </Field>
     </>
   );
 }

@@ -134,4 +134,21 @@ async function upsertAuthorizedUser(supabaseAdmin, { userId, nome, email, now })
       { onConflict: 'email' },
     );
   if (error) throw error;
+
+  if (userId) {
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          user_id: userId,
+          nome,
+          email,
+          perfil: email === 'leandroalmeida861@gmail.com' ? 'admin' : 'operador',
+          ativo: true,
+          atualizado_em: now,
+        },
+        { onConflict: 'user_id' },
+      );
+    if (profileError) throw profileError;
+  }
 }

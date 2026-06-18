@@ -142,6 +142,16 @@ export async function createNote(payload) {
   return data;
 }
 
+export function auditAction(action, table = null, recordId = null, newData = null) {
+  return supabase.rpc('agroflow_auditar', {
+    action_name: action,
+    table_name: table,
+    record_id: recordId,
+    old_data: null,
+    new_data: newData,
+  });
+}
+
 async function importSimpleTable(table, rows, context, userId) {
   const allowed = {
     fornecedores: ['id', 'user_id', 'nome', 'cnpj', 'telefone', 'email', 'cidade', 'uf', 'created_at'],
@@ -466,6 +476,7 @@ export function hydrateContracts(contracts) {
 }
 
 export function exportContractsCsv(contracts) {
+  auditAction('exportar', 'contratos', null, { formato: 'csv', total: contracts.length });
   const headers = [
     'Número',
     'Fornecedor',
@@ -495,6 +506,7 @@ export function exportContractsCsv(contracts) {
 }
 
 export function exportContractsExcel(contracts) {
+  auditAction('exportar', 'contratos', null, { formato: 'xlsx', total: contracts.length });
   const rows = contracts.map((contract) => ({
     Número: contract.numero_contrato,
     Fornecedor: contract.fornecedor?.nome || '',
