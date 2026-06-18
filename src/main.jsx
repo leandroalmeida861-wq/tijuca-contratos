@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import AppErrorBoundary from './components/AppErrorBoundary.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
@@ -13,9 +14,10 @@ import './styles/index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route
             path="/"
@@ -38,8 +40,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="admin/solicitacoes" element={<AdminSolicitacoes />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
