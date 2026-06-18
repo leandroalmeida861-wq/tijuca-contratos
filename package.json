@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test:access": "node scripts/test-access-flow.mjs",
     "test:backup": "node scripts/test-backup-import.mjs",
+    "test:documents": "node scripts/test-documents-storage.mjs",
     "test:ui": "node scripts/test-ui-contracts.mjs"
   },
   "dependencies": {

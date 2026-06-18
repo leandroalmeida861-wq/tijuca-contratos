@@ -1,6 +1,7 @@
 import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createNote, createRow, deleteNote, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
+import { deleteDocumentPdf, openDocumentPdf, uploadDocumentPdf } from '../lib/documentStorage.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { exportSimplePdf } from '../lib/pdf.js';
 
@@ -104,20 +105,33 @@ function GenericPage({ config }) {
   async function submit(event) {
     event.preventDefault();
     setError('');
+    let uploadedUrl = '';
     try {
-      const payload = config.table === 'documentos'
-        ? cleanPayload({ ...form, tipo: 'PDF' }, ['nome', 'tipo', 'url', 'observacoes'])
-        : cleanPayload(form, config.fields.map((field) => field.name));
-      if (config.table === 'documentos' && !payload.url) {
+      if (config.table === 'documentos' && !form.url && !form.pdfFile) {
         setError('Importe um arquivo PDF antes de salvar. Como corrigir: clique em "Importar PDF" e selecione um documento em PDF.');
         return;
       }
+
+      if (config.table === 'documentos' && form.pdfFile) {
+        uploadedUrl = await uploadDocumentPdf(form.pdfFile);
+      }
+
+      const payload = config.table === 'documentos'
+        ? cleanPayload({ ...form, tipo: 'PDF', url: uploadedUrl || form.url }, ['nome', 'tipo', 'url', 'observacoes'])
+        : cleanPayload(form, config.fields.map((field) => field.name));
+
       if (editingId) await updateRow(config.table, editingId, payload);
       else await createRow(config.table, payload);
+
+      if (config.table === 'documentos' && uploadedUrl && form.url && form.url !== uploadedUrl) {
+        deleteDocumentPdf(form.url).catch(() => undefined);
+      }
+
       setForm(defaultForm(config.fields));
       setEditingId(null);
       await load();
     } catch (err) {
+      if (uploadedUrl) await deleteDocumentPdf(uploadedUrl).catch(() => undefined);
       setError(toUserError('salvar-cadastro', err));
     }
   }
@@ -133,7 +147,11 @@ function GenericPage({ config }) {
     if (!window.confirm(`Excluir este registro de ${config.title}?`)) return;
     setError('');
     try {
+      const row = rows.find((item) => item.id === id);
       await deleteRow(config.table, id);
+      if (config.table === 'documentos' && row?.url) {
+        await deleteDocumentPdf(row.url);
+      }
       await load();
     } catch (err) {
       setError(toUserError('excluir-cadastro', err));
@@ -188,13 +206,22 @@ function GenericPage({ config }) {
       return;
     }
 
-    const dataUrl = await readFileAsDataUrl(file);
     setForm((current) => ({
       ...current,
       nome: current.nome || file.name.replace(/\.pdf$/i, ''),
       tipo: 'PDF',
-      url: dataUrl,
+      pdfFile: file,
+      pdfFileName: file.name,
     }));
+  }
+
+  async function openDocument(url) {
+    setError('');
+    try {
+      await openDocumentPdf(url);
+    } catch (err) {
+      setError(toUserError('abrir-documento', err));
+    }
   }
 
   return (
@@ -226,7 +253,13 @@ function GenericPage({ config }) {
       ) : (
         <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
       )}
-      <DataTable rows={filtered} columns={config.columns} onEdit={edit} onDelete={removeRow} />
+      <DataTable
+        rows={filtered}
+        columns={config.columns}
+        onEdit={edit}
+        onDelete={removeRow}
+        onOpenDocument={config.table === 'documentos' ? openDocument : undefined}
+      />
     </CrudShell>
   );
 }
@@ -697,7 +730,7 @@ function DocumentForm({ form, setForm, editing, onCancel, onSubmit, onFileChange
         Arquivo PDF
         <span className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
           <FileUp size={17} />
-          {form.url ? 'PDF importado' : 'Importar PDF'}
+          {form.pdfFileName || (form.url ? 'PDF anexado' : 'Importar PDF')}
           <input type="file" accept="application/pdf,.pdf" onChange={onFileChange} className="sr-only" />
         </span>
       </label>
@@ -739,7 +772,7 @@ function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, select
   );
 }
 
-function DataTable({ rows, columns, onEdit, onDelete }) {
+function DataTable({ rows, columns, onEdit, onDelete, onOpenDocument }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
       <table className="w-full min-w-[760px] text-left text-sm">
@@ -752,7 +785,7 @@ function DataTable({ rows, columns, onEdit, onDelete }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="border-b border-slate-100 last:border-0">
-              {columns.map((column) => <td key={column} className="px-4 py-3 text-slate-700">{formatCell(getValue(row, column), column, row)}</td>)}
+              {columns.map((column) => <td key={column} className="px-4 py-3 text-slate-700">{formatCell(getValue(row, column), column, row, onOpenDocument)}</td>)}
               {(onEdit || onDelete) && <td className="px-4 py-3"><RowActions onEdit={() => onEdit?.(row)} onDelete={() => onDelete?.(row.id, row)} /></td>}
             </tr>
           ))}
@@ -805,15 +838,6 @@ function defaultForm(fields, row = {}) {
   return fields.reduce((acc, field) => ({ ...acc, [field.name]: row[field.name] ?? field.defaultValue ?? '' }), {});
 }
 
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Não foi possível ler o PDF. Como corrigir: selecione o arquivo novamente.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function defaultContractForm(row = {}) {
   return {
     numero_contrato: row.numero_contrato || '',
@@ -859,9 +883,19 @@ function label(value) {
   return value.split('.').pop().replace(/_/g, ' ');
 }
 
-function formatCell(value, column, row = {}) {
+function formatCell(value, column, row = {}, onOpenDocument) {
   if (value === null || value === undefined || value === '') return '-';
-  if (column === 'url') return <a href={String(value)} target="_blank" rel="noreferrer" className="font-bold text-tijuca-700 hover:underline">Abrir PDF</a>;
+  if (column === 'url') {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenDocument?.(String(value))}
+        className="font-bold text-tijuca-700 hover:underline"
+      >
+        Abrir PDF
+      </button>
+    );
+  }
   if (column.includes('valor_unitario')) return unitCurrency(value, row.valor_unitario_decimais);
   if (column.includes('custo_kg') || column.includes('custo_medio_com_frete')) return unitCurrency(value, 4);
   if (column.includes('valor') || column.includes('custo') || column.includes('saldo_financeiro')) return currency(value);
@@ -1064,7 +1098,10 @@ function unitCurrency(value, decimals) {
 }
 
 function toUserError(context, error) {
-  const raw = String(error?.message || error || '').toLowerCase();
+  const original = String(error?.message || error || '');
+  const raw = original.toLowerCase();
+
+  if (original.includes('Como corrigir:')) return original;
 
   if (raw.includes('duplicate') || raw.includes('unique')) {
     return 'Registro duplicado. Como corrigir: confira se este número já foi cadastrado para o mesmo fornecedor ou contrato antes de salvar novamente.';
@@ -1100,6 +1137,7 @@ function toUserError(context, error) {
     'excluir-nota': 'Não foi possível excluir a nota fiscal. Como corrigir: atualize a página e tente novamente.',
     'importar-xml-nota': 'Não foi possível importar o XML da NF-e. Como corrigir: selecione o contrato, use o XML original da NF-e e confira se o fornecedor está cadastrado.',
     'importar-xml-frete': 'Não foi possível importar o XML do CT-e. Como corrigir: selecione o contrato vinculado e use o XML original do CT-e.',
+    'abrir-documento': 'Não foi possível abrir o PDF. Como corrigir: edite o documento, anexe o arquivo novamente e tente abrir.',
   };
 
   return fallback[context] || 'Não foi possível concluir a operação. Como corrigir: confira os dados informados e tente novamente.';
