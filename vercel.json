@@ -7,7 +7,7 @@
     },
     {
       "source": "/assets/(.*)",
-      "destination": "/assets/$1"
+      "destination": "/asset-recovery.js"
     },
     {
       "source": "/(.*)",
@@ -48,6 +48,15 @@
     },
     {
       "source": "/api/health",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/asset-recovery.js",
       "headers": [
         {
           "key": "Cache-Control",

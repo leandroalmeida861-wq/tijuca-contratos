@@ -4,6 +4,7 @@ const results = [];
 const main = readFileSync('src/main.jsx', 'utf8');
 const boundary = readFileSync('src/components/AppErrorBoundary.jsx', 'utf8');
 const health = readFileSync('api/health.js', 'utf8');
+const recovery = readFileSync('public/asset-recovery.js', 'utf8');
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
 const html = readFileSync('index.html', 'utf8');
 
@@ -12,7 +13,7 @@ assert('HTML possui fallback antes do JavaScript carregar', html.includes('Carre
 assert('Endpoint de saude verifica Vercel e Supabase', health.includes('/auth/v1/health') && health.includes('status(503)'));
 assert('Index HTML nao fica preso no cache', JSON.stringify(vercel).includes('no-store'));
 assert('Assets compilados usam cache imutavel', JSON.stringify(vercel).includes('immutable'));
-assert('Asset inexistente nao cai no HTML da SPA', vercel.rewrites?.some((rule) => rule.source === '/assets/(.*)' && rule.destination === '/assets/$1'));
+assert('Asset antigo aciona recuperacao automatica', vercel.rewrites?.some((rule) => rule.source === '/assets/(.*)' && rule.destination === '/asset-recovery.js') && recovery.includes('window.location.replace'));
 assert('Deploy executa testes preventivos', String(vercel.buildCommand || '').includes('test:resilience'));
 
 console.log('\nTESTES DE ESTABILIDADE');
