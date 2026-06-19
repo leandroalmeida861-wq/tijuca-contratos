@@ -1,4 +1,4 @@
-import { Save, ShieldCheck, Users } from 'lucide-react';
+import { Save, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { MENU_DEFINITIONS, PERMISSION_ACTIONS } from '../lib/permissions.js';
@@ -13,6 +13,7 @@ export default function AdminAccessPage() {
   const [selectedRole, setSelectedRole] = useState('gestor');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -58,6 +59,40 @@ export default function AdminAccessPage() {
     setMessage('Usuário atualizado com sucesso.');
   }
 
+  async function deleteProfile(row) {
+    if (row.email === ADMIN_EMAIL) {
+      setMessage('O Admin principal não pode ser excluído.');
+      return;
+    }
+    if (!window.confirm(`Excluir definitivamente o acesso de ${row.nome || row.email}?\n\nO usuário não conseguirá mais entrar. Os dados operacionais cadastrados por ele serão preservados.`)) return;
+
+    setMessage('');
+    setDeletingId(row.id);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) throw new Error('Sessão expirada. Entre novamente no AgroFlow.');
+
+      const response = await fetch('/api/admin/excluir-usuario', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ profileId: row.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível excluir o usuário.');
+
+      await load();
+      setMessage(payload.message || 'Usuário excluído com sucesso.');
+    } catch (error) {
+      setMessage(error.message || 'Não foi possível excluir o usuário.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function togglePermission(menu, action) {
     setPermissionRows((current) => current.map((row) => (
       row.perfil === selectedRole && row.menu === menu ? { ...row, [action]: !row[action] } : row
@@ -96,7 +131,7 @@ export default function AdminAccessPage() {
         <div className="flex items-center gap-2 border-b p-4"><Users size={18} /><h2 className="font-extrabold">Usuários</h2></div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
-            <thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th></tr></thead>
+            <thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th className="text-center">Ações</th></tr></thead>
             <tbody>
               {profiles.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
@@ -124,6 +159,18 @@ export default function AdminAccessPage() {
                       />
                       {row.ativo ? 'Ativo' : 'Bloqueado'}
                     </label>
+                  </td>
+                  <td className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => deleteProfile(row)}
+                      disabled={row.email === ADMIN_EMAIL || deletingId === row.id}
+                      className="inline-grid h-9 w-9 place-items-center rounded-md text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                      title={row.email === ADMIN_EMAIL ? 'O Admin principal não pode ser excluído' : 'Excluir usuário'}
+                      aria-label={`Excluir usuário ${row.email}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </td>
                 </tr>
               ))}
