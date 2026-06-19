@@ -14,3 +14,19 @@ export const supabase = isSupabaseConfigured
       },
     })
   : null;
+
+export function createSessionClient(accessToken) {
+  if (!isSupabaseConfigured || !accessToken) return supabase;
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}

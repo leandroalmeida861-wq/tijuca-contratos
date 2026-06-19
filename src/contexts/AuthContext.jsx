@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
+import { createSessionClient, isSupabaseConfigured, supabase } from '../lib/supabase.js';
 import { permissionsToMap } from '../lib/permissions.js';
 
 export const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
@@ -28,14 +28,14 @@ export function AuthProvider({ children }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
-      await applyAuthorization(data.session?.user?.email);
+      await applyAuthorization(data.session?.user?.email, data.session?.access_token);
       setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       window.setTimeout(() => {
-        applyAuthorization(nextSession?.user?.email).finally(() => setLoading(false));
+        applyAuthorization(nextSession?.user?.email, nextSession?.access_token).finally(() => setLoading(false));
       }, 0);
     });
 
@@ -57,7 +57,7 @@ export function AuthProvider({ children }) {
     }
 
     setSession(signInData.session);
-    const authorization = await loadAuthorization(normalized);
+    const authorization = await loadAuthorization(normalized, signInData.session?.access_token);
     if (!authorization?.authorized) {
       await supabase.auth.signOut();
       throw new Error('Este e-mail ainda nao foi liberado pelo administrador. Como corrigir: aguarde a aprovacao do acesso e tente novamente.');
@@ -80,8 +80,8 @@ export function AuthProvider({ children }) {
     if (supabase) await supabase.auth.signOut();
   }
 
-  async function applyAuthorization(email) {
-    const authorization = await loadAuthorization(email);
+  async function applyAuthorization(email, accessToken) {
+    const authorization = await loadAuthorization(email, accessToken);
     setAuthorized(Boolean(authorization?.authorized));
     setProfile(authorization?.profile || null);
     setProfileData(authorization?.profileData || null);
@@ -121,14 +121,15 @@ export function useAuth() {
   return context;
 }
 
-async function loadAuthorization(email) {
+async function loadAuthorization(email, accessToken) {
   const normalized = normalizeEmail(email);
   if (!normalized || !isSupabaseConfigured) return { authorized: false };
 
-  await supabase.rpc('agroflow_ensure_profile');
+  const sessionClient = createSessionClient(accessToken);
+  await sessionClient.rpc('agroflow_ensure_profile');
   const [{ data, error }, { data: permissionRows, error: permissionError }] = await Promise.all([
-    supabase.rpc('agroflow_profile_atual'),
-    supabase.rpc('agroflow_permissoes_atuais'),
+    sessionClient.rpc('agroflow_profile_atual'),
+    sessionClient.rpc('agroflow_permissoes_atuais'),
   ]);
   if (error || permissionError) return { authorized: normalized === AUTHORIZED_EMAIL, profile: 'admin', permissions: {} };
 
