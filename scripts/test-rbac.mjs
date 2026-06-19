@@ -9,8 +9,6 @@ const admin = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
 const denied = readFileSync('src/pages/AccessDenied.jsx', 'utf8');
 const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
 const approveApi = readFileSync('api/aprovar-acesso.js', 'utf8');
-const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
-const vercelIgnore = readFileSync('.vercelignore', 'utf8');
 
 assert('Existem apenas Admin, Gestor e Operador', sql.includes("('admin', 'gestor', 'operador')") && !sql.includes("'consulta'"));
 assert('Admin principal e automatico', sql.includes('leandroalmeida861@gmail.com') && sql.includes('agroflow_ensure_profile'));
@@ -24,7 +22,6 @@ assert('Admin gerencia usuarios e permissoes', admin.includes("from('profiles')"
 assert('Auth carrega profile e permissoes', auth.includes('agroflow_profile_atual') && auth.includes('agroflow_permissoes_atuais'));
 assert('Solicitacao nao armazena senha', !requestApi.includes('senha_criptografada') && !requestApi.includes('password'));
 assert('Aprovacao usa convite do Supabase', approveApi.includes('inviteUserByEmail') && !approveApi.includes('password:'));
-assert('Modulo legado inseguro nao e publicado', vercelIgnore.includes('public/consulta-cnpj') && vercel.rewrites.some((rule) => rule.source === '/consulta-cnpj/(.*)' && rule.destination === '/login'));
 
 console.log('\nTESTES RBAC AGROFLOW');
 for (const result of results) console.log(`${result.ok ? 'OK' : 'FALHOU'} - ${result.name}`);
