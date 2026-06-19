@@ -64,7 +64,8 @@ function testSourceContracts() {
   assert('Backend valida o token no Supabase Auth', authApi.includes('supabaseAdmin.auth.getUser(accessToken)'));
   assert('Backend bloqueia perfil inativo', authApi.includes('if (!profile?.ativo)'));
   assert('Backend nao devolve dados sensiveis', !authApi.includes('SERVICE_ROLE_KEY') && !authApi.includes('password'));
-  assert('Cada aba possui sessao isolada', supabaseClient.includes('storage: window.sessionStorage'));
+  assert('Cada aba possui sessao isolada', supabaseClient.includes('storageKey: `agroflow-auth-${tabId}`') && supabaseClient.includes('window.sessionStorage'));
+  assert('Recuperacao por e-mail preserva verificador PKCE', supabaseClient.includes("key.endsWith('-code-verifier')") && supabaseClient.includes('SHARED_CODE_VERIFIER_KEY'));
   assert('Logout afeta somente a sessao atual', (auth.match(/signOut\(\{ scope: 'local' \}\)/g) || []).length >= 2);
   assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
   assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
