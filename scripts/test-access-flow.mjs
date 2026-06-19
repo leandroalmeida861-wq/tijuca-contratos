@@ -53,6 +53,7 @@ function testSourceContracts() {
   const adminPage = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
   const helper = readFileSync('api/_supabaseAdmin.js', 'utf8');
   const sql = readFileSync('supabase/solicitacoes-senha-segura.sql', 'utf8');
+  const authHookSql = readFileSync('supabase/corrigir-auth-hook-acesso.sql', 'utf8');
   const envExample = readFileSync('.env.example', 'utf8');
 
   assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
@@ -88,6 +89,9 @@ function testSourceContracts() {
   assert('Painel Admin possui aprovar e rejeitar', adminPage.includes("processAccessRequest(row, 'aprovar')") && adminPage.includes("processAccessRequest(row, 'rejeitar')"));
   assert('SQL altera somente solicitacoes_acesso', sql.includes('public.solicitacoes_acesso') && !sql.includes('fornecedores') && !sql.includes('contratos'));
   assert('SQL permite rejeicao e campo nulo', sql.includes("'rejeitado'") && sql.includes('senha_criptografada text'));
+  assert('Auth Hook usa tabelas atuais de acesso', authHookSql.includes('public.profiles') && authHookSql.includes('public.usuarios_autorizados'));
+  assert('Auth Hook nao consulta tabela antiga de usuarios', !authHookSql.includes('public.usuarios '));
+  assert('Auth Hook permanece restrito ao Supabase Auth', authHookSql.includes('supabase_auth_admin') && authHookSql.includes('revoke all'));
 }
 
 function emailSubmissionBlock(source) {
