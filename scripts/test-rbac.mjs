@@ -9,6 +9,7 @@ const admin = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
 const denied = readFileSync('src/pages/AccessDenied.jsx', 'utf8');
 const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
 const requestAdminApi = readFileSync('api/admin/solicitacoes.js', 'utf8');
+const authAccessApi = readFileSync('api/auth/acesso.js', 'utf8');
 const deleteUserApi = readFileSync('api/admin/excluir-usuario.js', 'utf8');
 
 assert('Existem apenas Admin, Gestor e Operador', sql.includes("('admin', 'gestor', 'operador')") && !sql.includes("'consulta'"));
@@ -20,7 +21,7 @@ assert('Rotas usam protecao por menu', routes.includes('ProtectedRoute menu="con
 assert('Pagina de acesso negado existe', routes.includes('/acesso-negado') && denied.includes('Você não tem permissão'));
 assert('Menu respeita permissao visualizar', layout.includes("can(item.menu, 'visualizar')"));
 assert('Admin gerencia usuarios e permissoes', admin.includes("from('profiles')") && admin.includes("from('permissoes_menu')"));
-assert('Auth carrega profile e permissoes', auth.includes('agroflow_profile_atual') && auth.includes('agroflow_permissoes_atuais'));
+assert('Auth carrega profile e permissoes pelo backend seguro', auth.includes('/api/auth/acesso') && authAccessApi.includes("from('profiles')") && authAccessApi.includes("from('permissoes_menu')"));
 assert('Solicitacao armazena apenas senha cifrada', requestApi.includes('encryptAccessRequestPassword') && requestApi.includes('senha_criptografada: encryptedPassword'));
 assert('Aprovacao segura ocorre somente no backend Admin', requestAdminApi.includes('auth.admin.createUser') && requestAdminApi.includes("profile.perfil !== 'admin'"));
 assert('Aprovacao e rejeicao removem senha cifrada', (requestAdminApi.match(/senha_criptografada: null/g) || []).length >= 2);

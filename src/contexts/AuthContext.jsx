@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { createSessionClient, isSupabaseConfigured, supabase } from '../lib/supabase.js';
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 import { permissionsToMap } from '../lib/permissions.js';
 
 export const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
@@ -123,28 +123,24 @@ export function useAuth() {
 
 async function loadAuthorization(email, accessToken) {
   const normalized = normalizeEmail(email);
-  if (!normalized || !isSupabaseConfigured) return { authorized: false };
+  if (!normalized || !accessToken || !isSupabaseConfigured) return { authorized: false };
 
-  const sessionClient = createSessionClient(accessToken);
-  await sessionClient.rpc('agroflow_ensure_profile');
-  const [{ data, error }, { data: permissionRows, error: permissionError }] = await Promise.all([
-    sessionClient.rpc('agroflow_profile_atual'),
-    sessionClient.rpc('agroflow_permissoes_atuais'),
-  ]);
-  if (error || permissionError) return { authorized: normalized === AUTHORIZED_EMAIL, profile: 'admin', permissions: {} };
+  const response = await fetch('/api/auth/acesso', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.authorized) return { authorized: false };
 
-  const row = Array.isArray(data) ? data[0] : data;
-  if (row?.ativo) {
-    return {
-      authorized: true,
-      profile: row.perfil || (normalized === AUTHORIZED_EMAIL ? 'admin' : 'operador'),
-      profileData: row,
-      permissions: permissionsToMap(permissionRows || []),
-      access: row,
-    };
-  }
-
-  return { authorized: normalized === AUTHORIZED_EMAIL, profile: normalized === AUTHORIZED_EMAIL ? 'admin' : null };
+  return {
+    authorized: true,
+    profile: payload.profile,
+    profileData: payload.profileData,
+    permissions: permissionsToMap(payload.permissions || []),
+    access: payload.access,
+  };
 }
 
 function normalizeEmail(email) {

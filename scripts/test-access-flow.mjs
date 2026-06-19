@@ -47,7 +47,7 @@ async function testEncryptionRoundTrip() {
 function testSourceContracts() {
   const login = readFileSync('src/pages/Login.jsx', 'utf8');
   const auth = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
-  const supabaseClient = readFileSync('src/lib/supabase.js', 'utf8');
+  const authApi = readFileSync('api/auth/acesso.js', 'utf8');
   const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
   const adminApi = readFileSync('api/admin/solicitacoes.js', 'utf8');
   const adminPage = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
@@ -58,8 +58,10 @@ function testSourceContracts() {
   assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
   assert('Evento Auth nao bloqueia o login com chamadas assincronas', auth.includes("onAuthStateChange((_event, nextSession)") && auth.includes('window.setTimeout(() =>'));
   assert('Login usa a sessao devolvida pelo Supabase', auth.includes('setSession(signInData.session)'));
-  assert('Autorizacao usa explicitamente o JWT da sessao', auth.includes('createSessionClient(accessToken)') && supabaseClient.includes('Authorization: `Bearer ${accessToken}`'));
-  assert('Cliente de sessao nao usa chave secreta', !supabaseClient.includes('SERVICE_ROLE'));
+  assert('Autorizacao envia explicitamente o JWT ao backend', auth.includes("fetch('/api/auth/acesso'") && auth.includes('Authorization: `Bearer ${accessToken}`'));
+  assert('Backend valida o token no Supabase Auth', authApi.includes('supabaseAdmin.auth.getUser(accessToken)'));
+  assert('Backend bloqueia perfil inativo', authApi.includes('if (!profile?.ativo)'));
+  assert('Backend nao devolve dados sensiveis', !authApi.includes('SERVICE_ROLE_KEY') && !authApi.includes('password'));
   assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
   assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
   assert('Frontend valida senhas iguais', login.includes('accessForm.senha !== accessForm.confirmarSenha'));
