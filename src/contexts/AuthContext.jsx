@@ -51,6 +51,7 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase nao configurado. Como corrigir: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY na Vercel.');
     }
 
+    await supabase.auth.signOut({ scope: 'local' });
     const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
     if (error) {
       throw error;
@@ -59,7 +60,7 @@ export function AuthProvider({ children }) {
     setSession(signInData.session);
     const authorization = await loadAuthorization(normalized, signInData.session?.access_token);
     if (!authorization?.authorized) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       throw new Error('Este e-mail ainda nao foi liberado pelo administrador. Como corrigir: aguarde a aprovacao do acesso e tente novamente.');
     }
 
@@ -77,7 +78,7 @@ export function AuthProvider({ children }) {
     setProfileData(null);
     setPermissions({});
     setAccess(null);
-    if (supabase) await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut({ scope: 'local' });
   }
 
   async function applyAuthorization(email, accessToken) {

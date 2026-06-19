@@ -48,6 +48,7 @@ function testSourceContracts() {
   const login = readFileSync('src/pages/Login.jsx', 'utf8');
   const auth = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
   const authApi = readFileSync('api/auth/acesso.js', 'utf8');
+  const supabaseClient = readFileSync('src/lib/supabase.js', 'utf8');
   const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
   const adminApi = readFileSync('api/admin/solicitacoes.js', 'utf8');
   const adminPage = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
@@ -63,6 +64,8 @@ function testSourceContracts() {
   assert('Backend valida o token no Supabase Auth', authApi.includes('supabaseAdmin.auth.getUser(accessToken)'));
   assert('Backend bloqueia perfil inativo', authApi.includes('if (!profile?.ativo)'));
   assert('Backend nao devolve dados sensiveis', !authApi.includes('SERVICE_ROLE_KEY') && !authApi.includes('password'));
+  assert('Cada aba possui sessao isolada', supabaseClient.includes('storage: window.sessionStorage'));
+  assert('Logout afeta somente a sessao atual', (auth.match(/signOut\(\{ scope: 'local' \}\)/g) || []).length >= 2);
   assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
   assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
   assert('Frontend valida senhas iguais', login.includes('accessForm.senha !== accessForm.confirmarSenha'));

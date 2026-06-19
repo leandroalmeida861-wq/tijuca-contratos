@@ -11,6 +11,7 @@ export const supabase = isSupabaseConfigured
         detectSessionInUrl: true,
         persistSession: true,
         flowType: 'pkce',
+        storage: window.sessionStorage,
       },
     })
   : null;
