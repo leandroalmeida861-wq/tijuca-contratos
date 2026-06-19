@@ -32,10 +32,11 @@ export function AuthProvider({ children }) {
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      await applyAuthorization(nextSession?.user?.email);
-      setLoading(false);
+      window.setTimeout(() => {
+        applyAuthorization(nextSession?.user?.email).finally(() => setLoading(false));
+      }, 0);
     });
 
     return () => listener.subscription.unsubscribe();
@@ -50,11 +51,12 @@ export function AuthProvider({ children }) {
       throw new Error('Supabase nao configurado. Como corrigir: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY na Vercel.');
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email: normalized, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
     if (error) {
       throw error;
     }
 
+    setSession(signInData.session);
     const authorization = await loadAuthorization(normalized);
     if (!authorization?.authorized) {
       await supabase.auth.signOut();

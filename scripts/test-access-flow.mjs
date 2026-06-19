@@ -46,6 +46,7 @@ async function testEncryptionRoundTrip() {
 
 function testSourceContracts() {
   const login = readFileSync('src/pages/Login.jsx', 'utf8');
+  const auth = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
   const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
   const adminApi = readFileSync('api/admin/solicitacoes.js', 'utf8');
   const adminPage = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
@@ -54,6 +55,8 @@ function testSourceContracts() {
   const envExample = readFileSync('.env.example', 'utf8');
 
   assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
+  assert('Evento Auth nao bloqueia o login com chamadas assincronas', auth.includes("onAuthStateChange((_event, nextSession)") && auth.includes('window.setTimeout(() =>'));
+  assert('Login usa a sessao devolvida pelo Supabase', auth.includes('setSession(signInData.session)'));
   assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
   assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
   assert('Frontend valida senhas iguais', login.includes('accessForm.senha !== accessForm.confirmarSenha'));
