@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 import { permissionsToMap } from '../lib/permissions.js';
 
@@ -14,8 +14,11 @@ export function AuthProvider({ children }) {
   const [permissions, setPermissions] = useState({});
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(true);
+  const authorizationRequestRef = useRef(0);
 
   useEffect(() => {
+    let active = true;
+
     if (!isSupabaseConfigured) {
       setAuthorized(false);
       setProfile(null);
@@ -26,20 +29,46 @@ export function AuthProvider({ children }) {
       return undefined;
     }
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      await applyAuthorization(data.session?.user?.email, data.session?.access_token);
-      setLoading(false);
-    });
+    async function synchronizeSession(nextSession) {
+      const requestId = ++authorizationRequestRef.current;
+      if (!active) return;
+
+      setSession(nextSession);
+      setLoading(true);
+
+      if (!nextSession) {
+        applyAuthorizationState(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const authorization = await loadAuthorization(
+          nextSession.user?.email,
+          nextSession.access_token,
+        );
+        if (active && requestId === authorizationRequestRef.current) {
+          applyAuthorizationState(authorization);
+        }
+      } finally {
+        if (active && requestId === authorizationRequestRef.current) {
+          setLoading(false);
+        }
+      }
+    }
+
+    supabase.auth.getSession().then(({ data }) => synchronizeSession(data.session));
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
       window.setTimeout(() => {
-        applyAuthorization(nextSession?.user?.email, nextSession?.access_token).finally(() => setLoading(false));
+        synchronizeSession(nextSession);
       }, 0);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   async function signIn(email, password) {
@@ -64,11 +93,7 @@ export function AuthProvider({ children }) {
       throw new Error('Este e-mail ainda nao foi liberado pelo administrador. Como corrigir: aguarde a aprovacao do acesso e tente novamente.');
     }
 
-    setAuthorized(true);
-    setProfile(authorization.profile);
-    setProfileData(authorization.profileData);
-    setPermissions(authorization.permissions);
-    setAccess(authorization.access);
+    applyAuthorizationState(authorization);
     await supabase.rpc('agroflow_auditar', { action_name: 'login', table_name: 'auth', record_id: null, old_data: null, new_data: null });
   }
 
@@ -81,8 +106,7 @@ export function AuthProvider({ children }) {
     if (supabase) await supabase.auth.signOut({ scope: 'local' });
   }
 
-  async function applyAuthorization(email, accessToken) {
-    const authorization = await loadAuthorization(email, accessToken);
+  function applyAuthorizationState(authorization) {
     setAuthorized(Boolean(authorization?.authorized));
     setProfile(authorization?.profile || null);
     setProfileData(authorization?.profileData || null);
@@ -126,24 +150,41 @@ async function loadAuthorization(email, accessToken) {
   const normalized = normalizeEmail(email);
   if (!normalized || !accessToken || !isSupabaseConfigured) return { authorized: false };
 
-  const response = await fetch('/api/auth/acesso', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    cache: 'no-store',
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.authorized) return { authorized: false };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch('/api/auth/acesso', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => ({}));
 
-  return {
-    authorized: true,
-    profile: payload.profile,
-    profileData: payload.profileData,
-    permissions: permissionsToMap(payload.permissions || []),
-    access: payload.access,
-  };
+      if (response.ok && payload.authorized) {
+        return {
+          authorized: true,
+          profile: payload.profile,
+          profileData: payload.profileData,
+          permissions: permissionsToMap(payload.permissions || []),
+          access: payload.access,
+        };
+      }
+
+      if (response.status === 403) return { authorized: false };
+    } catch {
+      // A renovacao da sessao pode causar uma falha de rede momentanea.
+    }
+
+    if (attempt < 2) await wait(250 * (attempt + 1));
+  }
+
+  return { authorized: false };
 }
 
 function normalizeEmail(email) {
   return String(email || '').toLowerCase().trim();
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }

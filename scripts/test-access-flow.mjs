@@ -59,6 +59,9 @@ function testSourceContracts() {
 
   assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
   assert('Evento Auth nao bloqueia o login com chamadas assincronas', auth.includes("onAuthStateChange((_event, nextSession)") && auth.includes('window.setTimeout(() =>'));
+  assert('Respostas antigas de autorizacao sao descartadas', auth.includes('authorizationRequestRef') && auth.includes('requestId === authorizationRequestRef.current'));
+  assert('Rotas aguardam a autorizacao terminar', auth.includes('setLoading(true)') && auth.includes('setLoading(false)'));
+  assert('Falhas temporarias de autorizacao sao repetidas', auth.includes('attempt < 3') && auth.includes('await wait(250 * (attempt + 1))'));
   assert('Login usa a sessao devolvida pelo Supabase', auth.includes('setSession(signInData.session)'));
   assert('Autorizacao envia explicitamente o JWT ao backend', auth.includes("fetch('/api/auth/acesso'") && auth.includes('Authorization: `Bearer ${accessToken}`'));
   assert('Backend valida o token no Supabase Auth', authApi.includes('supabaseAdmin.auth.getUser(accessToken)'));
