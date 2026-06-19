@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {
   APP_URL,
+  encryptAccessRequestPassword,
   getSupabaseAdmin,
   normalizeEmail,
   readJsonBody,
@@ -19,9 +20,21 @@ export default async function handler(request, response) {
     const email = normalizeEmail(body.email);
     const telefone = String(body.telefone || '').trim();
     const observacao = String(body.observacao || '').trim();
+    const senha = String(body.senha || '');
+    const confirmarSenha = String(body.confirmarSenha || '');
     if (!nome || !email) {
       return sendJson(response, 400, {
         error: 'Nome e e-mail sao obrigatorios. Como corrigir: preencha o nome do solicitante e um e-mail valido.',
+      });
+    }
+    if (senha.length < 6) {
+      return sendJson(response, 400, {
+        error: 'A senha deve ter pelo menos 6 caracteres. Como corrigir: informe uma senha maior.',
+      });
+    }
+    if (senha !== confirmarSenha) {
+      return sendJson(response, 400, {
+        error: 'As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.',
       });
     }
 
@@ -36,8 +49,23 @@ export default async function handler(request, response) {
       });
     }
 
+    const { data: pendingRequest, error: pendingError } = await supabaseAdmin
+      .from('solicitacoes_acesso')
+      .select('id')
+      .eq('email', email)
+      .eq('status', 'pendente')
+      .limit(1)
+      .maybeSingle();
+    if (pendingError) throw pendingError;
+    if (pendingRequest) {
+      return sendJson(response, 409, {
+        error: 'Ja existe um pedido pendente para este e-mail. Como corrigir: aguarde a analise do administrador.',
+      });
+    }
+
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const encryptedPassword = encryptAccessRequestPassword(senha);
 
     const { data, error } = await supabaseAdmin
       .from('solicitacoes_acesso')
@@ -49,20 +77,29 @@ export default async function handler(request, response) {
         token_autorizacao: token,
         status: 'pendente',
         expira_em: expiresAt,
+        senha_criptografada: encryptedPassword,
       })
-      .select('id,token_autorizacao,email,status,expira_em')
+      .select('id,email,status,expira_em')
       .single();
     if (error) throw error;
 
     return sendJson(response, 200, {
       ok: true,
       email,
-      token: data.token_autorizacao,
-      approvalUrl: `${APP_URL}/api/aprovar-acesso?token=${encodeURIComponent(data.token_autorizacao)}`,
+      requestId: data.id,
+      approvalUrl: `${APP_URL}/admin/acessos`,
     });
   } catch (error) {
     return sendJson(response, 500, {
-      error: error.message || 'Nao foi possivel registrar o pedido de acesso.',
+      error: safeRequestError(error),
     });
   }
+}
+
+function safeRequestError(error) {
+  const message = String(error?.message || '');
+  if (message.includes('ACCESS_REQUEST_ENCRYPTION_KEY')) {
+    return 'O cadastro seguro ainda nao esta configurado. Como corrigir: o administrador deve configurar a chave de criptografia na Vercel.';
+  }
+  return 'Nao foi possivel registrar o pedido de acesso. Como corrigir: tente novamente e, se continuar, avise o administrador.';
 }

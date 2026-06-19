@@ -1,28 +1,26 @@
 import { readFileSync } from 'node:fs';
 
 const SITE_URL = 'https://agroflow-contratos.vercel.app';
-const AUTHORIZED_EMAIL = 'leandroalmeida861@gmail.com';
 const results = [];
 
 async function main() {
   await testPublishedHtml();
+  await testEncryptionRoundTrip();
   testSourceContracts();
-  testSimulatedFlow();
 
-  console.log('\nBATERIA DE TESTES AGROFLOW - ACESSO SEGURO');
+  console.log('\nBATERIA DE TESTES AGROFLOW - SOLICITACAO SEGURA');
   for (const result of results) {
     console.log(`${result.ok ? 'OK' : 'FALHOU'} - ${result.name}`);
     if (result.detail) console.log(`   ${result.detail}`);
   }
 
   const failed = results.filter((result) => !result.ok);
-  if (failed.length > 0) {
+  if (failed.length) {
     process.exitCode = 1;
     console.error(`\n${failed.length} teste(s) falharam.`);
-    return;
+  } else {
+    console.log('\nTodos os testes passaram.');
   }
-
-  console.log('\nTodos os testes passaram.');
 }
 
 async function testPublishedHtml() {
@@ -32,94 +30,80 @@ async function testPublishedHtml() {
   assert('HTML publicado tem root React', html.includes('<div id="root">'));
 }
 
+async function testEncryptionRoundTrip() {
+  process.env.ACCESS_REQUEST_ENCRYPTION_KEY = 'teste-local-com-mais-de-trinta-e-dois-caracteres';
+  const {
+    decryptAccessRequestPassword,
+    encryptAccessRequestPassword,
+  } = await import('../api/_supabaseAdmin.js');
+
+  const original = 'SenhaSegura123!';
+  const encrypted = encryptAccessRequestPassword(original);
+  assert('Senha temporaria usa envelope cifrado', encrypted.includes('"v":1') && encrypted.includes('"tag":'));
+  assert('Conteudo cifrado nao contem a senha original', !encrypted.includes(original));
+  assert('Backend recupera a senha somente com a chave', decryptAccessRequestPassword(encrypted) === original);
+}
+
 function testSourceContracts() {
-  const authSource = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
-  const loginSource = readFileSync('src/pages/Login.jsx', 'utf8');
-  const requestApiSource = readFileSync('api/solicitar-acesso.js', 'utf8');
-  const approveApiSource = readFileSync('api/aprovar-acesso.js', 'utf8');
-  const sqlSource = readFileSync('supabase/rbac-tres-perfis.sql', 'utf8');
+  const login = readFileSync('src/pages/Login.jsx', 'utf8');
+  const requestApi = readFileSync('api/solicitar-acesso.js', 'utf8');
+  const adminApi = readFileSync('api/admin/solicitacoes.js', 'utf8');
+  const adminPage = readFileSync('src/pages/AdminAccessPage.jsx', 'utf8');
+  const helper = readFileSync('api/_supabaseAdmin.js', 'utf8');
+  const sql = readFileSync('supabase/solicitacoes-senha-segura.sql', 'utf8');
+  const envExample = readFileSync('.env.example', 'utf8');
 
-  assert('Projeto usa Vercel Serverless Function para solicitar acesso', loginSource.includes('/api/solicitar-acesso'));
-  assert('Link de aprovacao correto vai para /api/aprovar-acesso', requestApiSource.includes('/api/aprovar-acesso?token='));
-  assert('Aprovacao usa convite oficial do Supabase', approveApiSource.includes('inviteUserByEmail'));
-  assert('Senha e gerenciada somente pelo Supabase Auth', !approveApiSource.includes('password:') && !requestApiSource.includes('senha_criptografada'));
-  assert('Aprovacao ativa usuario antes de enviar convite', approveApiSource.indexOf('await upsertAuthorizedUser') < approveApiSource.indexOf('inviteUserByEmail'));
-  assert('Aprovacao reenvia senha para usuario ja existente', approveApiSource.includes('resetPasswordForEmail'));
-  assert('Convite redireciona para /login', approveApiSource.includes('redirectTo: INVITE_REDIRECT_URL'));
-  assert('Admin volta para /admin/solicitacoes com sucesso', approveApiSource.includes('ADMIN_APPROVED_REDIRECT'));
-  assert('Frontend nao cria usuario com signUp', !loginSource.includes('signUp') && !authSource.includes('signUp'));
-  assert('Frontend nao usa service role', !loginSource.includes('SERVICE_ROLE') && !authSource.includes('SERVICE_ROLE'));
-  assert('AuthContext nao depende de localStorage', !authSource.includes('localStorage'));
-  assert('Login consulta profile e permissoes no Supabase', authSource.includes('agroflow_profile_atual') && authSource.includes('agroflow_permissoes_atuais'));
-  assert('SQL cria profiles e permissoes', sqlSource.includes('create table if not exists public.profiles') && sqlSource.includes('create table if not exists public.permissoes_menu'));
-  assert('SQL garante Leandro como admin', sqlSource.includes(AUTHORIZED_EMAIL) && sqlSource.includes("'admin'"));
-  assert('SQL cria RLS por menu e acao', sqlSource.includes('agroflow_tem_permissao') && sqlSource.includes('rbac_insert_'));
-  assert('Formulario de solicitacao nao pede senha', !loginSource.includes('form.senha') && !loginSource.includes('confirmarSenha'));
-  assert('Convite abre criacao de senha em portugues', loginSource.includes('Criar senha de acesso') && loginSource.includes('hasPasswordSetupToken'));
-  assert('Convite reconhece formatos atuais do Supabase', loginSource.includes("queryParams.get('code')") && loginSource.includes("hashParams.get('access_token')") && loginSource.includes("queryParams.get('token_hash')"));
-  assert('Login troca code PKCE por sessao', loginSource.includes('exchangeCodeForSession'));
-  assert('Criacao de senha valida sessao do convite', loginSource.includes('supabase.auth.getSession()') && loginSource.includes('Convite ainda nao carregou a sessao'));
-  assert('Login tem recuperacao segura de senha', loginSource.includes('Alterar ou recuperar senha') && loginSource.includes('resetPasswordForEmail'));
+  assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
+  assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
+  assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
+  assert('Frontend valida senhas iguais', login.includes('accessForm.senha !== accessForm.confirmarSenha'));
+  assert(
+    'E-mail administrativo nao recebe senha',
+    !emailSubmissionBlock(login).includes('senha: accessForm.senha')
+      && !emailSubmissionBlock(login).includes('confirmarSenha: accessForm.confirmarSenha'),
+  );
+  assert('API valida senha novamente no backend', requestApi.includes('senha.length < 6') && requestApi.includes('senha !== confirmarSenha'));
+  assert('API cifra antes de gravar', requestApi.includes('encryptAccessRequestPassword(senha)') && requestApi.includes('senha_criptografada: encryptedPassword'));
+  assert('API publica nao retorna token ou senha', !responseBlock(requestApi).includes('token:') && !responseBlock(requestApi).includes('senha'));
+  assert('Criptografia exige chave exclusiva de backend', helper.includes("readEnv('ACCESS_REQUEST_ENCRYPTION_KEY')") && !helper.includes('VITE_ACCESS_REQUEST'));
+  assert('Criptografia usa AES-256-GCM', helper.includes("createCipheriv('aes-256-gcm'") && helper.includes('getAuthTag'));
+  assert('Chave consta sem segredo no env example', envExample.includes('ACCESS_REQUEST_ENCRYPTION_KEY='));
+  assert('Listagem do Admin nao seleciona senha protegida', adminApi.includes(".select('id,nome,email,telefone,observacao,status,criado_em,expira_em')"));
+  assert('Somente Admin ativo processa pedidos', adminApi.includes("profile.perfil !== 'admin'") && adminApi.includes('!profile?.ativo'));
+  assert('Aprovacao cria ou atualiza usuario no Supabase Auth', adminApi.includes('auth.admin.createUser') && adminApi.includes('auth.admin.updateUserById'));
+  assert('Aprovacao confirma e-mail', adminApi.includes('email_confirm: true'));
+  assert('Aprovacao aplica perfil escolhido', adminApi.includes("new Set(['admin', 'gestor', 'operador'])") && adminApi.includes('perfil: effectiveRole'));
+  assert('Aprovacao limpa senha cifrada', approvalUpdateBlock(adminApi).includes('senha_criptografada: null'));
+  assert('Rejeicao limpa senha cifrada', rejectionUpdateBlock(adminApi).includes('senha_criptografada: null'));
+  assert('Auditoria recebe apenas metadados seguros', adminApi.includes("dados_anteriores: {\n      email:") && !auditBlock(adminApi).includes('senha_criptografada'));
+  assert('Painel Admin mostra pedidos e perfil', adminPage.includes('Pedidos pendentes de acesso') && adminPage.includes('<option value="gestor">Gestor</option>'));
+  assert('Painel Admin possui aprovar e rejeitar', adminPage.includes("processAccessRequest(row, 'aprovar')") && adminPage.includes("processAccessRequest(row, 'rejeitar')"));
+  assert('SQL altera somente solicitacoes_acesso', sql.includes('public.solicitacoes_acesso') && !sql.includes('fornecedores') && !sql.includes('contratos'));
+  assert('SQL permite rejeicao e campo nulo', sql.includes("'rejeitado'") && sql.includes('senha_criptografada text'));
 }
 
-function testSimulatedFlow() {
-  const request = createAccessRequest({
-    nome: 'Usuario Teste AgroFlow',
-    email: 'usuario.teste@example.com',
-    telefone: '(11) 90000-0000',
-    observacao: 'Teste do fluxo seguro',
-  });
-
-  assert('Solicitacao grava status pendente', request.status === 'pendente');
-  assert('Link de aprovacao tem apenas token', hasOnlyToken(request.approvalUrl));
-  assert('Link nao contem senha, e-mail, nome nem service role', !/[?&](senha|password|email|nome|service_role)=/i.test(request.approvalUrl));
-
-  const approved = approveRequest(request);
-  assert('Aprovacao marca solicitacao como aprovada', approved.request.status === 'aprovado');
-  assert('Usuario autorizado fica operador e ativo', approved.user.perfil === 'operador' && approved.user.status === 'ativo');
-  assert('Convite e enviado para o e-mail solicitado', approved.invite.email === request.email);
-  assert('Convite usa redirectTo correto', approved.invite.redirectTo === `${SITE_URL}/login`);
+function emailSubmissionBlock(source) {
+  return source.slice(source.indexOf('submitNetlifyAccessEmail({'), source.indexOf('});', source.indexOf('submitNetlifyAccessEmail({')) + 3);
 }
 
-function createAccessRequest(form) {
-  const token = cryptoRandomToken();
-  return {
-    ...form,
-    email: form.email.toLowerCase(),
-    token,
-    status: 'pendente',
-    approvalUrl: `${SITE_URL}/api/aprovar-acesso?token=${token}`,
-  };
+function responseBlock(source) {
+  const start = source.indexOf('return sendJson(response, 200');
+  return source.slice(start, source.indexOf('});', start) + 3);
 }
 
-function approveRequest(request) {
-  request.status = 'aprovado';
-  request.usado_em = new Date().toISOString();
-  request.aprovado_em = request.usado_em;
-
-  return {
-    request,
-    invite: {
-      email: request.email,
-      redirectTo: `${SITE_URL}/login`,
-    },
-    user: {
-      email: request.email,
-      nome: request.nome,
-      perfil: 'operador',
-      status: 'ativo',
-    },
-  };
+function approvalUpdateBlock(source) {
+  const start = source.indexOf("status: 'aprovado'");
+  return source.slice(start, source.indexOf("await writeSafeAudit", start));
 }
 
-function hasOnlyToken(url) {
-  const parsed = new URL(url);
-  const params = [...parsed.searchParams.keys()];
-  return parsed.origin === SITE_URL && parsed.pathname === '/api/aprovar-acesso' && params.length === 1 && params[0] === 'token';
+function rejectionUpdateBlock(source) {
+  const start = source.indexOf("status: 'rejeitado'");
+  return source.slice(start, source.indexOf("await writeSafeAudit", start));
 }
 
-function cryptoRandomToken() {
-  return '00000000-0000-4000-8000-000000000001';
+function auditBlock(source) {
+  const start = source.indexOf('async function writeSafeAudit');
+  return source.slice(start, source.indexOf('function safeLogError', start));
 }
 
 function assert(name, ok, detail = '') {

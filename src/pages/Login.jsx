@@ -1,5 +1,5 @@
-// Login v2 - suporte a criacao de senha por convite
-import { BarChart3, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
+// Login e solicitacao de acesso com senha protegida no backend.
+import { BarChart3, Eye, EyeOff, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
@@ -10,6 +10,8 @@ const initialAccessForm = {
   email: '',
   telefone: '',
   observacao: '',
+  senha: '',
+  confirmarSenha: '',
 };
 
 export default function Login() {
@@ -94,6 +96,13 @@ export default function Login() {
   }
 
   async function submitAccessRequest() {
+    if (accessForm.senha.length < 6) {
+      throw new Error('A senha deve ter pelo menos 6 caracteres. Como corrigir: informe uma senha maior.');
+    }
+    if (accessForm.senha !== accessForm.confirmarSenha) {
+      throw new Error('As senhas nao conferem. Como corrigir: digite a mesma senha nos dois campos.');
+    }
+
     const databaseRequest = await registerAccessRequestInSupabase(accessForm);
 
     submitNetlifyAccessEmail({
@@ -104,12 +113,12 @@ export default function Login() {
       destinatario: AUTHORIZED_EMAIL,
       origem: 'agroflow-contratos-login',
       link_liberacao: databaseRequest.approvalUrl,
-      status_senha: 'A senha sera definida somente pelo convite oficial do Supabase depois da aprovacao.',
-      status_banco: 'Solicitacao gravada no Supabase em solicitacoes_acesso. A aprovacao usa token seguro e service role apenas no backend.',
+      status_senha: 'Senha protegida pelo backend e nunca enviada neste e-mail.',
+      status_banco: 'Solicitacao pendente. A aprovacao deve ser feita em Usuarios e permissoes.',
     });
 
     setAccessForm(initialAccessForm);
-    setMessage('Pedido registrado. Depois da aprovacao, o Supabase enviara um convite seguro para voce criar sua senha.');
+    setMessage('Pedido registrado. Depois da aprovacao, entre usando o e-mail e a senha informados.');
   }
 
   async function submitPasswordSetup() {
@@ -201,8 +210,8 @@ export default function Login() {
 
             <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
               {mode === 'request'
-                ? 'A senha sera criada somente pelo convite oficial enviado apos a aprovacao.'
-                : 'Novo usuario solicita acesso e cria a senha pelo convite oficial do Supabase.'}
+                ? 'Sua senha e protegida e nunca fica visivel para o administrador.'
+                : 'Novo usuario solicita acesso e aguarda a aprovacao do administrador.'}
             </p>
             {mode === 'login' && (
               <button
@@ -377,6 +386,9 @@ function ForgotPasswordFields({ email, setEmail }) {
 }
 
 function AccessRequestFields({ form, update }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
   return (
     <>
       <Field label="Nome do solicitante" icon={UserRound}>
@@ -388,6 +400,30 @@ function AccessRequestFields({ form, update }) {
       <Field label="Telefone ou WhatsApp" icon={Phone}>
         <input value={form.telefone} onChange={(event) => update('telefone', event.target.value)} className="w-full border-0 bg-transparent outline-none" />
       </Field>
+      <Field label="Senha" icon={Lock}>
+        <input
+          value={form.senha}
+          onChange={(event) => update('senha', event.target.value)}
+          className="min-w-0 flex-1 border-0 bg-transparent outline-none"
+          type={showPassword ? 'text' : 'password'}
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+        <PasswordVisibilityButton visible={showPassword} onClick={() => setShowPassword((current) => !current)} label="senha" />
+      </Field>
+      <Field label="Confirmar senha" icon={Lock}>
+        <input
+          value={form.confirmarSenha}
+          onChange={(event) => update('confirmarSenha', event.target.value)}
+          className="min-w-0 flex-1 border-0 bg-transparent outline-none"
+          type={showConfirmation ? 'text' : 'password'}
+          autoComplete="new-password"
+          minLength={6}
+          required
+        />
+        <PasswordVisibilityButton visible={showConfirmation} onClick={() => setShowConfirmation((current) => !current)} label="confirmacao da senha" />
+      </Field>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         Observacao para liberacao
         <textarea
@@ -397,6 +433,21 @@ function AccessRequestFields({ form, update }) {
         />
       </label>
     </>
+  );
+}
+
+function PasswordVisibilityButton({ visible, onClick, label }) {
+  const Icon = visible ? EyeOff : Eye;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+      aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${label}`}
+      title={`${visible ? 'Ocultar' : 'Mostrar'} ${label}`}
+    >
+      <Icon size={17} />
+    </button>
   );
 }
 
@@ -484,6 +535,8 @@ async function registerAccessRequestInSupabase(form) {
       email: form.email.trim().toLowerCase(),
       telefone: form.telefone.trim(),
       observacao: form.observacao.trim(),
+      senha: form.senha,
+      confirmarSenha: form.confirmarSenha,
     }),
   });
   const payload = await response.json().catch(() => ({}));

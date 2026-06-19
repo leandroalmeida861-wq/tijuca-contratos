@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'node:crypto';
 
 export const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'leandroalmeida861@gmail.com');
 export const APP_URL = 'https://agroflow-contratos.vercel.app';
@@ -39,6 +40,49 @@ export function getSupabasePublic() {
 
 export function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+export function encryptAccessRequestPassword(password) {
+  const key = getAccessRequestEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(String(password), 'utf8'), cipher.final()]);
+
+  return JSON.stringify({
+    v: 1,
+    iv: iv.toString('base64url'),
+    tag: cipher.getAuthTag().toString('base64url'),
+    data: encrypted.toString('base64url'),
+  });
+}
+
+export function decryptAccessRequestPassword(payload) {
+  try {
+    const parsed = JSON.parse(String(payload || ''));
+    if (parsed.v !== 1 || !parsed.iv || !parsed.tag || !parsed.data) throw new Error();
+
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      getAccessRequestEncryptionKey(),
+      Buffer.from(parsed.iv, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(parsed.tag, 'base64url'));
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(parsed.data, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    throw new Error('A senha protegida deste pedido nao pode ser lida. Rejeite o pedido e solicite um novo cadastro.');
+  }
+}
+
+function getAccessRequestEncryptionKey() {
+  const secret = readEnv('ACCESS_REQUEST_ENCRYPTION_KEY');
+  if (secret.length < 32) {
+    throw new Error('ACCESS_REQUEST_ENCRYPTION_KEY ausente ou muito curta na Vercel.');
+  }
+  return crypto.createHash('sha256').update(secret, 'utf8').digest();
 }
 
 function readEnv(name) {
