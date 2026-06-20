@@ -20,7 +20,20 @@ import { deleteRow, exportContractsCsv, exportContractsExcel } from '../lib/api.
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { loadDashboardData, loadDashboardOptions } from '../services/dashboardService.js';
 
-const chartColors = ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#e2b849', '#d8783d'];
+const chartColors = [
+  '#12325f',
+  '#0f7f89',
+  '#24a6a0',
+  '#4f9a59',
+  '#d6a62b',
+  '#d8783d',
+  '#8b5fbf',
+  '#c43c68',
+  '#3677c8',
+  '#708238',
+  '#a0522d',
+  '#52606d',
+];
 
 export default function Dashboard() {
   const { can } = useAuth();
@@ -283,7 +296,8 @@ function ChartPanel({ title, children }) {
 
 function SupplierVolumeChart({ data }) {
   if (!data.length) return <EmptyChart message="Cadastre contratos para visualizar o volume." />;
-  const max = Math.max(...data.map((item) => item.value), 1);
+  const coloredData = assignChartColors(data);
+  const max = Math.max(...coloredData.map((item) => item.value), 1);
   const ticks = [0, max / 2, max];
 
   return (
@@ -294,24 +308,32 @@ function SupplierVolumeChart({ data }) {
       </div>
       <div className="absolute inset-y-4 right-4 w-[48%] rounded-full bg-cyan-100/70 blur-2xl" />
       <div className="relative z-10 flex h-full flex-col justify-center gap-2.5">
-        {data.map((item, index) => {
+        {coloredData.map((item) => {
           const width = Math.max((item.value / max) * 100, 8);
+          const color = item.color;
+          const lightColor = mixColor(color, '#ffffff', 0.28);
           return (
             <div key={item.name} className="grid grid-cols-[42%_1fr] items-center gap-2 sm:grid-cols-[38%_1fr]">
-              <p className="truncate text-right text-[10px] font-semibold uppercase text-slate-700 sm:text-[11px]" title={item.name}>
-                {compactName(item.name)} ({shortWeight(item.value)})
-              </p>
+              <div className="flex min-w-0 items-center justify-end gap-1.5">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color }} />
+                <p className="truncate text-right text-[10px] font-semibold uppercase text-slate-700 sm:text-[11px]" title={item.name}>
+                  {compactName(item.name)} ({shortWeight(item.value)})
+                </p>
+              </div>
               <div className="relative h-5 rounded-r-md bg-slate-100">
                 <div
                   className="h-full rounded-r-md shadow-[0_4px_9px_rgba(15,23,42,0.18)]"
                   style={{
                     width: `${width}%`,
-                    background: `linear-gradient(90deg, ${chartColors[index % chartColors.length]}, #25b7ae)`,
+                    background: `linear-gradient(90deg, ${color}, ${lightColor})`,
                   }}
                 />
                 <span
-                  className="absolute top-1/2 -translate-y-1/2 rounded bg-teal-700 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm"
-                  style={{ left: `min(calc(${width}% - 30px), calc(100% - 38px))` }}
+                  className="absolute top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm"
+                  style={{
+                    left: `min(calc(${width}% - 30px), calc(100% - 38px))`,
+                    backgroundColor: color,
+                  }}
                 >
                   {shortWeight(item.value)}
                 </span>
@@ -333,18 +355,24 @@ function ProductDonutChart({ data }) {
   const total = data.reduce((sum, item) => sum + Number(item.value || 0), 0);
   if (total <= 0) return <EmptyChart message="Cadastre volumes nos contratos para visualizar a distribuição." />;
   let current = 0;
-  const segments = data.map((item, index) => {
+  const segments = assignChartColors(data).map((item) => {
     const value = Number(item.value || 0);
     const percentValue = total > 0 ? value / total : 0;
     const start = current;
     const end = Math.min(current + percentValue * 360, 359.99);
     current = end;
-    return { ...item, start, end, color: chartColors[index % chartColors.length] };
+    return {
+      ...item,
+      start,
+      end,
+      percent: percentValue * 100,
+      color: item.color,
+    };
   }).filter((item) => item.end > item.start);
 
   return (
-    <div className="relative z-10 grid h-[240px] place-items-center sm:h-[270px]">
-      <div className="relative h-[200px] w-[200px] sm:h-[230px] sm:w-[230px]">
+    <div className="relative z-10 grid min-h-[320px] gap-3 sm:min-h-[350px]">
+      <div className="relative mx-auto h-[190px] w-[190px] sm:h-[215px] sm:w-[215px]">
         <svg viewBox="0 0 240 240" className="h-full w-full drop-shadow-[0_10px_12px_rgba(15,23,42,0.22)]">
           <defs>
             <linearGradient id="donutShade" x1="0" x2="1" y1="0" y2="1">
@@ -359,26 +387,47 @@ function ProductDonutChart({ data }) {
           <circle cx="120" cy="120" r="92" fill="url(#donutShade)" opacity="0.28" />
           <circle cx="120" cy="120" r="58" fill="none" stroke="#eef2f7" strokeWidth="8" opacity="0.9" />
           <path d="M120 109a12 12 0 1 0 0-24 12 12 0 0 0 0 24Zm-24 40c3-17 14-27 24-27s21 10 24 27" fill="none" stroke="#111827" strokeLinecap="round" strokeWidth="5" />
+          {segments.map((segment) => {
+            if (segment.percent < 8) return null;
+            const middle = segment.start + ((segment.end - segment.start) / 2);
+            const pos = polarToCartesian(120, 120, 72, middle);
+            return (
+              <text
+                key={segment.name}
+                x={pos.x}
+                y={pos.y}
+                fill="#ffffff"
+                fontSize="11"
+                fontWeight="800"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{ filter: 'drop-shadow(0 1px 1px rgb(15 23 42 / 0.7))' }}
+              >
+                {Math.round(segment.percent)}%
+              </text>
+            );
+          })}
         </svg>
-        {segments.map((segment) => {
-          const middle = segment.start + ((segment.end - segment.start) / 2);
-          const pos = polarToCartesian(115, 115, 69, middle);
-          return (
-            <div
-              key={segment.name}
-              className="absolute -translate-x-1/2 -translate-y-1/2 text-center text-[10px] font-extrabold uppercase leading-tight text-white drop-shadow"
-              style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-            >
-              <span>{compactName(segment.name)}</span>
-            </div>
-          );
-        })}
+      </div>
+      <div className="grid content-start gap-1.5 border-t border-slate-200 pt-3">
+        {segments.map((segment) => (
+          <div key={segment.name} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 text-xs">
+            <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: segment.color }} />
+            <span className="min-w-0 font-semibold leading-tight text-slate-700" title={segment.name}>
+              {segment.name}
+            </span>
+            <span className="whitespace-nowrap font-extrabold text-slate-900">
+              {formatChartPercent(segment.percent)} · {shortWeight(segment.value)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 function ContractExecutionChart({ data }) {
+  const coloredData = assignChartColors(data);
   if (!data.length) return <EmptyChart message="Cadastre contratos para visualizar a execução." />;
 
   return (
@@ -388,23 +437,30 @@ function ContractExecutionChart({ data }) {
         <span className="border-l border-dashed border-slate-200" />
       </div>
       <div className="relative z-10 flex h-full flex-col justify-center gap-4">
-        {data.map((item, index) => {
+        {coloredData.map((item) => {
           const value = Math.max(0, Math.min(Number(item.value || 0), 100));
-          const highlighted = index === 0;
+          const color = item.color;
+          const lightColor = mixColor(color, '#ffffff', 0.25);
           return (
-            <div key={item.name} className={`grid grid-cols-[22%_1fr] items-center gap-2 rounded-md py-1 sm:grid-cols-[16%_1fr] sm:gap-3 ${highlighted ? 'bg-gradient-to-r from-slate-200/80 to-teal-100/70 pr-2' : ''}`}>
-              <p className="truncate text-[11px] font-semibold text-slate-700 sm:text-xs" title={item.name}>{item.name}</p>
+            <div key={item.name} className="grid grid-cols-[22%_1fr] items-center gap-2 rounded-md py-1 sm:grid-cols-[16%_1fr] sm:gap-3">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: color }} />
+                <p className="truncate text-[11px] font-semibold text-slate-700 sm:text-xs" title={`${item.name} - ${item.fornecedor}`}>{item.name}</p>
+              </div>
               <div className="relative h-6 rounded-full bg-slate-200 shadow-inner ring-1 ring-slate-300/70">
                 <div
                   className="h-full rounded-full shadow-[0_4px_9px_rgba(15,23,42,0.18)]"
                   style={{
                     width: `${Math.max(value, 9)}%`,
-                    background: 'linear-gradient(90deg, #16325f 0%, #0f8d8d 64%, #34c1b3 100%)',
+                    background: `linear-gradient(90deg, ${color}, ${lightColor})`,
                   }}
                 />
                 <span
-                  className="absolute top-1/2 -translate-y-1/2 rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-extrabold text-white shadow"
-                  style={{ left: `min(calc(${Math.max(value, 9)}% - 28px), calc(100% - 46px))` }}
+                  className="absolute top-1/2 -translate-y-1/2 rounded-full px-2 py-0.5 text-[11px] font-extrabold text-white shadow"
+                  style={{
+                    left: `min(calc(${Math.max(value, 9)}% - 28px), calc(100% - 46px))`,
+                    backgroundColor: color,
+                  }}
                 >
                   {value}%
                 </span>
@@ -454,6 +510,49 @@ function compactName(value) {
   const name = String(value || '-').trim();
   if (name.length <= 13) return name;
   return `${name.slice(0, 12).trim()}...`;
+}
+
+function assignChartColors(data) {
+  const occupied = new Set();
+  return data.map((item) => {
+    let colorIndex = chartColorIndex(item.name);
+    let attempts = 0;
+    while (occupied.has(colorIndex) && attempts < chartColors.length) {
+      colorIndex = (colorIndex + 1) % chartColors.length;
+      attempts += 1;
+    }
+    occupied.add(colorIndex);
+    return { ...item, color: chartColors[colorIndex] };
+  });
+}
+
+function chartColorIndex(value) {
+  const text = String(value || '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash) % chartColors.length;
+}
+
+function mixColor(colorA, colorB, amount) {
+  const first = hexToRgb(colorA);
+  const second = hexToRgb(colorB);
+  const channel = (key) => Math.round(first[key] + ((second[key] - first[key]) * amount));
+  return `rgb(${channel('r')}, ${channel('g')}, ${channel('b')})`;
+}
+
+function hexToRgb(color) {
+  const value = color.replace('#', '');
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  };
+}
+
+function formatChartPercent(value) {
+  return `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(Number(value || 0))}%`;
 }
 
 function shortWeight(value) {
