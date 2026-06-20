@@ -148,7 +148,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       <DashboardFilters
         filters={draftFilters}
         options={options}
@@ -181,7 +181,7 @@ export default function Dashboard() {
         ))}
       </section>}
 
-      {!loading && <section className="grid gap-5 xl:grid-cols-3">
+      {!loading && <section className="grid min-w-0 gap-5 xl:grid-cols-3">
         <ChartPanel title="Volume por fornecedor">
           <SupplierVolumeChart data={supplierChart} />
         </ChartPanel>
@@ -193,7 +193,7 @@ export default function Dashboard() {
         </ChartPanel>
       </section>}
 
-      {!loading && <section className="rounded-lg border border-slate-200 bg-white shadow-panel">
+      {!loading && <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-panel">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Todos os contratos ({filteredContracts.length})</h2>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -272,7 +272,7 @@ export default function Dashboard() {
 
 function ChartPanel({ title, children }) {
   return (
-    <article className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+    <article className="relative min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
       <HexPattern />
       <h2 className="relative z-10 mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-900">{title}</h2>
       {children}
