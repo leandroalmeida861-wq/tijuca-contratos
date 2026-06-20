@@ -11,7 +11,7 @@ export default function DashboardFilters({
   loading,
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-panel sm:p-4">
       <div className="mb-4 flex items-center gap-2">
         <Filter size={18} className="text-emerald-700" />
         <div>
@@ -20,7 +20,7 @@ export default function DashboardFilters({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
         <DateField
           label="Data inicial"
           value={filters.dataInicial}
@@ -61,7 +61,7 @@ export default function DashboardFilters({
           type="button"
           onClick={onClear}
           disabled={loading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           <RotateCcw size={16} />
           Limpar filtros
@@ -70,7 +70,7 @@ export default function DashboardFilters({
           type="button"
           onClick={onApply}
           disabled={loading}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           <Check size={16} />
           {loading ? 'Aplicando...' : 'Aplicar filtros'}
@@ -167,7 +167,7 @@ function SearchableSelect({ label, placeholder, options, value, onChange }) {
               onChange('');
               setOpen(true);
             }}
-            className="absolute right-8 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center text-slate-400 hover:text-slate-700"
+            className="absolute right-9 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center text-slate-400 hover:text-slate-700"
             title={`Limpar ${label.toLowerCase()}`}
           >
             <X size={15} />
@@ -176,7 +176,7 @@ function SearchableSelect({ label, placeholder, options, value, onChange }) {
         <button
           type="button"
           onClick={() => setOpen((current) => !current)}
-          className="absolute right-1 top-1/2 grid h-9 w-7 -translate-y-1/2 place-items-center text-slate-500"
+          className="absolute right-0 top-1/2 grid h-11 w-10 -translate-y-1/2 place-items-center text-slate-500"
           title={`Abrir opções de ${label.toLowerCase()}`}
         >
           <ChevronDown size={16} />
@@ -192,7 +192,7 @@ function SearchableSelect({ label, placeholder, options, value, onChange }) {
               setQuery('');
               setOpen(false);
             }}
-            className="w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-500 hover:bg-slate-50"
+            className="min-h-11 w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-500 hover:bg-slate-50"
           >
             {placeholder}
           </button>
@@ -201,7 +201,7 @@ function SearchableSelect({ label, placeholder, options, value, onChange }) {
               key={option.value}
               type="button"
               onClick={() => choose(option)}
-              className="w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
+              className="min-h-11 w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
             >
               {option.label}
             </button>

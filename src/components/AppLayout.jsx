@@ -8,12 +8,15 @@ import {
   Grid2X2,
   History,
   LogOut,
+  Menu,
   Package,
   Receipt,
   ShieldCheck,
   Truck,
+  X,
 } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 const navItems = [
@@ -33,16 +36,70 @@ const navItems = [
 
 export default function AppLayout() {
   const { signOut, can, profileData } = useAuth();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    function closeOnEscape(event) {
+      if (event.key === 'Escape') setMenuOpen(false);
+    }
+    if (menuOpen) document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_1fr]">
-      <aside className="sticky top-0 z-20 flex h-auto flex-col border-r border-slate-800 bg-[#111820] px-3 py-5 text-white lg:h-screen">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
+        <div className="flex min-w-0 items-center gap-3">
+          <img src="/agroflow-icon.png" alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+          <div className="min-w-0">
+            <p className="truncate text-lg font-black text-slate-950">AgroFlow</p>
+            <p className="truncate text-[10px] font-bold uppercase text-emerald-700">Gestão de contratos</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+          aria-label="Abrir menu"
+          aria-expanded={menuOpen}
+        >
+          <Menu size={23} />
+        </button>
+      </header>
+
+      {menuOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-slate-950/55 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+          aria-label="Fechar menu"
+        />
+      )}
+
+      <aside className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(84vw,300px)] flex-col overflow-y-auto border-r border-slate-800 bg-[#111820] px-3 py-5 text-white shadow-2xl transition-transform duration-200 lg:sticky lg:top-0 lg:z-20 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-7 flex items-center gap-3 px-2">
           <img src="/agroflow-icon.png" alt="AgroFlow" className="h-11 w-11 rounded-xl object-cover" />
-          <div>
+          <div className="min-w-0">
             <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
             <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">Gestão de contratos</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white lg:hidden"
+            aria-label="Fechar menu"
+          >
+            <X size={21} />
+          </button>
         </div>
 
         <nav className="grid gap-1">
@@ -53,7 +110,7 @@ export default function AppLayout() {
               end={item.to === '/'}
               className={({ isActive }) =>
                 [
-                  'flex h-11 items-center gap-3 rounded-lg px-4 text-sm font-semibold transition',
+                  'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
                   isActive ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
                 ].join(' ')
               }
@@ -78,7 +135,7 @@ export default function AppLayout() {
           Sair
         </button>
       </aside>
-      <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">
+      <main className="min-w-0 px-3 py-4 sm:px-5 sm:py-5 lg:px-7">
         <Outlet />
       </main>
     </div>

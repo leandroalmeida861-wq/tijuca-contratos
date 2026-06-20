@@ -167,14 +167,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {!loading && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {!loading && <section className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
         {cards.map((card) => (
-          <article key={card.label} className="flex min-h-24 items-start justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
-            <div>
+          <article key={card.label} className="flex min-h-24 min-w-0 items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel sm:p-5">
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{card.label}</p>
-              <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{card.value}</p>
+              <p className="mt-2 break-words text-xl font-extrabold text-slate-950 sm:text-2xl">{card.value}</p>
             </div>
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
               <card.icon size={20} />
             </div>
           </article>
@@ -194,22 +194,23 @@ export default function Dashboard() {
       </section>}
 
       {!loading && <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-panel">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Todos os contratos ({filteredContracts.length})</h2>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {can('contratos', 'exportar') && <button onClick={() => exportContractsCsv(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row">
+            {can('contratos', 'exportar') && <button onClick={() => exportContractsCsv(filteredContracts)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
               <Download size={16} /> CSV
             </button>}
-            {can('contratos', 'exportar') && <button onClick={() => exportContractsExcel(filteredContracts)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            {can('contratos', 'exportar') && <button onClick={() => exportContractsExcel(filteredContracts)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50">
               <Download size={16} /> Excel
             </button>}
-            <label className="flex h-10 min-w-64 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500">
+            <label className="col-span-2 flex h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500 sm:min-w-64">
               <Search size={16} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full border-0 outline-none" placeholder="Buscar contratos..." />
             </label>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <p className="px-3 pt-3 text-xs font-semibold text-slate-500 sm:hidden">Deslize para o lado para ver todas as colunas.</p>
+        <div className="max-w-full overflow-x-auto overscroll-x-contain">
           <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="text-xs font-bold uppercase text-slate-500">
               <tr>
@@ -272,7 +273,7 @@ export default function Dashboard() {
 
 function ChartPanel({ title, children }) {
   return (
-    <article className="relative min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+    <article className="relative min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 shadow-panel sm:p-5">
       <HexPattern />
       <h2 className="relative z-10 mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-900">{title}</h2>
       {children}
@@ -286,8 +287,8 @@ function SupplierVolumeChart({ data }) {
   const ticks = [0, max / 2, max];
 
   return (
-    <div className="relative z-10 h-[270px] overflow-hidden rounded-md px-1 pb-7 pt-2">
-      <div className="pointer-events-none absolute bottom-8 left-[39%] right-4 top-2 grid grid-cols-2 border-l border-slate-200/80">
+    <div className="relative z-10 h-[240px] overflow-hidden rounded-md px-1 pb-7 pt-2 sm:h-[270px]">
+      <div className="pointer-events-none absolute bottom-8 left-[44%] right-2 top-2 grid grid-cols-2 border-l border-slate-200/80 sm:left-[39%] sm:right-4">
         <span className="border-r border-dashed border-slate-200" />
         <span className="border-r border-dashed border-slate-200" />
       </div>
@@ -296,8 +297,8 @@ function SupplierVolumeChart({ data }) {
         {data.map((item, index) => {
           const width = Math.max((item.value / max) * 100, 8);
           return (
-            <div key={item.name} className="grid grid-cols-[38%_1fr] items-center gap-2">
-              <p className="truncate text-right text-[11px] font-semibold uppercase text-slate-700" title={item.name}>
+            <div key={item.name} className="grid grid-cols-[42%_1fr] items-center gap-2 sm:grid-cols-[38%_1fr]">
+              <p className="truncate text-right text-[10px] font-semibold uppercase text-slate-700 sm:text-[11px]" title={item.name}>
                 {compactName(item.name)} ({shortWeight(item.value)})
               </p>
               <div className="relative h-5 rounded-r-md bg-slate-100">
@@ -319,7 +320,7 @@ function SupplierVolumeChart({ data }) {
           );
         })}
       </div>
-      <div className="absolute bottom-0 left-[39%] right-4 flex justify-between text-[11px] font-semibold text-slate-600">
+      <div className="absolute bottom-0 left-[44%] right-2 flex justify-between text-[10px] font-semibold text-slate-600 sm:left-[39%] sm:right-4 sm:text-[11px]">
         {ticks.map((tick) => <span key={tick}>{shortWeight(tick)}</span>)}
       </div>
     </div>
@@ -342,8 +343,8 @@ function ProductDonutChart({ data }) {
   }).filter((item) => item.end > item.start);
 
   return (
-    <div className="relative z-10 grid h-[270px] place-items-center">
-      <div className="relative h-[230px] w-[230px]">
+    <div className="relative z-10 grid h-[240px] place-items-center sm:h-[270px]">
+      <div className="relative h-[200px] w-[200px] sm:h-[230px] sm:w-[230px]">
         <svg viewBox="0 0 240 240" className="h-full w-full drop-shadow-[0_10px_12px_rgba(15,23,42,0.22)]">
           <defs>
             <linearGradient id="donutShade" x1="0" x2="1" y1="0" y2="1">
@@ -381,8 +382,8 @@ function ContractExecutionChart({ data }) {
   if (!data.length) return <EmptyChart message="Cadastre contratos para visualizar a execução." />;
 
   return (
-    <div className="relative z-10 h-[270px] pb-7 pt-3">
-      <div className="pointer-events-none absolute bottom-7 left-[18%] right-3 top-0 grid grid-cols-4">
+    <div className="relative z-10 h-[240px] pb-7 pt-3 sm:h-[270px]">
+      <div className="pointer-events-none absolute bottom-7 left-[24%] right-1 top-0 grid grid-cols-4 sm:left-[18%] sm:right-3">
         {[0, 1, 2, 3].map((tick) => <span key={tick} className="border-l border-dashed border-slate-200" />)}
         <span className="border-l border-dashed border-slate-200" />
       </div>
@@ -391,8 +392,8 @@ function ContractExecutionChart({ data }) {
           const value = Math.max(0, Math.min(Number(item.value || 0), 100));
           const highlighted = index === 0;
           return (
-            <div key={item.name} className={`grid grid-cols-[16%_1fr] items-center gap-3 rounded-md py-1 ${highlighted ? 'bg-gradient-to-r from-slate-200/80 to-teal-100/70 pr-2' : ''}`}>
-              <p className="text-xs font-semibold text-slate-700">{item.name}</p>
+            <div key={item.name} className={`grid grid-cols-[22%_1fr] items-center gap-2 rounded-md py-1 sm:grid-cols-[16%_1fr] sm:gap-3 ${highlighted ? 'bg-gradient-to-r from-slate-200/80 to-teal-100/70 pr-2' : ''}`}>
+              <p className="truncate text-[11px] font-semibold text-slate-700 sm:text-xs" title={item.name}>{item.name}</p>
               <div className="relative h-6 rounded-full bg-slate-200 shadow-inner ring-1 ring-slate-300/70">
                 <div
                   className="h-full rounded-full shadow-[0_4px_9px_rgba(15,23,42,0.18)]"
@@ -412,7 +413,7 @@ function ContractExecutionChart({ data }) {
           );
         })}
       </div>
-      <div className="absolute bottom-0 left-[18%] right-3 flex justify-between text-[11px] font-semibold text-slate-600">
+      <div className="absolute bottom-0 left-[24%] right-1 flex justify-between text-[10px] font-semibold text-slate-600 sm:left-[18%] sm:right-3 sm:text-[11px]">
         {[0, 25, 50, 75, 100].map((tick) => <span key={tick}>{tick}%</span>)}
       </div>
     </div>
@@ -434,7 +435,7 @@ function HexPattern() {
 
 function EmptyChart({ message }) {
   return (
-    <div className="grid h-[270px] place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-semibold text-slate-500">
+    <div className="grid h-[240px] place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-semibold text-slate-500 sm:h-[270px]">
       {message}
     </div>
   );
