@@ -68,7 +68,7 @@ function testSourceContracts() {
   assert('Backend bloqueia perfil inativo', authApi.includes('if (!profile?.ativo)'));
   assert('Backend nao devolve dados sensiveis', !authApi.includes('SERVICE_ROLE_KEY') && !authApi.includes('password'));
   assert('Cada aba possui sessao isolada', supabaseClient.includes('storageKey: `agroflow-auth-${tabId}`') && supabaseClient.includes('window.sessionStorage'));
-  assert('Abas duplicadas recebem identificadores diferentes', supabaseClient.includes('AUTH_TAB_CLAIM_PREFIX') && supabaseClient.includes("navigationType === 'reload' || !existingClaim"));
+  assert('Navegacao direta preserva a sessao da aba', supabaseClient.includes("window.name.startsWith(AUTH_TAB_NAME_PREFIX)") && !supabaseClient.includes('navigationType'));
   assert('Recuperacao por e-mail preserva verificador PKCE', supabaseClient.includes("key.endsWith('-code-verifier')") && supabaseClient.includes('SHARED_CODE_VERIFIER_KEY'));
   assert('Logout afeta somente a sessao atual', (auth.match(/signOut\(\{ scope: 'local' \}\)/g) || []).length >= 2);
   assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
