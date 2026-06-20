@@ -11,6 +11,7 @@
     "test:access": "node scripts/test-access-flow.mjs",
     "test:backup": "node scripts/test-backup-import.mjs",
     "test:documents": "node scripts/test-documents-storage.mjs",
+    "test:dashboard": "node scripts/test-dashboard-filters.mjs",
     "test:rbac": "node scripts/test-rbac.mjs",
     "test:resilience": "node scripts/test-resilience.mjs",
     "test:ui": "node scripts/test-ui-contracts.mjs"

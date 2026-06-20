@@ -11,11 +11,14 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import DashboardFilters from '../components/dashboard/DashboardFilters.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { deleteRow, exportContractsCsv, exportContractsExcel, listContracts, listFreights, listTable } from '../lib/api.js';
+import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
+import { deleteRow, exportContractsCsv, exportContractsExcel } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
+import { loadDashboardData, loadDashboardOptions } from '../services/dashboardService.js';
 
 const chartColors = ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#e2b849', '#d8783d'];
 
@@ -23,29 +26,42 @@ export default function Dashboard() {
   const { can } = useAuth();
   const [contracts, setContracts] = useState([]);
   const [freights, setFreights] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
+  const [options, setOptions] = useState({ suppliers: [], products: [], contracts: [] });
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const {
+    appliedFilters,
+    draftFilters,
+    updateFilter,
+    applyFilters,
+    clearFilters,
+    validationError,
+  } = useDashboardFilters();
 
   useEffect(() => {
-    load();
+    loadDashboardOptions()
+      .then(setOptions)
+      .catch((err) => setError(err.message || 'Não foi possível carregar as opções dos filtros.'));
   }, []);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [contractRows, supplierRows, freightRows] = await Promise.all([listContracts(), listTable('fornecedores'), listFreights()]);
-      setContracts(contractRows);
-      setSuppliers(supplierRows);
-      setFreights(freightRows);
+      const dashboardData = await loadDashboardData(appliedFilters);
+      setContracts(dashboardData.contracts);
+      setFreights(dashboardData.freights);
     } catch (err) {
-      setError(err.message || 'Erro ao carregar dashboard.');
+      setError(err.message || 'Não foi possível carregar o dashboard com os filtros informados.');
     } finally {
       setLoading(false);
     }
-  }
+  }, [appliedFilters]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function removeContract(id) {
     if (!window.confirm('Excluir este contrato?')) return;
@@ -81,11 +97,11 @@ export default function Dashboard() {
       saldo: Math.max(contratado - recebido, 0),
       custoMedio: contratado > 0 ? custoTotal / contratado : 0,
       ativos: contracts.filter((item) => item.status_calculado === 'Ativo').length,
-      fornecedores: suppliers.length,
+      fornecedores: new Set(contracts.map((item) => item.fornecedor_id).filter(Boolean)).size,
       vencidos: contracts.filter((item) => item.vencido).length,
       venceEm30: contracts.filter((item) => item.venceEm30).length,
     };
-  }, [contracts, suppliers, freights]);
+  }, [contracts, freights]);
 
   const supplierChart = useMemo(() => {
     const grouped = new Map();
@@ -131,13 +147,27 @@ export default function Dashboard() {
     { label: 'Vencem em 30d', value: stats.venceEm30, icon: AlertTriangle },
   ];
 
-  if (loading) return <div className="grid min-h-[70vh] place-items-center text-sm font-semibold text-slate-500">Carregando dashboard...</div>;
-
   return (
     <div className="grid gap-6">
+      <DashboardFilters
+        filters={draftFilters}
+        options={options}
+        onChange={updateFilter}
+        onApply={applyFilters}
+        onClear={clearFilters}
+        error={validationError}
+        loading={loading}
+      />
+
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {loading && (
+        <div className="grid min-h-40 place-items-center rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-panel">
+          Carregando dados do dashboard...
+        </div>
+      )}
+
+      {!loading && <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <article key={card.label} className="flex min-h-24 items-start justify-between rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
             <div>
@@ -149,9 +179,9 @@ export default function Dashboard() {
             </div>
           </article>
         ))}
-      </section>
+      </section>}
 
-      <section className="grid gap-5 xl:grid-cols-3">
+      {!loading && <section className="grid gap-5 xl:grid-cols-3">
         <ChartPanel title="Volume por fornecedor">
           <SupplierVolumeChart data={supplierChart} />
         </ChartPanel>
@@ -161,9 +191,9 @@ export default function Dashboard() {
         <ChartPanel title="Execução por contrato">
           <ContractExecutionChart data={contractChart} />
         </ChartPanel>
-      </section>
+      </section>}
 
-      <section className="rounded-lg border border-slate-200 bg-white shadow-panel">
+      {!loading && <section className="rounded-lg border border-slate-200 bg-white shadow-panel">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-600">Todos os contratos ({filteredContracts.length})</h2>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -228,9 +258,14 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
-          {!filteredContracts.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhum contrato encontrado.</p>}
+          {!filteredContracts.length && (
+            <div className="p-8 text-center">
+              <p className="text-sm font-bold text-slate-700">Nenhum resultado para os filtros informados.</p>
+              <p className="mt-1 text-xs text-slate-500">Ajuste o período ou limpe um dos filtros para consultar outros contratos.</p>
+            </div>
+          )}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
