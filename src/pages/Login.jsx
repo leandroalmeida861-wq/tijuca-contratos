@@ -1,15 +1,10 @@
 // Login e solicitacao de acesso com senha protegida no backend.
 import {
-  ChartNoAxesCombined,
-  ClipboardCheck,
   Eye,
   EyeOff,
   Lock,
   Mail,
   Phone,
-  ReceiptText,
-  ShieldCheck,
-  Truck,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -259,69 +254,12 @@ export default function Login() {
 
 function LoginHero() {
   return (
-    <div className="relative overflow-hidden bg-[#063f49] p-5 text-white sm:p-8 lg:min-h-[700px] lg:p-9">
-      <div className="relative z-10 flex items-center gap-3">
-        <img src="/agroflow-icon.png" alt="AgroFlow" className="h-14 w-14 rounded-lg object-cover shadow-lg" />
-        <div className="min-w-0">
-          <p className="text-2xl font-black tracking-wide">AgroFlow</p>
-          <p className="mt-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.11em] text-emerald-100 sm:text-[11px]">
-            GESTÃO INTELIGENTE DO AGRONEGÓCIO
-          </p>
-        </div>
-      </div>
-
-      <div className="relative z-10 mt-9 max-w-3xl sm:mt-11">
-        <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
-          Plataforma integrada de gestão operacional
-        </p>
-        <h1 className="max-w-3xl text-3xl font-black uppercase leading-[1.13] sm:text-4xl lg:text-[42px]">
-          Contratos, notas, fretes e financeiro integrados
-        </h1>
-        <p className="mt-4 max-w-2xl text-lg font-extrabold uppercase leading-7 text-cyan-50 sm:text-xl sm:leading-8">
-          Em um único lugar, com muito mais segurança, controle e previsibilidade para a sua operação.
-        </p>
-      </div>
-
-      <div className="relative z-10 mt-8 grid gap-3 sm:grid-cols-2">
-        <LoginModuleCard
-          icon={ClipboardCheck}
-          title="Contratos"
-          text="Volumes, prazos, fornecedores, produtos e execução em uma visão centralizada."
-          color="#62c7dc"
-        />
-        <LoginModuleCard
-          icon={ReceiptText}
-          title="Notas"
-          text="Importação de XML, vínculo ao contrato e atualização automática do saldo recebido."
-          color="#55c985"
-        />
-        <LoginModuleCard
-          icon={Truck}
-          title="Fretes"
-          text="CT-e e custos logísticos vinculados para uma apuração financeira mais completa."
-          color="#9b88d2"
-        />
-        <LoginModuleCard
-          icon={ChartNoAxesCombined}
-          title="Financeiro"
-          text="Custos médios, saldos e relatórios confiáveis para apoiar cada fechamento."
-          color="#37b8ae"
-        />
-      </div>
-
-      <div className="relative z-10 mt-6 border-t border-emerald-200/25 pt-5">
-        <div className="flex items-start gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-200/25">
-            <ShieldCheck size={23} />
-          </div>
-          <div>
-            <p className="text-sm font-black uppercase tracking-[0.08em]">Segurança, controle e previsibilidade</p>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-cyan-50">
-              Informações integradas e rastreáveis para reduzir divergências e dar mais confiança à operação.
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="flex items-center justify-center bg-[#052f42] p-2 sm:p-4 lg:min-h-[700px]">
+      <img
+        src="/agroflow-login-integrado.png"
+        alt="Contratos, notas, fretes e financeiro integrados em um único lugar, com segurança, controle e previsibilidade."
+        className="block h-auto w-full object-contain"
+      />
     </div>
   );
 }
@@ -486,23 +424,6 @@ function Field({ label, icon: Icon, children }) {
         {children}
       </div>
     </label>
-  );
-}
-
-function LoginModuleCard({ icon: Icon, title, text, color }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-white/15 bg-[#0b5661] p-4 shadow-[0_12px_30px_rgba(2,23,29,0.22)]">
-      <div className="mb-3 flex items-center gap-3">
-        <div
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-slate-950"
-          style={{ backgroundColor: color }}
-        >
-          <Icon size={21} />
-        </div>
-        <p className="text-base font-black uppercase tracking-[0.06em]">{title}</p>
-      </div>
-      <p className="text-sm leading-6 text-cyan-50">{text}</p>
-    </div>
   );
 }
 
