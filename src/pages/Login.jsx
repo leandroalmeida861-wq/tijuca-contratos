@@ -271,10 +271,10 @@ function LoginHero() {
       </div>
 
       <div className="mt-5 max-w-2xl border-l-4 border-emerald-400 pl-4 sm:mt-6">
-        <p className="text-lg font-black uppercase leading-snug text-white sm:text-xl">
+        <p className="text-justify text-lg font-black uppercase leading-[1.35] text-white sm:text-xl">
           Gestão integrada para uma operação mais segura e previsível
         </p>
-        <p className="mt-2 text-sm font-medium leading-6 text-cyan-50 sm:text-base">
+        <p className="mt-2 hyphens-auto text-justify text-sm font-medium leading-6 text-cyan-50 sm:text-base sm:leading-7">
           Centralize contratos, notas fiscais, fretes e informações financeiras para acompanhar custos, saldos e resultados com muito mais controle.
         </p>
       </div>
