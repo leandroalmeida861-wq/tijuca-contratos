@@ -265,7 +265,10 @@ function LoginHero() {
             />
           </div>
           <div className="min-w-0">
-            <p className="text-[38px] font-black leading-none tracking-wide text-white sm:text-5xl">AgroFlow</p>
+            <p className="text-[38px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,0.35)] sm:text-5xl">
+              <span className="text-white">Agro</span>
+              <span className="text-emerald-300">Flow</span>
+            </p>
             <p className="mt-2 text-[11px] font-black uppercase leading-[1.35] tracking-[0.1em] text-emerald-200 sm:text-sm">
               GESTÃO INTELIGENTE DO
               <span className="block">AGRONEGÓCIO</span>
