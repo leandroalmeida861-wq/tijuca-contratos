@@ -254,12 +254,38 @@ export default function Login() {
 
 function LoginHero() {
   return (
-    <div className="flex items-center justify-center bg-[#052f42] p-2 sm:p-4 lg:min-h-[700px]">
-      <img
-        src="/agroflow-login-integrado.png"
-        alt="Contratos, notas, fretes e financeiro integrados em um único lugar, com segurança, controle e previsibilidade."
-        className="block h-auto w-full object-contain"
-      />
+    <div className="flex flex-col bg-[#052f42] p-4 text-white sm:p-6 lg:min-h-[700px] lg:p-8">
+      <div className="flex items-center gap-4">
+        <img
+          src="/agroflow-icon.png"
+          alt=""
+          className="h-14 w-14 shrink-0 rounded-lg object-cover ring-1 ring-emerald-200/60 sm:h-16 sm:w-16"
+        />
+        <div className="min-w-0">
+          <p className="text-3xl font-black tracking-wide sm:text-4xl">AgroFlow</p>
+          <p className="mt-1 text-[10px] font-extrabold uppercase leading-[1.35] tracking-[0.09em] text-emerald-200 sm:text-xs">
+            GESTÃO INTELIGENTE DO
+            <span className="block">AGRONEGÓCIO</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 max-w-2xl border-l-4 border-emerald-400 pl-4 sm:mt-6">
+        <p className="text-lg font-black uppercase leading-snug text-white sm:text-xl">
+          Gestão integrada para uma operação mais segura e previsível
+        </p>
+        <p className="mt-2 text-sm font-medium leading-6 text-cyan-50 sm:text-base">
+          Centralize contratos, notas fiscais, fretes e informações financeiras para acompanhar custos, saldos e resultados com muito mais controle.
+        </p>
+      </div>
+
+      <div className="mt-5 flex min-h-0 flex-1 items-center justify-center sm:mt-6">
+        <img
+          src="/agroflow-login-integrado.png"
+          alt="Contratos, notas, fretes e financeiro integrados em um único lugar, com segurança, controle e previsibilidade."
+          className="block h-auto max-h-[470px] w-full object-contain"
+        />
+      </div>
     </div>
   );
 }
