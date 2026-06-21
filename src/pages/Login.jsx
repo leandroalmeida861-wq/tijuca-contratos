@@ -255,7 +255,7 @@ function LoginHero() {
         <img src="/agroflow-icon.png" alt="AgroFlow" className="h-14 w-14 rounded-2xl object-cover shadow-lg" />
         <div>
           <p className="text-2xl font-black tracking-wide">AgroFlow</p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-100">gestao inteligente de contratos</p>
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-100">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
         </div>
       </div>
 

@@ -62,7 +62,7 @@ export default function AppLayout() {
           <img src="/agroflow-icon.png" alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
           <div className="min-w-0">
             <p className="truncate text-lg font-black text-slate-950">AgroFlow</p>
-            <p className="truncate text-[10px] font-bold uppercase text-emerald-700">Gestão de contratos</p>
+            <p className="truncate text-[9px] font-bold uppercase tracking-[0.04em] text-emerald-700">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
           </div>
         </div>
         <button
@@ -90,7 +90,7 @@ export default function AppLayout() {
           <img src="/agroflow-icon.png" alt="AgroFlow" className="h-11 w-11 rounded-xl object-cover" />
           <div className="min-w-0">
             <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
-            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">Gestão de contratos</p>
+            <p className="mt-2 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-200">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
           </div>
           <button
             type="button"
