@@ -90,7 +90,10 @@ export default function AppLayout() {
           <img src="/agroflow-icon.png" alt="AgroFlow" className="h-11 w-11 rounded-xl object-cover" />
           <div className="min-w-0">
             <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
-            <p className="mt-2 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.08em] text-emerald-200">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
+            <p className="mt-1.5 max-w-[170px] text-[9px] font-semibold uppercase leading-[1.35] tracking-[0.07em] text-emerald-200">
+              GESTÃO INTELIGENTE DO
+              <span className="block">AGRONEGÓCIO</span>
+            </p>
           </div>
           <button
             type="button"
