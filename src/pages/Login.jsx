@@ -255,22 +255,29 @@ export default function Login() {
 function LoginHero() {
   return (
     <div className="flex flex-col bg-[#052f42] p-4 text-white sm:p-6 lg:min-h-[700px] lg:p-8">
-      <div className="flex items-center gap-4">
-        <img
-          src="/agroflow-icon.png"
-          alt=""
-          className="h-14 w-14 shrink-0 rounded-lg object-cover ring-1 ring-emerald-200/60 sm:h-16 sm:w-16"
-        />
-        <div className="min-w-0">
-          <p className="text-3xl font-black tracking-wide sm:text-4xl">AgroFlow</p>
-          <p className="mt-1 text-[10px] font-extrabold uppercase leading-[1.35] tracking-[0.09em] text-emerald-200 sm:text-xs">
-            GESTÃO INTELIGENTE DO
-            <span className="block">AGRONEGÓCIO</span>
-          </p>
+      <div className="border-b border-emerald-200/25 pb-5 sm:pb-6">
+        <div className="flex items-center gap-4 sm:gap-5">
+          <div className="grid h-[76px] w-[76px] shrink-0 place-items-center rounded-xl border border-emerald-100/70 bg-white/10 p-1.5 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:h-[88px] sm:w-[88px]">
+            <img
+              src="/agroflow-icon.png"
+              alt=""
+              className="h-full w-full rounded-lg object-cover"
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[38px] font-black leading-none tracking-wide text-white sm:text-5xl">AgroFlow</p>
+            <p className="mt-2 text-[11px] font-black uppercase leading-[1.35] tracking-[0.1em] text-emerald-200 sm:text-sm">
+              GESTÃO INTELIGENTE DO
+              <span className="block">AGRONEGÓCIO</span>
+            </p>
+          </div>
         </div>
+        <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-cyan-100 sm:text-sm">
+          Controle operacional e financeiro para decisões mais seguras
+        </p>
       </div>
 
-      <div className="mt-5 max-w-2xl border-l-4 border-emerald-400 pl-4 sm:mt-6">
+      <div className="mt-5 max-w-2xl border-l-4 border-emerald-400 pl-4 sm:mt-5">
         <p className="text-justify text-lg font-black uppercase leading-[1.35] text-white sm:text-xl">
           Gestão integrada para uma operação mais segura e previsível
         </p>
