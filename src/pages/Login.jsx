@@ -1,5 +1,17 @@
 // Login e solicitacao de acesso com senha protegida no backend.
-import { BarChart3, Eye, EyeOff, FileCheck2, Lock, Mail, Phone, ShieldCheck, TrendingUp, UserRound } from 'lucide-react';
+import {
+  ChartNoAxesCombined,
+  ClipboardCheck,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Phone,
+  ReceiptText,
+  ShieldCheck,
+  Truck,
+  UserRound,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
@@ -247,51 +259,65 @@ export default function Login() {
 
 function LoginHero() {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-[#073f3a] via-[#0b7782] to-[#27a9d2] p-7 text-white sm:p-9 lg:min-h-[700px]">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-72 w-72 rounded-tl-[120px] bg-[#31bf69]/20" />
-
+    <div className="relative overflow-hidden bg-[#063f49] p-5 text-white sm:p-8 lg:min-h-[700px] lg:p-9">
       <div className="relative z-10 flex items-center gap-3">
-        <img src="/agroflow-icon.png" alt="AgroFlow" className="h-14 w-14 rounded-2xl object-cover shadow-lg" />
-        <div>
+        <img src="/agroflow-icon.png" alt="AgroFlow" className="h-14 w-14 rounded-lg object-cover shadow-lg" />
+        <div className="min-w-0">
           <p className="text-2xl font-black tracking-wide">AgroFlow</p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-100">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
+          <p className="mt-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.11em] text-emerald-100 sm:text-[11px]">
+            GESTÃO INTELIGENTE DO AGRONEGÓCIO
+          </p>
         </div>
       </div>
 
-      <div className="relative z-10 mt-12 max-w-2xl">
-        <p className="mb-3 inline-flex rounded-full bg-white/12 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-100 ring-1 ring-white/15">
-          Plataforma de controle operacional
+      <div className="relative z-10 mt-9 max-w-3xl sm:mt-11">
+        <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
+          Plataforma integrada de gestão operacional
         </p>
-        <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-5xl">
-          Contratos, notas, fretes e financeiro em um unico lugar.
+        <h1 className="max-w-3xl text-3xl font-black uppercase leading-[1.13] sm:text-4xl lg:text-[42px]">
+          Contratos, notas, fretes e financeiro integrados
         </h1>
-        <p className="mt-5 max-w-xl text-base font-medium leading-7 text-cyan-50">
-          Organize compras, acompanhe saldo por contrato, importe XML, vincule fretes e tenha um fechamento financeiro mais seguro, claro e rastreavel.
+        <p className="mt-4 max-w-2xl text-lg font-extrabold uppercase leading-7 text-cyan-50 sm:text-xl sm:leading-8">
+          Em um único lugar, com muito mais segurança, controle e previsibilidade para a sua operação.
         </p>
       </div>
 
-      <div className="relative z-10 mt-9 grid gap-3 sm:grid-cols-3">
-        <LoginBenefit icon={FileCheck2} title="Contratos" text="Volume, prazo, produto e fornecedor sempre visiveis." />
-        <LoginBenefit icon={BarChart3} title="Indicadores" text="Dashboard com saldo, execucao e alertas de vencimento." />
-        <LoginBenefit icon={ShieldCheck} title="Seguranca" text="Acesso protegido, banco online e backup dos dados." />
+      <div className="relative z-10 mt-8 grid gap-3 sm:grid-cols-2">
+        <LoginModuleCard
+          icon={ClipboardCheck}
+          title="Contratos"
+          text="Volumes, prazos, fornecedores, produtos e execução em uma visão centralizada."
+          color="#62c7dc"
+        />
+        <LoginModuleCard
+          icon={ReceiptText}
+          title="Notas"
+          text="Importação de XML, vínculo ao contrato e atualização automática do saldo recebido."
+          color="#55c985"
+        />
+        <LoginModuleCard
+          icon={Truck}
+          title="Fretes"
+          text="CT-e e custos logísticos vinculados para uma apuração financeira mais completa."
+          color="#9b88d2"
+        />
+        <LoginModuleCard
+          icon={ChartNoAxesCombined}
+          title="Financeiro"
+          text="Custos médios, saldos e relatórios confiáveis para apoiar cada fechamento."
+          color="#37b8ae"
+        />
       </div>
 
-      <div className="relative z-10 mt-10 grid gap-4 sm:grid-cols-3">
-        <LoginMetric value="100%" label="mais controle sobre contratos" />
-        <LoginMetric value="XML" label="importacao de notas e CT-e" />
-        <LoginMetric value="PDF" label="relatorios para conferencia" />
-      </div>
-
-      <div className="relative z-10 mt-10 rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+      <div className="relative z-10 mt-6 border-t border-emerald-200/25 pt-5">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-300/20 text-emerald-100">
-            <TrendingUp size={21} />
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-200/25">
+            <ShieldCheck size={23} />
           </div>
           <div>
-            <p className="text-sm font-extrabold">Fechamento financeiro com mais confianca</p>
-            <p className="mt-1 text-sm leading-6 text-cyan-50">
-              O custo medio considera contrato e frete vinculado, reduzindo divergencias na conferencia de saldos e valores.
+            <p className="text-sm font-black uppercase tracking-[0.08em]">Segurança, controle e previsibilidade</p>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-cyan-50">
+              Informações integradas e rastreáveis para reduzir divergências e dar mais confiança à operação.
             </p>
           </div>
         </div>
@@ -463,23 +489,19 @@ function Field({ label, icon: Icon, children }) {
   );
 }
 
-function LoginBenefit({ icon: Icon, title, text }) {
+function LoginModuleCard({ icon: Icon, title, text, color }) {
   return (
-    <div className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur">
-      <div className="mb-3 grid h-9 w-9 place-items-center rounded-lg bg-white/15 text-emerald-100">
-        <Icon size={19} />
+    <div className="min-w-0 rounded-lg border border-white/15 bg-[#0b5661] p-4 shadow-[0_12px_30px_rgba(2,23,29,0.22)]">
+      <div className="mb-3 flex items-center gap-3">
+        <div
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-slate-950"
+          style={{ backgroundColor: color }}
+        >
+          <Icon size={21} />
+        </div>
+        <p className="text-base font-black uppercase tracking-[0.06em]">{title}</p>
       </div>
-      <p className="text-sm font-extrabold">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-cyan-50">{text}</p>
-    </div>
-  );
-}
-
-function LoginMetric({ value, label }) {
-  return (
-    <div>
-      <p className="text-2xl font-black leading-none">{value}</p>
-      <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-cyan-100">{label}</p>
+      <p className="text-sm leading-6 text-cyan-50">{text}</p>
     </div>
   );
 }
