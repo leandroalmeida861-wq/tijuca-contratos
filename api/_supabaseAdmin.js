@@ -2,7 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 
 export const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'leandroalmeida861@gmail.com');
-export const APP_URL = 'https://agroflow-contratos.vercel.app';
+export const APP_URL = normalizeAppUrl(
+  process.env.NEXT_PUBLIC_APP_URL || 'https://sistema.agroflow.com.br',
+);
 export const INVITE_REDIRECT_URL = `${APP_URL}/login`;
 export const ADMIN_APPROVED_REDIRECT = `${APP_URL}/admin/solicitacoes?sucesso=usuario_aprovado`;
 
@@ -40,6 +42,10 @@ export function getSupabasePublic() {
 
 export function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeAppUrl(url) {
+  return String(url || '').trim().replace(/^['"]|['"]$/g, '').replace(/\/+$/, '');
 }
 
 export function encryptAccessRequestPassword(password) {

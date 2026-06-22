@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AUTHORIZED_EMAIL, useAuth } from '../contexts/AuthContext.jsx';
+import { appUrl } from '../lib/appUrl.js';
 import { supabase } from '../lib/supabase.js';
 
 const initialAccessForm = {
@@ -158,7 +159,7 @@ export default function Login() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
-      redirectTo: 'https://agroflow-contratos.vercel.app/login',
+      redirectTo: appUrl('/login'),
     });
     if (error) throw error;
 

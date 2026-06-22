@@ -25,4 +25,4 @@ O usuário precisa abrir o e-mail automático enviado pelo Supabase e confirmar 
 
 O link agora volta para:
 
-`https://agroflow-contratos.vercel.app/login`
+`https://sistema.agroflow.com.br/login`

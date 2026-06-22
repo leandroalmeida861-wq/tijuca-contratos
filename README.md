@@ -25,8 +25,8 @@ Sistema web em React + Vite + Tailwind CSS + Supabase para gestao de contratos, 
 5. Deixe o provedor de e-mail ativado.
 6. O `Confirm email` pode ficar ativado. Usuarios aprovados recebem convite oficial do Supabase para criar senha.
 7. Em `Authentication > URL Configuration`, configure:
-   - Site URL: `https://agroflow-contratos.vercel.app`
-   - Redirect URL: `https://agroflow-contratos.vercel.app/login`
+   - Site URL: `https://sistema.agroflow.com.br`
+   - Redirect URL: `https://sistema.agroflow.com.br/login`
 8. Se aparecer limite de envio de e-mail, configure SMTP proprio em `Authentication > SMTP Settings`.
 
 ## 2. Configurar variaveis de ambiente
@@ -42,6 +42,7 @@ Crie um arquivo `.env` local e configure as mesmas variaveis na Vercel:
 ```env
 VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_ANON_KEY=sua-chave-anon-publica
+NEXT_PUBLIC_APP_URL=https://sistema.agroflow.com.br
 SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_ANON_KEY=sua-chave-anon-publica
 SUPABASE_SERVICE_ROLE_KEY=sua-service-role-key-apenas-no-backend
@@ -49,6 +50,7 @@ ADMIN_EMAIL=leandroalmeida861@gmail.com
 ```
 
 Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no frontend, em e-mails, prints ou mensagens. Ela deve ficar apenas no backend/serverless.
+`NEXT_PUBLIC_APP_URL` e uma URL publica e deve apontar para o dominio oficial sem barra no final.
 
 ## 3. Rodar localmente
 
@@ -79,12 +81,12 @@ Acesse o endereco exibido pelo Vite, normalmente `http://localhost:5173`.
 5. O administrador recebe um link neste formato:
 
 ```text
-https://agroflow-contratos.vercel.app/api/aprovar-acesso?token=TOKEN
+https://sistema.agroflow.com.br/api/aprovar-acesso?token=TOKEN
 ```
 
 6. O link tem somente token. Nunca envie senha, e-mail, nome ou `service_role` por query string.
 7. A funcao `/api/aprovar-acesso` usa `SUPABASE_SERVICE_ROLE_KEY` apenas no backend, aprova o pedido, cria/atualiza `usuarios_autorizados` com perfil `operador` e envia convite do Supabase.
-8. O usuario recebe o convite, cria a senha e entra em `https://agroflow-contratos.vercel.app/login`.
+8. O usuario recebe o convite, cria a senha e entra em `https://sistema.agroflow.com.br/login`.
 9. O login consulta `usuarios_autorizados`; usuarios sem `status = ativo` sao bloqueados.
 
 ## Estrutura

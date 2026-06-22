@@ -1,6 +1,6 @@
 # Roteiro E2E Guiado - AgroFlow
 
-Ambiente do app: https://agroflow-contratos.vercel.app
+Ambiente do app: https://sistema.agroflow.com.br
 Projeto Supabase: `imbdshylpobrtaxvkfxb`
 
 Importante: nao envie `SUPABASE_SERVICE_ROLE_KEY` pelo chat.
@@ -55,7 +55,7 @@ Se falhar:
 
 Onde clicar:
 
-1. Abra https://agroflow-contratos.vercel.app/login
+1. Abra https://sistema.agroflow.com.br/login
 2. Clique em `Solicitar`.
 3. Preencha:
    - Nome: `Usuario E2E AgroFlow`
@@ -150,7 +150,7 @@ Se falhar:
 
 Onde clicar:
 
-1. Abra https://agroflow-contratos.vercel.app/login
+1. Abra https://sistema.agroflow.com.br/login
 2. Clique em `Entrar`.
 3. E-mail: `agroflow.e2e.teste+001@gmail.com`
 4. Senha: `TesteE2E@123`

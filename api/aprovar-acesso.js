@@ -1,4 +1,5 @@
 import {
+  APP_URL,
   ADMIN_APPROVED_REDIRECT,
   INVITE_REDIRECT_URL,
   findAuthUserByEmail,
@@ -7,7 +8,7 @@ import {
   normalizeEmail,
 } from './_supabaseAdmin.js';
 
-const ERROR_REDIRECT = 'https://agroflow-contratos.vercel.app/admin/solicitacoes?erro=';
+const ERROR_REDIRECT = `${APP_URL}/admin/solicitacoes?erro=`;
 
 export default async function handler(request, response) {
   if (request.method !== 'GET') {

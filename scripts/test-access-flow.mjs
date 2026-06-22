@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 
-const SITE_URL = 'https://agroflow-contratos.vercel.app';
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://sistema.agroflow.com.br';
 const results = [];
 
 async function main() {
