@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 
 export const ADMIN_EMAIL = normalizeEmail(process.env.ADMIN_EMAIL || 'leandroalmeida861@gmail.com');
 export const APP_URL = normalizeAppUrl(
-  process.env.NEXT_PUBLIC_APP_URL || 'https://sistema.agroflow.com.br',
+  process.env.NEXT_PUBLIC_APP_URL || 'https://agroflow-sistema.vercel.app',
 );
 export const INVITE_REDIRECT_URL = `${APP_URL}/login`;
 export const ADMIN_APPROVED_REDIRECT = `${APP_URL}/admin/solicitacoes?sucesso=usuario_aprovado`;

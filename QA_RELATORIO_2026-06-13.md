@@ -1,7 +1,7 @@
 # Relatorio de QA - AgroFlow
 
 Data: 2026-06-13
-Ambiente: https://sistema.agroflow.com.br
+Ambiente: https://agroflow-sistema.vercel.app
 
 ## Cenarios testados
 
