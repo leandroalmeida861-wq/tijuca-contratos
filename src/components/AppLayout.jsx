@@ -59,9 +59,12 @@ export default function AppLayout() {
     <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_1fr]">
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/agroflow-icon.png" alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+          <img src="/agroflow-symbol.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
           <div className="min-w-0">
-            <p className="truncate text-lg font-black text-slate-950">AgroFlow</p>
+            <p className="truncate text-lg font-black">
+              <span className="text-[#5dcaa5]">Agro</span>
+              <span className="text-[#1d9e75]">Flow</span>
+            </p>
             <p className="truncate text-[9px] font-bold uppercase tracking-[0.04em] text-emerald-700">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
           </div>
         </div>
@@ -87,9 +90,12 @@ export default function AppLayout() {
 
       <aside className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(84vw,300px)] flex-col overflow-y-auto border-r border-slate-800 bg-[#111820] px-3 py-5 text-white shadow-2xl transition-transform duration-200 lg:sticky lg:top-0 lg:z-20 lg:h-screen lg:w-auto lg:translate-x-0 lg:shadow-none ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-7 flex items-center gap-3 px-2">
-          <img src="/agroflow-icon.png" alt="AgroFlow" className="h-11 w-11 rounded-xl object-cover" />
+          <img src="/agroflow-symbol.png" alt="AgroFlow" className="h-12 w-12 object-contain" />
           <div className="min-w-0">
-            <p className="text-2xl font-black leading-none tracking-wide text-white">AgroFlow</p>
+            <p className="text-2xl font-black leading-none tracking-wide">
+              <span className="text-[#5dcaa5]">Agro</span>
+              <span className="text-[#1d9e75]">Flow</span>
+            </p>
             <p className="mt-1.5 max-w-[170px] text-[9px] font-semibold uppercase leading-[1.35] tracking-[0.07em] text-emerald-200">
               GESTÃO INTELIGENTE DO
               <span className="block">AGRONEGÓCIO</span>

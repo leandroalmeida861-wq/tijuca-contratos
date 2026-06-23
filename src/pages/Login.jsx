@@ -180,7 +180,7 @@ export default function Login() {
         <aside className="flex items-center justify-center bg-[#f8fafc] p-5 sm:p-8">
           <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
             <div className="mb-6 text-center">
-              <img src="/agroflow-icon.png" alt="AgroFlow" className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-sm" />
+              <img src="/agroflow-symbol.png" alt="AgroFlow" className="mx-auto h-16 w-16 object-contain" />
               <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{titleForMode(mode)}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
                 {descriptionForMode(mode)}
@@ -258,17 +258,15 @@ function LoginHero() {
     <div className="flex flex-col bg-[#052f42] p-4 text-white sm:p-6 lg:min-h-[700px] lg:p-8">
       <div className="border-b border-emerald-200/25 pb-5 sm:pb-6">
         <div className="flex items-center gap-4 sm:gap-5">
-          <div className="grid h-[76px] w-[76px] shrink-0 place-items-center rounded-xl border border-emerald-100/70 bg-white/10 p-1.5 shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:h-[88px] sm:w-[88px]">
-            <img
-              src="/agroflow-icon.png"
-              alt=""
-              className="h-full w-full rounded-lg object-cover"
-            />
-          </div>
+          <img
+            src="/agroflow-symbol.png"
+            alt=""
+            className="h-[76px] w-[76px] shrink-0 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.22)] sm:h-[88px] sm:w-[88px]"
+          />
           <div className="min-w-0">
             <p className="text-[38px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,0.35)] sm:text-5xl">
-              <span className="text-white">Agro</span>
-              <span className="text-emerald-300">Flow</span>
+              <span className="text-[#5dcaa5]">Agro</span>
+              <span className="text-[#1d9e75]">Flow</span>
             </p>
             <p className="mt-2 text-[11px] font-black uppercase leading-[1.35] tracking-[0.1em] text-emerald-200 sm:text-sm">
               GESTÃO INTELIGENTE DO
