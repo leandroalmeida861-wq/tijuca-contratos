@@ -63,7 +63,7 @@ export default function AppLayout() {
           <div className="min-w-0">
             <p className="truncate text-lg font-black">
               <span className="text-[#5dcaa5]">Agro</span>
-              <span className="text-[#1d9e75]">Flow</span>
+              <span className="text-[#ef9f27]">Flow</span>
             </p>
             <p className="truncate text-[9px] font-bold uppercase tracking-[0.04em] text-emerald-700">GESTÃO INTELIGENTE DO AGRONEGÓCIO</p>
           </div>
@@ -94,7 +94,7 @@ export default function AppLayout() {
           <div className="min-w-0">
             <p className="text-2xl font-black leading-none tracking-wide">
               <span className="text-[#5dcaa5]">Agro</span>
-              <span className="text-[#1d9e75]">Flow</span>
+              <span className="text-[#ef9f27]">Flow</span>
             </p>
             <p className="mt-1.5 max-w-[170px] text-[9px] font-semibold uppercase leading-[1.35] tracking-[0.07em] text-emerald-200">
               GESTÃO INTELIGENTE DO

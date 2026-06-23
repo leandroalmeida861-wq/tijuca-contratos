@@ -266,7 +266,7 @@ function LoginHero() {
           <div className="min-w-0">
             <p className="text-[38px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,0.35)] sm:text-5xl">
               <span className="text-[#5dcaa5]">Agro</span>
-              <span className="text-[#1d9e75]">Flow</span>
+              <span className="text-[#ef9f27]">Flow</span>
             </p>
             <p className="mt-2 text-[11px] font-black uppercase leading-[1.35] tracking-[0.1em] text-emerald-200 sm:text-sm">
               GESTÃO INTELIGENTE DO
