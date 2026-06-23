@@ -25,7 +25,7 @@ const initialAccessForm = {
 export default function Login() {
   const { signIn, user, authorized, configured } = useAuth();
   const [mode, setMode] = useState(() => (hasPasswordSetupToken() ? 'setPassword' : 'login'));
-  const [email, setEmail] = useState(AUTHORIZED_EMAIL);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [accessForm, setAccessForm] = useState(initialAccessForm);
@@ -194,7 +194,7 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="grid gap-4">
+            <form onSubmit={handleSubmit} autoComplete="off" className="grid gap-4">
               {mode === 'request' ? (
                 <AccessRequestFields form={accessForm} update={updateAccessForm} />
               ) : mode === 'setPassword' ? (
@@ -322,7 +322,7 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
           onChange={(event) => setEmail(event.target.value)}
           className="w-full border-0 bg-transparent outline-none"
           type="email"
-          autoComplete="email"
+          autoComplete="off"
           required
         />
       </Field>
@@ -379,7 +379,7 @@ function ForgotPasswordFields({ email, setEmail }) {
         onChange={(event) => setEmail(event.target.value)}
         className="w-full border-0 bg-transparent outline-none"
         type="email"
-        autoComplete="email"
+        autoComplete="off"
         required
       />
     </Field>
