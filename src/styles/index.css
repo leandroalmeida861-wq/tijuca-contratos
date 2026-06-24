@@ -22,3 +22,17 @@ select,
 textarea {
   font: inherit;
 }
+
+@keyframes loadingBar {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  50% {
+    transform: translateX(60%);
+  }
+
+  100% {
+    transform: translateX(220%);
+  }
+}
