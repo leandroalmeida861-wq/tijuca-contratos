@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Building2,
+  ChevronDown,
   ClipboardList,
   Database,
   FileArchive,
@@ -46,9 +47,15 @@ export default function AppLayout() {
   const { signOut, can, profileData } = useAuth();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cadastrosOpen, setCadastrosOpen] = useState(() =>
+    ['/fornecedores', '/fabricas', '/produtos'].includes(location.pathname)
+  );
 
   useEffect(() => {
     setMenuOpen(false);
+    if (['/fornecedores', '/fabricas', '/produtos'].includes(location.pathname)) {
+      setCadastrosOpen(true);
+    }
   }, [location.pathname]);
 
   useEffect(() => {
@@ -129,32 +136,41 @@ export default function AppLayout() {
 
               return (
                 <div key={item.label} className="grid gap-1">
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => setCadastrosOpen((open) => !open)}
+                    aria-expanded={cadastrosOpen}
                     className={[
-                      'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-bold transition',
-                      isGroupActive ? 'bg-slate-800 text-white' : 'text-slate-200',
+                      'flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-sm font-bold transition',
+                      isGroupActive || cadastrosOpen ? 'bg-slate-800 text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
                     ].join(' ')}
                   >
                     <GroupIcon size={18} />
-                    <span>{item.label}</span>
-                  </div>
-                  <div className="ml-4 grid gap-1 border-l border-slate-700 pl-3">
-                    {visibleChildren.map((child) => (
-                      <NavLink
-                        key={child.to}
-                        to={child.to}
-                        className={({ isActive }) =>
-                          [
-                            'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition',
-                            isActive ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
-                          ].join(' ')
-                        }
-                      >
-                        <child.icon size={17} />
-                        <span>{child.label}</span>
-                      </NavLink>
-                    ))}
-                  </div>
+                    <span className="flex-1">{item.label}</span>
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform ${cadastrosOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {cadastrosOpen && (
+                    <div className="ml-4 grid gap-1 border-l border-slate-700 pl-3">
+                      {visibleChildren.map((child) => (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          className={({ isActive }) =>
+                            [
+                              'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition',
+                              isActive ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                            ].join(' ')
+                          }
+                        >
+                          <child.icon size={17} />
+                          <span>{child.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             }
