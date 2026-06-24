@@ -22,16 +22,22 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Grid2X2, menu: 'dashboard' },
-  { to: '/fornecedores', label: 'Fornecedores', icon: Building2, menu: 'fornecedores' },
-  { to: '/fabricas', label: 'Fábricas', icon: Factory, menu: 'fabricas' },
-  { to: '/produtos', label: 'Produtos', icon: Package, menu: 'produtos' },
+  {
+    label: 'Cadastros',
+    icon: Building2,
+    children: [
+      { to: '/fornecedores', label: 'Fornecedores', icon: Building2, menu: 'fornecedores' },
+      { to: '/fabricas', label: 'Fábricas', icon: Factory, menu: 'fabricas' },
+      { to: '/produtos', label: 'Produtos', icon: Package, menu: 'produtos' },
+    ],
+  },
   { to: '/contratos', label: 'Contratos', icon: ClipboardList, menu: 'contratos' },
   { to: '/notas-fiscais', label: 'Notas Fiscais', icon: Receipt, menu: 'notas_fiscais' },
+  { to: '/balancas', label: 'Balanças', icon: Scale, menu: 'balancas' },
   { to: '/frete', label: 'Frete', icon: Truck, menu: 'fretes' },
   { to: '/documentos', label: 'Documentos', icon: FileArchive, menu: 'documentos' },
   { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3, menu: 'financeiro' },
   { to: '/backup', label: 'Backup', icon: Database, menu: 'backup' },
-  { to: '/balancas', label: 'Balanças', icon: Scale, menu: 'balancas' },
   { to: '/admin/acessos', label: 'Usuários e permissões', icon: ShieldCheck, menu: 'usuarios' },
   { to: '/admin/auditoria', label: 'Auditoria', icon: History, menu: 'auditoria' },
 ];
@@ -114,22 +120,63 @@ export default function AppLayout() {
         </div>
 
         <nav className="grid gap-1">
-          {navItems.filter((item) => can(item.menu, 'visualizar')).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                [
-                  'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
-                  isActive ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
-                ].join(' ')
-              }
-            >
-              <item.icon size={18} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            if (item.children) {
+              const visibleChildren = item.children.filter((child) => can(child.menu, 'visualizar'));
+              if (!visibleChildren.length) return null;
+              const GroupIcon = item.icon;
+              const isGroupActive = visibleChildren.some((child) => location.pathname === child.to);
+
+              return (
+                <div key={item.label} className="grid gap-1">
+                  <div
+                    className={[
+                      'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-bold transition',
+                      isGroupActive ? 'bg-slate-800 text-white' : 'text-slate-200',
+                    ].join(' ')}
+                  >
+                    <GroupIcon size={18} />
+                    <span>{item.label}</span>
+                  </div>
+                  <div className="ml-4 grid gap-1 border-l border-slate-700 pl-3">
+                    {visibleChildren.map((child) => (
+                      <NavLink
+                        key={child.to}
+                        to={child.to}
+                        className={({ isActive }) =>
+                          [
+                            'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition',
+                            isActive ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                          ].join(' ')
+                        }
+                      >
+                        <child.icon size={17} />
+                        <span>{child.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            if (!can(item.menu, 'visualizar')) return null;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  [
+                    'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
+                    isActive ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                  ].join(' ')
+                }
+              >
+                <item.icon size={18} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="mt-5 border-t border-slate-800 px-4 pt-4 text-xs text-slate-400">
