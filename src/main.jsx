@@ -10,6 +10,7 @@ import AccessDenied from './pages/AccessDenied.jsx';
 import AdminAccessPage from './pages/AdminAccessPage.jsx';
 import AdminSolicitacoes from './pages/AdminSolicitacoes.jsx';
 import AuditLogsPage from './pages/AuditLogsPage.jsx';
+import BalancasPage from './pages/BalancasPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
@@ -41,6 +42,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="documentos" element={<ProtectedRoute menu="documentos"><ManagementPage type="documentos" /></ProtectedRoute>} />
             <Route path="rel-financeiro" element={<ProtectedRoute menu="financeiro"><ManagementPage type="financeiro" /></ProtectedRoute>} />
             <Route path="backup" element={<ProtectedRoute menu="backup"><BackupPage /></ProtectedRoute>} />
+            <Route path="balancas" element={<ProtectedRoute menu="balancas"><BalancasPage /></ProtectedRoute>} />
             <Route path="admin/solicitacoes" element={<ProtectedRoute menu="usuarios"><AdminSolicitacoes /></ProtectedRoute>} />
             <Route path="admin/acessos" element={<ProtectedRoute menu="usuarios"><AdminAccessPage /></ProtectedRoute>} />
             <Route path="admin/auditoria" element={<ProtectedRoute menu="auditoria"><AuditLogsPage /></ProtectedRoute>} />

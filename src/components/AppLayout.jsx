@@ -11,6 +11,7 @@ import {
   Menu,
   Package,
   Receipt,
+  Scale,
   ShieldCheck,
   Truck,
   X,
@@ -30,6 +31,7 @@ const navItems = [
   { to: '/documentos', label: 'Documentos', icon: FileArchive, menu: 'documentos' },
   { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3, menu: 'financeiro' },
   { to: '/backup', label: 'Backup', icon: Database, menu: 'backup' },
+  { to: '/balancas', label: 'Balanças', icon: Scale, menu: 'balancas' },
   { to: '/admin/acessos', label: 'Usuários e permissões', icon: ShieldCheck, menu: 'usuarios' },
   { to: '/admin/auditoria', label: 'Auditoria', icon: History, menu: 'auditoria' },
 ];
