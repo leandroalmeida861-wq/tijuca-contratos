@@ -9,6 +9,7 @@ export const MENU_DEFINITIONS = [
   { key: 'documentos', label: 'Documentos', path: '/documentos' },
   { key: 'financeiro', label: 'Rel. Financeiro', path: '/rel-financeiro' },
   { key: 'backup', label: 'Backup', path: '/backup' },
+  { key: 'balancas', label: 'Balanças', path: '/balancas' },
   { key: 'usuarios', label: 'Usuários e permissões', path: '/admin/acessos' },
   { key: 'auditoria', label: 'Auditoria', path: '/admin/auditoria' },
 ];
