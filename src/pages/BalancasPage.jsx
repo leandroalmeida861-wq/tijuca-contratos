@@ -41,11 +41,10 @@ const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'recebimentos', label: 'Recebimentos' },
   { key: 'laboratorio', label: 'Aprovação Laboratório' },
-  { key: 'cadastros', label: 'Cadastros' },
   { key: 'relatorios', label: 'Relatórios' },
 ];
 
-const tabKeys = new Set(tabs.map((tab) => tab.key));
+const tabKeys = new Set([...tabs.map((tab) => tab.key), 'cadastros']);
 
 const defaultFilters = {
   dataInicial: '',
