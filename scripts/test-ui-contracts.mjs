@@ -41,8 +41,14 @@ async function main() {
   const requestApi = await fetch(`${SITE_URL}/api/solicitar-acesso`, { method: 'HEAD' });
   assert('API publicada de solicitacao existe e aceita POST', requestApi.status === 405 && requestApi.headers.get('allow')?.includes('POST'), `status ${requestApi.status}`);
 
-  const approveApi = await fetch(`${SITE_URL}/api/aprovar-acesso?token=teste`, { method: 'HEAD' });
-  assert('API publicada de aprovacao existe e aceita GET', approveApi.status === 405 && approveApi.headers.get('allow')?.includes('GET'), `status ${approveApi.status}`);
+  const approveApi = await fetch(`${SITE_URL}/api/aprovar-acesso?token=teste`, { method: 'GET', redirect: 'manual' });
+  assert(
+    'API legada de aprovacao nao aprova por token publico',
+    approveApi.status >= 300
+      && approveApi.status < 400
+      && (approveApi.headers.get('location') || '').includes('/admin/acessos'),
+    `status ${approveApi.status}`,
+  );
 
   console.log('\nBATERIA DE ROTAS E INTERFACE');
   for (const result of results) {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 const results = [];
 const sql = readFileSync('supabase/rbac-tres-perfis.sql', 'utf8');
+const companyIsolationSql = readFileSync('supabase/isolamento-empresa-rls.sql', 'utf8');
 const auth = readFileSync('src/contexts/AuthContext.jsx', 'utf8');
 const routes = readFileSync('src/main.jsx', 'utf8');
 const layout = readFileSync('src/components/AppLayout.jsx', 'utf8');
@@ -29,6 +30,9 @@ assert('Admin gerencia pedidos pendentes', admin.includes('/api/admin/solicitaco
 assert('Exclusao de usuario usa API backend segura', deleteUserApi.includes('auth.admin.deleteUser') && deleteUserApi.includes("actorProfile.perfil !== 'admin'"));
 assert('Admin principal nao pode ser excluido', deleteUserApi.includes('targetEmail === ADMIN_EMAIL') && admin.includes('row.email === ADMIN_EMAIL'));
 assert('Tela possui acao de excluir usuario', admin.includes('Excluir usuário') && admin.includes('/api/admin/excluir-usuario'));
+assert('Isolamento por empresa adiciona empresa_id nas tabelas sensiveis', companyIsolationSql.includes('public.empresas') && companyIsolationSql.includes('add column if not exists empresa_id'));
+assert('RLS por empresa combina permissao e mesma empresa', companyIsolationSql.includes('agroflow_mesma_empresa(empresa_id)') && companyIsolationSql.includes('agroflow_tem_permissao'));
+assert('Endpoint legado de aprovacao por token fica neutralizado', readFileSync('api/aprovar-acesso.js', 'utf8').includes('aprovacao_por_token_desativada'));
 
 console.log('\nTESTES RBAC AGROFLOW');
 for (const result of results) console.log(`${result.ok ? 'OK' : 'FALHOU'} - ${result.name}`);
