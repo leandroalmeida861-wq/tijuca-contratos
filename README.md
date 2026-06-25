@@ -76,24 +76,21 @@ Acesse o endereco exibido pelo Vite, normalmente `http://localhost:5173`.
 
 1. O novo usuario abre `/login`.
 2. Clica em `Solicitar`.
-3. Informa nome, e-mail, telefone e observacao.
+3. Informa nome, e-mail, telefone, observacao, senha e confirmacao de senha.
 4. O sistema grava o pedido em `solicitacoes_acesso`.
-5. O administrador recebe um link neste formato:
+5. O administrador entra em `Usuários e permissões` e analisa os pedidos pendentes.
+6. A aprovacao e feita pela API segura `/api/admin/solicitacoes`, sempre com sessao de admin ativa.
+7. A senha fica criptografada temporariamente no banco e e apagada assim que o pedido e aprovado ou rejeitado.
+8. O usuario aprovado entra em `https://agroflow-sistema.vercel.app/login` usando o e-mail e a senha informados no pedido.
+9. O login consulta `profiles` e `usuarios_autorizados`; usuarios sem perfil ativo sao bloqueados.
 
-```text
-https://agroflow-sistema.vercel.app/api/aprovar-acesso?token=TOKEN
-```
-
-6. O link tem somente token. Nunca envie senha, e-mail, nome ou `service_role` por query string.
-7. A funcao `/api/aprovar-acesso` usa `SUPABASE_SERVICE_ROLE_KEY` apenas no backend, aprova o pedido, cria/atualiza `usuarios_autorizados` com perfil `operador` e envia convite do Supabase.
-8. O usuario recebe o convite, cria a senha e entra em `https://agroflow-sistema.vercel.app/login`.
-9. O login consulta `usuarios_autorizados`; usuarios sem `status = ativo` sao bloqueados.
+> O endpoint legado `/api/aprovar-acesso?token=...` foi mantido apenas para compatibilidade de rota e redireciona para o painel seguro. Ele nao aprova usuarios por token publico.
 
 ## Estrutura
 
 ```text
 api/
-  aprovar-acesso.js
+  aprovar-acesso.js       # legado: redireciona para aprovacao segura
   solicitar-acesso.js
   approve-access.js      # compatibilidade
   request-access.js      # compatibilidade
@@ -110,10 +107,10 @@ supabase/
 
 1. Solicite acesso com um e-mail novo pela tela `/login`.
 2. Confirme no Supabase que a linha entrou em `solicitacoes_acesso` com `status = pendente`.
-3. Abra o link recebido pelo administrador.
-4. Confirme que o navegador redirecionou para `/admin/solicitacoes?sucesso=usuario_aprovado`.
-5. Confirme em `usuarios_autorizados` que o e-mail ficou com `perfil = operador` e `status = ativo`.
-6. Confirme em `Authentication > Users` que o usuario foi convidado.
-7. Abra o convite no e-mail do usuario, crie a senha e entre no sistema.
-8. Confirme que nao aparece erro de e-mail nao confirmado.
-9. Confirme que usuario `operador` consegue cadastrar/editar dados operacionais e nao acessa funcoes restritas de admin.
+3. Entre no app como Admin e abra `Usuários e permissões`.
+4. Aprove o pedido escolhendo o perfil correto.
+5. Confirme em `usuarios_autorizados` e `profiles` que o e-mail ficou ativo.
+6. Entre com o usuario aprovado usando o e-mail e a senha do pedido.
+7. Confirme que nao aparece erro de e-mail nao confirmado.
+8. Confirme que usuario `operador` consegue cadastrar/editar dados operacionais e nao acessa funcoes restritas de admin.
+9. Tente chamar `/api/aprovar-acesso?token=qualquer-coisa` e confirme que ela apenas redireciona para o painel seguro.
