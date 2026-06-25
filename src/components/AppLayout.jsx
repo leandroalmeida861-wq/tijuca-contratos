@@ -1,11 +1,13 @@
 import {
   BarChart3,
   Building2,
+  Car,
   ChevronDown,
   ClipboardList,
   Database,
   FileArchive,
   Factory,
+  FlaskConical,
   Grid2X2,
   History,
   LogOut,
@@ -15,6 +17,7 @@ import {
   Scale,
   ShieldCheck,
   Truck,
+  UserRound,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -30,6 +33,10 @@ const navItems = [
       { to: '/fornecedores', label: 'Fornecedores', icon: Building2, menu: 'fornecedores' },
       { to: '/fabricas', label: 'Fábricas', icon: Factory, menu: 'fabricas' },
       { to: '/produtos', label: 'Produtos', icon: Package, menu: 'produtos' },
+      { to: '/balancas?tab=cadastros&cadastro=veiculos', label: 'Ve\u00edculos', icon: Car, menu: 'balancas' },
+      { to: '/balancas?tab=cadastros&cadastro=motoristas', label: 'Motoristas', icon: UserRound, menu: 'balancas' },
+      { to: '/balancas?tab=cadastros&cadastro=transportadoras', label: 'Transportadoras', icon: Truck, menu: 'balancas' },
+      { to: '/balancas?tab=cadastros&cadastro=laboratorios', label: 'Laborat\u00f3rios', icon: FlaskConical, menu: 'balancas' },
     ],
   },
   { to: '/contratos', label: 'Contratos', icon: ClipboardList, menu: 'contratos' },
@@ -48,15 +55,15 @@ export default function AppLayout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [cadastrosOpen, setCadastrosOpen] = useState(() =>
-    ['/fornecedores', '/fabricas', '/produtos'].includes(location.pathname)
+    isCadastroPath(location.pathname, location.search)
   );
 
   useEffect(() => {
     setMenuOpen(false);
-    if (['/fornecedores', '/fabricas', '/produtos'].includes(location.pathname)) {
+    if (isCadastroPath(location.pathname, location.search)) {
       setCadastrosOpen(true);
     }
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : '';
@@ -132,7 +139,8 @@ export default function AppLayout() {
               const visibleChildren = item.children.filter((child) => can(child.menu, 'visualizar'));
               if (!visibleChildren.length) return null;
               const GroupIcon = item.icon;
-              const isGroupActive = visibleChildren.some((child) => location.pathname === child.to);
+              const currentPath = `${location.pathname}${location.search}`;
+              const isGroupActive = visibleChildren.some((child) => isSameNavTarget(currentPath, child.to));
 
               return (
                 <div key={item.label} className="grid gap-1">
@@ -161,7 +169,7 @@ export default function AppLayout() {
                           className={({ isActive }) =>
                             [
                               'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition',
-                              isActive ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                              (!child.to.includes('?') && isActive) || isSameNavTarget(currentPath, child.to) ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
                             ].join(' ')
                           }
                         >
@@ -214,4 +222,14 @@ export default function AppLayout() {
       </main>
     </div>
   );
+}
+
+function isCadastroPath(pathname, search = '') {
+  if (['/fornecedores', '/fabricas', '/produtos'].includes(pathname)) return true;
+  return pathname === '/balancas' && new URLSearchParams(search).get('tab') === 'cadastros';
+}
+
+function isSameNavTarget(currentPath, target) {
+  if (target.includes('?')) return currentPath === target;
+  return currentPath.split('?')[0] === target;
 }

@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   approveRecebimento,
   cancelRecebimento,
@@ -44,6 +44,8 @@ const tabs = [
   { key: 'cadastros', label: 'Cadastros' },
   { key: 'relatorios', label: 'Relatórios' },
 ];
+
+const tabKeys = new Set(tabs.map((tab) => tab.key));
 
 const defaultFilters = {
   dataInicial: '',
@@ -81,7 +83,10 @@ const defaultRecebimento = {
 
 export default function BalancasPage() {
   const { can } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const cadastroParam = searchParams.get('cadastro');
+  const [activeTab, setActiveTab] = useState(tabKeys.has(tabParam) ? tabParam : 'dashboard');
   const [rows, setRows] = useState([]);
   const [options, setOptions] = useState(emptyOptions());
   const [filters, setFilters] = useState(defaultFilters);
@@ -109,6 +114,21 @@ export default function BalancasPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (tabKeys.has(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  function selectTab(tabKey) {
+    setActiveTab(tabKey);
+    setSearchParams(tabKey === 'dashboard' ? {} : { tab: tabKey });
+  }
+
+  function selectCadastro(cadastroKey) {
+    setSearchParams({ tab: 'cadastros', cadastro: cadastroKey });
+  }
 
   function applyFilters(event) {
     event?.preventDefault();
@@ -138,7 +158,7 @@ export default function BalancasPage() {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => selectTab(tab.key)}
             className={[
               'h-10 shrink-0 rounded-md px-3 text-sm font-bold transition',
               activeTab === tab.key ? 'bg-tijuca-600 text-white' : 'text-slate-600 hover:bg-slate-100',
@@ -155,7 +175,7 @@ export default function BalancasPage() {
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
       {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={can} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={can} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'cadastros' && <CadastrosTab can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
+      {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
       {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={can} />}
     </div>
   );
@@ -518,20 +538,32 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   );
 }
 
-function CadastrosTab({ can, setError, setMessage, reloadMain }) {
-  const [active, setActive] = useState('balancas');
+function CadastrosTab({ activeCadastro, onCadastroChange, can, setError, setMessage, reloadMain }) {
+  const [active, setActive] = useState(lookupTables[activeCadastro] ? activeCadastro : 'balancas');
   const config = lookupTables[active];
+
+  useEffect(() => {
+    if (lookupTables[activeCadastro]) {
+      setActive(activeCadastro);
+    }
+  }, [activeCadastro]);
 
   return (
     <div className="grid gap-4">
       <div className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-panel">
         {Object.entries(lookupTables).map(([key, item]) => (
-          <button key={key} type="button" onClick={() => setActive(key)} className={['h-10 shrink-0 rounded-md px-3 text-sm font-bold', active === key ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'].join(' ')}>
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              setActive(key);
+              onCadastroChange(key);
+            }}
+            className={['h-10 shrink-0 rounded-md px-3 text-sm font-bold', active === key ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'].join(' ')}
+          >
             {item.label}
           </button>
         ))}
-        <Link to="/fornecedores" className="inline-flex h-10 shrink-0 items-center rounded-md px-3 text-sm font-bold text-slate-600 hover:bg-slate-100">Fornecedores</Link>
-        <Link to="/produtos" className="inline-flex h-10 shrink-0 items-center rounded-md px-3 text-sm font-bold text-slate-600 hover:bg-slate-100">Produtos</Link>
       </div>
       <LookupCrud config={config} can={can} setError={setError} setMessage={setMessage} reloadMain={reloadMain} />
     </div>
