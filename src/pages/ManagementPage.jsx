@@ -123,6 +123,12 @@ function GenericPage({ config }) {
         ? cleanPayload({ ...form, tipo: 'PDF', url: uploadedUrl || form.url }, ['nome', 'tipo', 'url', 'observacoes'])
         : cleanPayload(form, config.fields.map((field) => field.name));
 
+      const duplicate = findDuplicateCadastro(config.table, payload, rows, editingId);
+      if (duplicate) {
+        setError(duplicate.message);
+        return;
+      }
+
       if (editingId) await updateRow(config.table, editingId, payload);
       else await createRow(config.table, payload);
 
@@ -885,6 +891,32 @@ function getValue(row, path) {
 function cleanPayload(payload, allowedFields) {
   const entries = allowedFields ? allowedFields.map((field) => [field, payload[field]]) : Object.entries(payload);
   return Object.fromEntries(entries.map(([key, value]) => [key, value === '' ? null : value]));
+}
+
+function findDuplicateCadastro(table, payload, rows, editingId) {
+  if (!['fornecedores', 'produtos'].includes(table)) return null;
+
+  const currentName = normalizeKey(payload.nome);
+  const currentCnpj = onlyDigits(payload.cnpj);
+  const duplicate = rows.find((row) => {
+    if (row.id === editingId) return false;
+    if (table === 'fornecedores' && currentCnpj && onlyDigits(row.cnpj) === currentCnpj) return true;
+    return currentName && normalizeKey(row.nome) === currentName;
+  });
+
+  if (!duplicate) return null;
+
+  if (table === 'fornecedores' && currentCnpj && onlyDigits(duplicate.cnpj) === currentCnpj) {
+    return {
+      message: `Este fornecedor ja esta cadastrado com o CNPJ ${formatCnpj(currentCnpj)}. Como corrigir: use o cadastro existente ou edite o fornecedor ja salvo.`,
+    };
+  }
+
+  return {
+    message: table === 'fornecedores'
+      ? 'Este fornecedor ja esta cadastrado com este nome. Como corrigir: use o cadastro existente ou altere o nome para diferenciar corretamente.'
+      : 'Este produto ja esta cadastrado com este nome. Como corrigir: use o cadastro existente ou altere o nome para diferenciar corretamente.',
+  };
 }
 
 function label(value) {
