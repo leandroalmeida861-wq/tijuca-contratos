@@ -154,7 +154,7 @@ export function auditAction(action, table = null, recordId = null, newData = nul
 
 async function importSimpleTable(table, rows, context, userId) {
   const allowed = {
-    fornecedores: ['id', 'user_id', 'nome', 'cnpj', 'telefone', 'email', 'cidade', 'uf', 'created_at'],
+    fornecedores: ['id', 'user_id', 'nome', 'cnpj', 'inscricao_estadual', 'telefone', 'email', 'cidade', 'uf', 'created_at'],
     fabricas: ['id', 'user_id', 'nome', 'cnpj', 'cidade', 'uf', 'responsavel', 'created_at'],
     produtos: ['id', 'user_id', 'nome', 'unidade', 'descricao', 'created_at'],
     documentos: ['id', 'user_id', 'nome', 'tipo', 'url', 'observacoes', 'created_at'],

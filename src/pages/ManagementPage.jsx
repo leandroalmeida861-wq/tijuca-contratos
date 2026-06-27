@@ -13,13 +13,14 @@ const pageConfig = {
     search: ['nome', 'cnpj'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
-      { name: 'cnpj', label: 'CNPJ' },
+      { name: 'cnpj', label: 'CNPJ / CPF', mask: 'cpfCnpj' },
+      { name: 'inscricao_estadual', label: 'Inscri\u00e7\u00e3o estadual' },
       { name: 'telefone', label: 'Telefone' },
       { name: 'email', label: 'E-mail', type: 'email' },
       { name: 'cidade', label: 'Cidade' },
       { name: 'uf', label: 'UF' },
     ],
-    columns: ['nome', 'cnpj', 'telefone', 'email', 'cidade', 'uf'],
+    columns: ['nome', 'cnpj', 'inscricao_estadual', 'telefone', 'email', 'cidade', 'uf'],
   },
   fabricas: {
     title: 'Fábricas',
@@ -774,7 +775,7 @@ function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, select
               required={field.required}
             />
           )
-          : <Input key={field.name} label={field.label} type={field.type} step={field.step} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} />
+          : <Input key={field.name} label={field.label} type={field.type} step={field.step} mask={field.mask} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} />
       ))}
       <div className="flex items-end gap-2 xl:col-span-3">
         <button className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700">
@@ -819,11 +820,16 @@ function RowActions({ onEdit, onDelete }) {
   );
 }
 
-function Input({ label, value, onChange, type = 'text', required, step }) {
+function Input({ label, value, onChange, type = 'text', required, step, mask }) {
+  function handleChange(event) {
+    const rawValue = event.target.value;
+    onChange(mask === 'cpfCnpj' ? formatCpfCnpjInput(rawValue) : rawValue);
+  }
+
   return (
     <label className="grid gap-2 text-sm font-semibold text-slate-700">
       {label}
-      <input className="h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" value={value || ''} onChange={(event) => onChange(event.target.value)} type={type} required={required} step={step} />
+      <input className="h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" value={value || ''} onChange={handleChange} type={type} required={required} step={step} inputMode={mask === 'cpfCnpj' ? 'numeric' : undefined} maxLength={mask === 'cpfCnpj' ? 18 : undefined} />
     </label>
   );
 }
@@ -1100,6 +1106,22 @@ function formatCnpj(value) {
   const digits = onlyDigits(value);
   if (digits.length !== 14) return value || '-';
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function formatCpfCnpjInput(value) {
+  const digits = onlyDigits(value).slice(0, 14);
+  if (digits.length <= 11) {
+    return digits
+      .replace(/^(\d{3})(\d)/, '$1.$2')
+      .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+  }
+
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
 }
 
 function findSupplierForXml(parsed, suppliers) {

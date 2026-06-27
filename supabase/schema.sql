@@ -16,6 +16,7 @@ create table if not exists public.fornecedores (
   user_id uuid not null default auth.uid(),
   nome text not null,
   cnpj text,
+  inscricao_estadual text,
   telefone text,
   email text,
   cidade text,
