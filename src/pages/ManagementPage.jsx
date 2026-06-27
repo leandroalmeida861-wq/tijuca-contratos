@@ -12,8 +12,8 @@ const pageConfig = {
     table: 'fornecedores',
     search: ['nome', 'cnpj'],
     fields: [
-      { name: 'nome', label: 'Nome', required: true },
       { name: 'cnpj', label: 'CNPJ / CPF', mask: 'cpfCnpj' },
+      { name: 'nome', label: 'Nome', required: true },
       { name: 'inscricao_estadual', label: 'Inscri\u00e7\u00e3o estadual' },
       { name: 'telefone', label: 'Telefone' },
       { name: 'email', label: 'E-mail', type: 'email' },
@@ -89,6 +89,7 @@ function GenericPage({ config }) {
   const [editingId, setEditingId] = useState(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
 
   async function load() {
     if (config.table === 'fretes') {
@@ -225,6 +226,41 @@ function GenericPage({ config }) {
     }));
   }
 
+  async function handleFieldBlur(fieldName, value) {
+    if (config.table !== 'fornecedores' || fieldName !== 'cnpj') return;
+
+    const digits = onlyDigits(value);
+    if (digits.length !== 14) return;
+
+    setError('');
+    setLookupLoading(true);
+    try {
+      const response = await fetch(`/api/consultar-cnpj?cnpj=${digits}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nao foi possivel consultar este CNPJ.');
+      }
+
+      setForm((current) => ({
+        ...current,
+        cnpj: formatCpfCnpjInput(data.cnpj || digits),
+        nome: data.nome || current.nome,
+        telefone: data.telefone || current.telefone,
+        email: data.email || current.email,
+        cidade: data.cidade || current.cidade,
+        uf: data.uf || current.uf,
+        inscricao_estadual: data.inscricao_estadual || current.inscricao_estadual,
+      }));
+    } catch (err) {
+      setError(`${err.message || 'Nao foi possivel consultar este CNPJ.'} Como corrigir: confira o numero informado ou preencha os dados manualmente.`);
+    } finally {
+      setLookupLoading(false);
+    }
+  }
+
   async function openDocument(url) {
     setError('');
     try {
@@ -261,7 +297,7 @@ function GenericPage({ config }) {
           onFileChange={importDocumentPdf}
         />
       ) : (
-        <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} />
+        <EntityForm fields={config.fields} form={form} setForm={setForm} editing={Boolean(editingId)} onCancel={() => { setEditingId(null); setForm(defaultForm(config.fields)); }} onSubmit={submit} selectOptions={selectOptions} onFieldBlur={handleFieldBlur} lookupLoading={lookupLoading} />
       ))}
       <DataTable
         rows={filtered}
@@ -760,7 +796,7 @@ function DocumentForm({ form, setForm, editing, onCancel, onSubmit, onFileChange
   );
 }
 
-function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, selectOptions = {} }) {
+function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, selectOptions = {}, onFieldBlur, lookupLoading }) {
   return (
     <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-3">
       {fields.map((field) => (
@@ -775,10 +811,10 @@ function EntityForm({ fields, form, setForm, editing, onCancel, onSubmit, select
               required={field.required}
             />
           )
-          : <Input key={field.name} label={field.label} type={field.type} step={field.step} mask={field.mask} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} />
+          : <Input key={field.name} label={field.label} type={field.type} step={field.step} mask={field.mask} value={form[field.name] || ''} required={field.required} onChange={(value) => setForm({ ...form, [field.name]: value })} onBlur={() => onFieldBlur?.(field.name, form[field.name])} />
       ))}
       <div className="flex items-end gap-2 xl:col-span-3">
-        <button className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700">
+        <button disabled={lookupLoading} className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:opacity-60">
           {editing ? <Save size={17} /> : <Plus size={17} />} {editing ? 'Salvar alterações' : 'Cadastrar'}
         </button>
         {editing && <CancelButton onClick={onCancel} />}
@@ -820,7 +856,7 @@ function RowActions({ onEdit, onDelete }) {
   );
 }
 
-function Input({ label, value, onChange, type = 'text', required, step, mask }) {
+function Input({ label, value, onChange, type = 'text', required, step, mask, onBlur }) {
   function handleChange(event) {
     const rawValue = event.target.value;
     onChange(mask === 'cpfCnpj' ? formatCpfCnpjInput(rawValue) : rawValue);
@@ -829,7 +865,7 @@ function Input({ label, value, onChange, type = 'text', required, step, mask }) 
   return (
     <label className="grid gap-2 text-sm font-semibold text-slate-700">
       {label}
-      <input className="h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" value={value || ''} onChange={handleChange} type={type} required={required} step={step} inputMode={mask === 'cpfCnpj' ? 'numeric' : undefined} maxLength={mask === 'cpfCnpj' ? 18 : undefined} />
+      <input className="h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" value={value || ''} onChange={handleChange} onBlur={onBlur} type={type} required={required} step={step} inputMode={mask === 'cpfCnpj' ? 'numeric' : undefined} maxLength={mask === 'cpfCnpj' ? 18 : undefined} />
     </label>
   );
 }
