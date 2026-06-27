@@ -2,6 +2,9 @@
 -- Motivo: no DELETE, o log nao pode referenciar o recebimento apagado.
 -- Execute no Supabase SQL Editor. Nao apaga dados existentes.
 
+alter table public.recebimento_logs
+  alter column recebimento_id drop not null;
+
 create or replace function public.recebimento_audit_trigger()
 returns trigger
 language plpgsql
