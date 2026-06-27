@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   Check,
   Download,
   Edit,
@@ -11,6 +10,7 @@ import {
   Search,
   Trash2,
   Truck,
+  Users,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -185,7 +185,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
     return {
       cargas: rows.length,
       kgRecebidos: rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
-      divergencias: rows.filter((row) => row.divergente).length,
+      fornecedores: new Set(rows.map((row) => row.fornecedor_id || row.fornecedor?.id).filter(Boolean)).size,
       pendentes: rows.filter((row) => row.status === 'pendente').length,
       aprovadas: rows.filter((row) => row.status === 'aprovada').length,
       reprovadas: rows.filter((row) => row.status === 'reprovada').length,
@@ -208,7 +208,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Metric title="Cargas no periodo" value={metrics.cargas} icon={Truck} />
             <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
-            <Metric title="Divergencias no periodo" value={metrics.divergencias} icon={AlertTriangle} danger={metrics.divergencias > 0} />
+            <Metric title="Fornecedores no periodo" value={metrics.fornecedores} icon={Users} />
             <Metric title="Pendentes laboratório" value={metrics.pendentes} icon={FlaskConical} />
           </section>
 
