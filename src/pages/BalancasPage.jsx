@@ -579,7 +579,14 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
 
   async function submit(event) {
     event.preventDefault();
+    setError('');
     try {
+      const duplicate = findDuplicateLookup(config, form, rows, editing?.id);
+      if (duplicate) {
+        setError(duplicate);
+        return;
+      }
+
       if (editing) await updateLookup(config.table, editing.id, form);
       else await createLookup(config.table, form);
       setForm(defaultLookupForm(config.fields));
@@ -884,6 +891,51 @@ function nullableNumber(value) {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function findDuplicateLookup(config, form, rows, editingId) {
+  const duplicate = rows.find((row) => {
+    if (row.id === editingId) return false;
+    if (config.table === 'recebimento_veiculos') return normalizePlate(row.placa) === normalizePlate(form.placa);
+    if (config.table === 'recebimento_motoristas') {
+      const currentCpf = onlyDigits(form.cpf);
+      return (currentCpf && onlyDigits(row.cpf) === currentCpf) || normalizeName(row.nome) === normalizeName(form.nome);
+    }
+    if (config.table === 'recebimento_transportadoras') {
+      const currentCnpj = onlyDigits(form.cnpj);
+      return (currentCnpj && onlyDigits(row.cnpj) === currentCnpj) || normalizeName(row.nome) === normalizeName(form.nome);
+    }
+    if (config.table === 'recebimento_laboratorios') return normalizeName(row.nome) === normalizeName(form.nome);
+    return false;
+  });
+
+  if (!duplicate) return '';
+
+  const label = config.table === 'recebimento_veiculos'
+    ? 'placa'
+    : config.table === 'recebimento_transportadoras' && onlyDigits(form.cnpj) && onlyDigits(duplicate.cnpj) === onlyDigits(form.cnpj)
+      ? 'CNPJ'
+      : config.table === 'recebimento_motoristas' && onlyDigits(form.cpf) && onlyDigits(duplicate.cpf) === onlyDigits(form.cpf)
+        ? 'CPF'
+        : 'nome';
+
+  return `${config.label} ja possui cadastro com este ${label}. Como corrigir: use o cadastro existente ou edite o registro ja salvo.`;
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '')
+    .toLowerCase();
+}
+
+function normalizePlate(value) {
+  return String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '');
 }
 
 function filterRecebimentos(rows, query) {

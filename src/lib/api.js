@@ -337,7 +337,7 @@ function createImportContext(data) {
 function refreshImportContext(context, table, rows) {
   if (table === 'fornecedores') context.suppliersByName = mapBy(rows, (row) => row.nome);
   if (table === 'fabricas') context.factoriesByName = mapBy(rows, (row) => row.nome);
-  if (table === 'produtos') context.productsByName = mapBy(rows, (row) => row.nome);
+  if (table === 'produtos') context.productsByName = mapBy(rows, (row) => row.nome, normalizeProductKey);
   if (table === 'contratos') context.contractsByNumber = mapBy(rows, (row) => row.numero_contrato);
   if (table === 'notas_fiscais') {
     context.notesByKey = new Map(rows.map((row) => [`${normalizeKey(row.numero_nf)}|${row.fornecedor_id || ''}|${row.contrato_id || ''}`, row.id]));
@@ -350,7 +350,7 @@ function refreshImportContext(context, table, rows) {
 function findSimpleExistingId(table, payload, context) {
   if (table === 'fornecedores') return context.suppliersByName?.get(normalizeKey(payload.nome));
   if (table === 'fabricas') return context.factoriesByName?.get(normalizeKey(payload.nome));
-  if (table === 'produtos') return context.productsByName?.get(normalizeKey(payload.nome));
+  if (table === 'produtos') return context.productsByName?.get(normalizeProductKey(payload.nome));
   return null;
 }
 
@@ -365,8 +365,8 @@ function pickPayload(row, allowed, userId) {
   );
 }
 
-function mapBy(rows, getKey) {
-  return new Map((rows || []).filter((row) => getKey(row)).map((row) => [normalizeKey(getKey(row)), row.id]));
+function mapBy(rows, getKey, normalize = normalizeKey) {
+  return new Map((rows || []).filter((row) => getKey(row)).map((row) => [normalize(getKey(row)), row.id]));
 }
 
 function readAny(row, keys) {
@@ -432,6 +432,17 @@ function toDate(value) {
 
 function normalizeKey(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeProductKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((word) => word && !['em', 'grao', 'graos'].includes(word))
+    .join('');
 }
 
 export async function deleteNote(note) {

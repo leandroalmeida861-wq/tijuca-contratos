@@ -939,10 +939,12 @@ function findDuplicateCadastro(table, payload, rows, editingId) {
   if (!['fornecedores', 'produtos'].includes(table)) return null;
 
   const currentName = normalizeKey(payload.nome);
+  const currentProductName = normalizeProductKey(payload.nome);
   const currentCnpj = onlyDigits(payload.cnpj);
   const duplicate = rows.find((row) => {
     if (row.id === editingId) return false;
     if (table === 'fornecedores' && currentCnpj && onlyDigits(row.cnpj) === currentCnpj) return true;
+    if (table === 'produtos') return currentProductName && normalizeProductKey(row.nome) === currentProductName;
     return currentName && normalizeKey(row.nome) === currentName;
   });
 
@@ -1178,6 +1180,17 @@ function normalizeKey(value) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w]+/g, '')
     .toLowerCase();
+}
+
+function normalizeProductKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((word) => word && !['em', 'grao', 'graos'].includes(word))
+    .join('');
 }
 
 function decimalPlaces(value) {
