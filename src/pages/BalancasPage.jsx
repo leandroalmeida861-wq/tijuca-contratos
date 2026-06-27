@@ -321,43 +321,33 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
     try {
       const parsed = parseNfeRecebimento(await file.text());
       const mainItem = parsed.itens[0] || {};
-      const [supplier, carrier, vehicle, product] = await Promise.all([
-        parsed.emitente.nome
-          ? findOrCreateLookup('fornecedores', 'nome', parsed.emitente.nome, { nome: parsed.emitente.nome, cnpj: parsed.emitente.documento })
-          : null,
+      const [carrier, vehicle] = await Promise.all([
         parsed.transportadora.nome
           ? findOrCreateLookup('recebimento_transportadoras', 'nome', parsed.transportadora.nome, { nome: parsed.transportadora.nome, cnpj: parsed.transportadora.cnpj })
           : null,
         parsed.placaVeiculo
           ? findOrCreateLookup('recebimento_veiculos', 'placa', parsed.placaVeiculo, { placa: parsed.placaVeiculo })
           : null,
-        mainItem.nome
-          ? findOrCreateLookup('produtos', 'nome', mainItem.nome, { nome: mainItem.nome, unidade: mainItem.unidade || 'KG' })
-          : null,
       ]);
 
       setLocalOptions((current) => ({
         ...current,
-        fornecedores: mergeOption(current.fornecedores, supplier),
         transportadoras: mergeOption(current.transportadoras, carrier),
         veiculos: mergeOption(current.veiculos, vehicle),
-        produtos: mergeOption(current.produtos, product),
       }));
 
       setForm((current) => ({
         ...current,
         nf_numero: parsed.numero || current.nf_numero,
         nf_chave_acesso: parsed.chaveAcesso || current.nf_chave_acesso,
-        data: parsed.dataEmissao || current.data,
-        fornecedor_id: supplier?.id || current.fornecedor_id,
+        data: current.data || todayIso(),
         transportadora_id: carrier?.id || current.transportadora_id,
         veiculo_id: vehicle?.id || current.veiculo_id,
-        produto_id: product?.id || current.produto_id,
         peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
         valor_unitario: mainItem.valorUnitario ?? current.valor_unitario,
         valor_total: parsed.valorTotalNota ?? current.valor_total,
       }));
-      setXmlInfo(`XML importado: NF ${parsed.numero || '-'} | Fornecedor ${parsed.emitente.nome || '-'} | Produto ${mainItem.nome || '-'}`);
+      setXmlInfo(`XML importado: NF ${parsed.numero || '-'} | Fornecedor e produto devem ser selecionados manualmente.`);
     } catch (err) {
       setError(toUserError(err));
     }
@@ -512,7 +502,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
                 <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
                 <td className="px-3 py-3">{row.peso_nf ? kg(row.peso_nf) : '-'}</td>
                 <td className="px-3 py-3">
-                  <span className={row.divergente ? 'font-extrabold text-rose-700' : 'font-semibold text-slate-700'}>{kg(row.diferenca_kg)}</span>
+                  <span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span>
                 </td>
                 <td className="px-3 py-3"><SmallInput value={edits[row.id]?.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => updateEdit(row.id, 'ticket_numero', value)} /></td>
                 <td className="px-3 py-3"><SmallInput type="number" value={edits[row.id]?.umidade ?? row.umidade ?? ''} onChange={(value) => updateEdit(row.id, 'umidade', value)} /></td>
@@ -713,7 +703,7 @@ function RecebimentosTable({ rows, loading, can, onEdit, onDelete }) {
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
               <td className="px-4 py-3">{row.peso_nf ? kg(row.peso_nf) : '-'}</td>
               <td className="px-4 py-3">
-                <span className={row.divergente ? 'font-extrabold text-rose-700' : 'font-semibold text-slate-700'}>{kg(row.diferenca_kg)}</span>
+                <span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span>
               </td>
               <td className="px-4 py-3"><StatusBadge row={row} /></td>
               <td className="px-4 py-3">
@@ -885,7 +875,11 @@ function mergeOption(rows, option) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function nullableNumber(value) {
@@ -931,6 +925,13 @@ function statusLabel(status) {
     reprovada: 'Reprovada',
     cancelada: 'Cancelada',
   }[status] || status || '-';
+}
+
+function differenceClass(value) {
+  const numeric = Number(value || 0);
+  if (numeric > 0) return 'font-extrabold text-blue-700';
+  if (numeric < 0) return 'font-extrabold text-rose-700';
+  return 'font-semibold text-slate-700';
 }
 
 function chartColor(index) {

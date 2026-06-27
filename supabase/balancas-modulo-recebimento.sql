@@ -172,7 +172,7 @@ begin
   insert into public.recebimento_logs (user_id, recebimento_id, acao, dados_anteriores, dados_novos)
   values (
     auth.uid(),
-    coalesce(new.id, old.id),
+    case when tg_op = 'DELETE' then null else new.id end,
     case tg_op when 'INSERT' then 'cadastrar' when 'UPDATE' then 'editar' else 'excluir' end,
     case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end,
     case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end
