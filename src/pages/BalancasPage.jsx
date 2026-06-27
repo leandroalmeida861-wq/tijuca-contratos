@@ -182,12 +182,10 @@ export default function BalancasPage() {
 
 function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {
   const metrics = useMemo(() => {
-    const today = todayIso();
-    const todayRows = rows.filter((row) => row.data === today);
     return {
-      cargas: todayRows.length,
-      kgRecebidos: todayRows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
-      divergencias: todayRows.filter((row) => row.divergente).length,
+      cargas: rows.length,
+      kgRecebidos: rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
+      divergencias: rows.filter((row) => row.divergente).length,
       pendentes: rows.filter((row) => row.status === 'pendente').length,
       aprovadas: rows.filter((row) => row.status === 'aprovada').length,
       reprovadas: rows.filter((row) => row.status === 'reprovada').length,
@@ -208,9 +206,9 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
       ) : (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Metric title="Cargas do dia" value={metrics.cargas} icon={Truck} />
-            <Metric title="KG recebidos hoje" value={kg(metrics.kgRecebidos)} icon={Truck} />
-            <Metric title="Divergências hoje" value={metrics.divergencias} icon={AlertTriangle} danger={metrics.divergencias > 0} />
+            <Metric title="Cargas no periodo" value={metrics.cargas} icon={Truck} />
+            <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
+            <Metric title="Divergencias no periodo" value={metrics.divergencias} icon={AlertTriangle} danger={metrics.divergencias > 0} />
             <Metric title="Pendentes laboratório" value={metrics.pendentes} icon={FlaskConical} />
           </section>
 
