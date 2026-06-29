@@ -208,6 +208,8 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
   const byStatus = groupCount(rows, (row) => statusLabel(row.status));
   const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
   const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
+  const supplierMoisture = useMemo(() => buildSupplierMoisture(rows), [rows]);
+  const bestSuppliers = useMemo(() => buildBestSuppliersRanking(rows), [rows]);
 
   return (
     <div className="grid gap-5">
@@ -241,6 +243,15 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
             </ChartCard>
             <ChartCard title="Ranking de Diferença em KG por Fornecedor">
               <SupplierDifferenceChart data={supplierDifferences} />
+            </ChartCard>
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <ChartCard title="Umidade Média por Fornecedor">
+              <SupplierMoistureChart data={supplierMoisture} />
+            </ChartCard>
+            <ChartCard title="Ranking de Melhores Fornecedores">
+              <BestSuppliersChart data={bestSuppliers} />
             </ChartCard>
           </section>
         </>
@@ -886,6 +897,55 @@ function SupplierDifferenceChart({ data }) {
   );
 }
 
+function SupplierMoistureChart({ data }) {
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem umidade registrada no período.</p>;
+
+  return (
+    <div className="h-80 min-w-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(value) => `${Number(value).toFixed(1)}%`} />
+          <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fontWeight: 700 }} />
+          <Tooltip content={<SupplierMoistureTooltip />} />
+          <Bar dataKey="umidadeMedia" radius={[0, 6, 6, 0]}>
+            {data.map((item, index) => (
+              <Cell key={item.name} fill={item.umidadeMedia > 14 ? '#d97706' : chartColor(index)} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function BestSuppliersChart({ data }) {
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados suficientes para gerar ranking.</p>;
+
+  return (
+    <div className="grid gap-3">
+      {data.map((item, index) => (
+        <div key={item.name} className="grid gap-1 rounded-lg bg-slate-50 p-3">
+          <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-700">
+            <span className="min-w-0 truncate">
+              {index + 1}. {item.name}
+            </span>
+            <span className="shrink-0 text-tijuca-700">{item.score.toFixed(0)} pts</span>
+          </div>
+          <div className="h-3 rounded-full bg-white">
+            <div className="h-full rounded-full bg-tijuca-600" style={{ width: `${Math.max(item.score, 6)}%` }} />
+          </div>
+          <div className="grid gap-1 text-[11px] font-semibold text-slate-500 sm:grid-cols-3">
+            <span>{kg(item.kgRecebido)}</span>
+            <span>{item.taxaAprovacao.toFixed(0)}% aprovação</span>
+            <span>{item.divergenciaPercentualAbs.toFixed(2)}% diverg.</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ProductPieTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
@@ -910,6 +970,19 @@ function SupplierDifferenceTooltip({ active, payload }) {
         Diferença: {kg(item.diferencaKg)}
       </p>
       <p className="font-semibold text-slate-600">Percentual: {item.percentualDiferenca.toFixed(2)}%</p>
+    </div>
+  );
+}
+
+function SupplierMoistureTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
+      <p className="font-extrabold text-slate-900">{item.name}</p>
+      <p className="mt-1 font-semibold text-slate-600">Umidade média: {item.umidadeMedia.toFixed(2)}%</p>
+      <p className="font-semibold text-slate-600">Registros com umidade: {item.registros}</p>
+      <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
     </div>
   );
 }
@@ -1130,6 +1203,81 @@ function buildSupplierDifferences(rows) {
   return Array.from(map.values())
     .filter((item) => item.kgNota || item.kgRecebido || item.diferencaKg)
     .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg))
+    .slice(0, 10);
+}
+
+function buildSupplierMoisture(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const umidade = Number(row.umidade);
+    if (!Number.isFinite(umidade) || umidade <= 0) return;
+
+    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const kgRecebido = Number(row.peso_liquido || 0);
+    const weight = kgRecebido > 0 ? kgRecebido : 1;
+    const current = map.get(name) || { name, weightedMoisture: 0, weight: 0, registros: 0, kgRecebido: 0 };
+    current.weightedMoisture += umidade * weight;
+    current.weight += weight;
+    current.registros += 1;
+    current.kgRecebido += kgRecebido;
+    map.set(name, current);
+  });
+
+  return Array.from(map.values())
+    .map((item) => ({
+      name: item.name,
+      umidadeMedia: item.weight ? item.weightedMoisture / item.weight : 0,
+      registros: item.registros,
+      kgRecebido: item.kgRecebido,
+    }))
+    .sort((a, b) => b.umidadeMedia - a.umidadeMedia)
+    .slice(0, 10);
+}
+
+function buildBestSuppliersRanking(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const kgRecebido = Number(row.peso_liquido || 0);
+    const kgNota = Number(row.peso_nf || 0);
+    const current = map.get(name) || {
+      name,
+      cargas: 0,
+      aprovadas: 0,
+      kgRecebido: 0,
+      kgNota: 0,
+      diferencaAbsKg: 0,
+    };
+
+    current.cargas += 1;
+    current.aprovadas += row.status === 'aprovada' ? 1 : 0;
+    current.kgRecebido += kgRecebido;
+    current.kgNota += kgNota;
+    current.diferencaAbsKg += Math.abs(kgRecebido - kgNota);
+    map.set(name, current);
+  });
+
+  const suppliers = Array.from(map.values()).filter((item) => item.cargas > 0);
+  const maxKg = Math.max(...suppliers.map((item) => item.kgRecebido), 1);
+
+  return suppliers
+    .map((item) => {
+      const taxaAprovacao = item.cargas ? (item.aprovadas / item.cargas) * 100 : 0;
+      const divergenciaPercentualAbs = item.kgNota ? (item.diferencaAbsKg / item.kgNota) * 100 : 0;
+      const qualidadeDivergencia = Math.max(0, 100 - Math.min(divergenciaPercentualAbs * 4, 100));
+      const volumeScore = Math.min((item.kgRecebido / maxKg) * 100, 100);
+      const score = (taxaAprovacao * 0.45) + (qualidadeDivergencia * 0.4) + (volumeScore * 0.15);
+
+      return {
+        ...item,
+        taxaAprovacao,
+        divergenciaPercentualAbs,
+        score,
+      };
+    })
+    .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 }
 
