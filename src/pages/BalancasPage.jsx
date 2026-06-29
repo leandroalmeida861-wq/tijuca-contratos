@@ -16,6 +16,18 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
   approveRecebimento,
   cancelRecebimento,
   createLookup,
@@ -194,6 +206,8 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
 
   const bySupplier = groupSum(rows, (row) => row.fornecedor?.nome || 'Sem fornecedor', 'peso_liquido').slice(0, 6);
   const byStatus = groupCount(rows, (row) => statusLabel(row.status));
+  const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
+  const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
 
   return (
     <div className="grid gap-5">
@@ -218,6 +232,15 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
             </ChartCard>
             <ChartCard title="Status dos recebimentos">
               <BarList data={byStatus} valueFormatter={(value) => `${value} carga(s)`} />
+            </ChartCard>
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <ChartCard title="Distribuição de Produtos por KG">
+              <ProductsPieChart data={productsDistribution} />
+            </ChartCard>
+            <ChartCard title="Ranking de Diferença em KG por Fornecedor">
+              <SupplierDifferenceChart data={supplierDifferences} />
             </ChartCard>
           </section>
         </>
@@ -793,6 +816,104 @@ function BarList({ data, valueFormatter }) {
   );
 }
 
+function ProductsPieChart({ data }) {
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
+      <div className="h-72 min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="kgTotal"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={54}
+              outerRadius={96}
+              paddingAngle={2}
+            >
+              {data.map((item, index) => (
+                <Cell key={item.name} fill={item.color || chartColor(index)} />
+              ))}
+            </Pie>
+            <Tooltip content={<ProductPieTooltip />} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
+        {data.map((item, index) => (
+          <div key={item.name} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.color || chartColor(index) }} />
+              <span className="truncate">{item.name}</span>
+            </span>
+            <span className="shrink-0 text-slate-500">{item.percent.toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SupplierDifferenceChart({ data }) {
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
+
+  return (
+    <div className="h-80 min-w-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 12, bottom: 62, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis
+            dataKey="name"
+            interval={0}
+            tick={{ fontSize: 11, fontWeight: 700 }}
+            angle={-32}
+            textAnchor="end"
+            height={74}
+          />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => compactKg(value)} width={54} />
+          <Tooltip content={<SupplierDifferenceTooltip />} />
+          <Bar dataKey="diferencaKg" radius={[6, 6, 0, 0]}>
+            {data.map((item) => (
+              <Cell key={item.name} fill={item.diferencaKg < 0 ? '#dc2626' : item.diferencaKg > 0 ? '#2563eb' : '#94a3b8'} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function ProductPieTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
+      <p className="font-extrabold text-slate-900">{item.name}</p>
+      <p className="mt-1 font-semibold text-slate-600">Total: {kg(item.kgTotal)}</p>
+      <p className="font-semibold text-slate-600">Participação: {item.percent.toFixed(2)}%</p>
+    </div>
+  );
+}
+
+function SupplierDifferenceTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
+      <p className="font-extrabold text-slate-900">{item.name}</p>
+      <p className="mt-1 font-semibold text-slate-600">KG da nota: {kg(item.kgNota)}</p>
+      <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
+      <p className={item.diferencaKg < 0 ? 'font-extrabold text-rose-700' : item.diferencaKg > 0 ? 'font-extrabold text-blue-700' : 'font-extrabold text-slate-600'}>
+        Diferença: {kg(item.diferencaKg)}
+      </p>
+      <p className="font-semibold text-slate-600">Percentual: {item.percentualDiferenca.toFixed(2)}%</p>
+    </div>
+  );
+}
+
 function StatusBadge({ row }) {
   const classes = {
     pendente: 'bg-amber-100 text-amber-800 ring-amber-200',
@@ -968,6 +1089,50 @@ function groupCount(rows, getName) {
   return Array.from(map, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
+function buildProductsDistribution(rows) {
+  const total = rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0);
+  if (!total) return [];
+
+  const map = new Map();
+  rows.forEach((row) => {
+    const name = row.produto?.nome || 'Sem produto';
+    map.set(name, (map.get(name) || 0) + Number(row.peso_liquido || 0));
+  });
+
+  const ranked = Array.from(map, ([name, kgTotal]) => ({ name, kgTotal }))
+    .filter((item) => item.kgTotal > 0)
+    .sort((a, b) => b.kgTotal - a.kgTotal);
+
+  const main = ranked.slice(0, 10);
+  const othersTotal = ranked.slice(10).reduce((sum, item) => sum + item.kgTotal, 0);
+  const data = othersTotal > 0 ? [...main, { name: 'Outros', kgTotal: othersTotal }] : main;
+
+  return data.map((item, index) => ({
+    ...item,
+    percent: total ? (item.kgTotal / total) * 100 : 0,
+    color: chartColor(index),
+  }));
+}
+
+function buildSupplierDifferences(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const current = map.get(name) || { name, kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
+    current.kgNota += Number(row.peso_nf || 0);
+    current.kgRecebido += Number(row.peso_liquido || 0);
+    current.diferencaKg = current.kgRecebido - current.kgNota;
+    current.percentualDiferenca = current.kgNota ? (current.diferencaKg / current.kgNota) * 100 : 0;
+    map.set(name, current);
+  });
+
+  return Array.from(map.values())
+    .filter((item) => item.kgNota || item.kgRecebido || item.diferencaKg)
+    .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg))
+    .slice(0, 10);
+}
+
 function statusLabel(status) {
   return {
     pendente: 'Pendente',
@@ -985,7 +1150,13 @@ function differenceClass(value) {
 }
 
 function chartColor(index) {
-  return ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#d6a62b', '#d8783d'][index % 6];
+  return ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#d6a62b', '#d8783d', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#64748b'][index % 11];
+}
+
+function compactKg(value) {
+  const numeric = Number(value || 0);
+  if (Math.abs(numeric) >= 1000) return `${Math.round(numeric / 1000)}t`;
+  return `${Math.round(numeric)}kg`;
 }
 
 function label(value) {
