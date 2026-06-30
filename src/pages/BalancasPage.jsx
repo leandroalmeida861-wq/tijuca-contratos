@@ -2,6 +2,7 @@ import {
   Check,
   Download,
   Edit,
+  Eye,
   FileUp,
   FlaskConical,
   Plus,
@@ -78,6 +79,9 @@ const defaultRecebimento = {
   transportadora_id: '',
   fornecedor_id: '',
   produto_id: '',
+  fornecedor_nome_manual: '',
+  produto_nome_manual: '',
+  veiculo_placa_manual: '',
   tipo_veiculo: '',
   qtd_eixos: '',
   nf_numero: '',
@@ -96,9 +100,9 @@ const defaultRecebimento = {
 const defaultLaboratorioForm = {
   data: todayIso(),
   laboratorio_id: '',
-  fornecedor_id: '',
-  produto_id: '',
-  veiculo_id: '',
+  fornecedor_nome_manual: '',
+  produto_nome_manual: '',
+  veiculo_placa_manual: '',
   nf_numero: '',
   ticket_numero: '',
   umidade: '',
@@ -220,7 +224,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
     };
   }, [rows]);
 
-  const bySupplier = groupSum(rows, (row) => row.fornecedor?.nome || 'Sem fornecedor', 'peso_liquido').slice(0, 6);
+  const bySupplier = groupSum(rows, (row) => fornecedorNome(row, 'Sem fornecedor'), 'peso_liquido').slice(0, 6);
   const byStatus = groupCount(rows, (row) => statusLabel(row.status));
   const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
   const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
@@ -280,6 +284,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const [query, setQuery] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const filtered = filterRecebimentos(rows, query);
   const releasedForScale = rows.filter((row) =>
@@ -325,9 +330,9 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
               <div key={row.id} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm shadow-sm md:flex-row md:items-center md:justify-between">
                 <div className="grid gap-1 font-semibold text-slate-700 md:grid-cols-5 md:gap-4">
                   <span>NF: <strong>{row.nf_numero || '-'}</strong></span>
-                  <span>Placa: <strong>{row.veiculo?.placa || '-'}</strong></span>
-                  <span>Produto: <strong>{row.produto?.nome || '-'}</strong></span>
-                  <span>Fornecedor: <strong>{row.fornecedor?.nome || '-'}</strong></span>
+                  <span>Placa: <strong>{placaVeiculo(row)}</strong></span>
+                  <span>Produto: <strong>{produtoNome(row)}</strong></span>
+                  <span>Fornecedor: <strong>{fornecedorNome(row)}</strong></span>
                   <span>Umidade: <strong>{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</strong></span>
                 </div>
                 <button type="button" onClick={() => edit(row)} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-3 text-xs font-bold text-white hover:bg-tijuca-700">
@@ -365,7 +370,9 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
         />
       )}
 
-      <RecebimentosTable rows={filtered} loading={loading} can={can} onEdit={edit} onDelete={remove} />
+      {viewing && <RecebimentoViewModal row={viewing} onClose={() => setViewing(null)} />}
+
+      <RecebimentosTable rows={filtered} loading={loading} can={can} onView={setViewing} onEdit={edit} onDelete={remove} />
     </div>
   );
 }
@@ -506,13 +513,72 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
   );
 }
 
+function RecebimentoViewModal({ row, onClose }) {
+  const details = [
+    ['Data', dateBr(row.data)],
+    ['Status', statusLabel(row.status)],
+    ['NF', row.nf_numero || '-'],
+    ['Chave NF-e', row.nf_chave_acesso || '-'],
+    ['Balança', row.balanca?.nome || '-'],
+    ['Laboratório', row.laboratorio?.nome || '-'],
+    ['Fornecedor', fornecedorNome(row)],
+    ['Produto', produtoNome(row)],
+    ['Veículo / placa', placaVeiculo(row)],
+    ['Motorista', row.motorista?.nome || '-'],
+    ['Transportadora', row.transportadora?.nome || '-'],
+    ['Tipo de veículo', row.tipo_veiculo || '-'],
+    ['Qtd. eixos', row.qtd_eixos || '-'],
+    ['Peso bruto', kg(row.peso_bruto)],
+    ['Tara', kg(row.tara)],
+    ['Peso líquido', kg(row.peso_liquido)],
+    ['Peso NF', row.peso_nf ? kg(row.peso_nf) : '-'],
+    ['Diferença', kg(row.diferenca_kg)],
+    ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
+    ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
+    ['Ticket', row.ticket_numero || '-'],
+    ['Liberado por', row.liberado_por || '-'],
+    ['Valor unitário', row.valor_unitario ?? '-'],
+    ['Valor total', row.valor_total ?? '-'],
+    ['Motivo reprovação', row.motivo_reprovacao || '-'],
+    ['Motivo cancelamento', row.motivo_cancelamento || '-'],
+    ['Observação', row.observacao || '-'],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+      <section className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-xl bg-white shadow-2xl">
+        <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-950">Visualizar recebimento</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">NF {row.nf_numero || '-'} - {fornecedorNome(row, 'Fornecedor nao informado')}</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </header>
+        <div className="max-h-[72vh] overflow-y-auto p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {details.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">{label}</p>
+                <p className="mt-1 break-words text-sm font-bold text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [edits, setEdits] = useState({});
   const [reason, setReason] = useState({});
   const [labForm, setLabForm] = useState(defaultLaboratorioForm);
+  const [editingLabId, setEditingLabId] = useState(null);
   const [savingLab, setSavingLab] = useState(false);
   const pending = rows.filter((row) => row.status === 'pendente');
-  const approved = rows.filter((row) => row.status === 'aprovada');
+  const analyzed = rows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada');
 
   function updateEdit(id, field, value) {
     setEdits((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
@@ -562,12 +628,35 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
     setLabForm((current) => ({ ...current, [field]: value }));
   }
 
+  function editLab(row) {
+    setEditingLabId(row.id);
+    setLabForm(rowToLaboratorioForm(row));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelLabEdit() {
+    setEditingLabId(null);
+    setLabForm({ ...defaultLaboratorioForm, data: todayIso() });
+  }
+
+  async function removeLab(row) {
+    if (!window.confirm(`Excluir a liberacao do laboratorio da NF ${row.nf_numero || row.id}?`)) return;
+    try {
+      await deleteRecebimento(row.id);
+      setMessage('Liberacao do laboratorio excluida com sucesso.');
+      if (editingLabId === row.id) cancelLabEdit();
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
   async function saveManualRelease(event) {
     event.preventDefault();
     setError('');
 
-    if (!labForm.veiculo_id || !labForm.fornecedor_id || !labForm.produto_id) {
-      setError('Informe veículo, fornecedor e produto para liberar a carga. Como corrigir: selecione os três campos obrigatórios e tente novamente.');
+    if (!labForm.veiculo_placa_manual?.trim() || !labForm.fornecedor_nome_manual?.trim() || !labForm.produto_nome_manual?.trim()) {
+      setError('Informe veiculo, fornecedor e produto para liberar a carga. Como corrigir: preencha os tres campos obrigatorios e tente novamente.');
       return;
     }
     if (labForm.status === 'reprovada' && !labForm.motivo_reprovacao?.trim()) {
@@ -577,7 +666,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
 
     setSavingLab(true);
     try {
-      await createRecebimento({
+      const payload = {
         ...normalizeRecebimentoPayload({
           ...defaultRecebimento,
           ...labForm,
@@ -587,11 +676,16 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         }),
         status: labForm.status || 'aprovada',
         motivo_reprovacao: labForm.status === 'reprovada' ? labForm.motivo_reprovacao : null,
-      });
+      };
+      if (editingLabId) await updateRecebimento(editingLabId, payload);
+      else await createRecebimento(payload);
+      setEditingLabId(null);
       setLabForm({ ...defaultLaboratorioForm, data: todayIso() });
-      setMessage(labForm.status === 'reprovada'
-        ? 'Reprovacao do laboratorio salva. A carga ficou registrada como reprovada.'
-        : 'Aprovacao do laboratorio salva. A carga ja aparece em Recebimentos como pendencia de balanca.');
+      setMessage(editingLabId
+        ? 'Liberacao do laboratorio atualizada com sucesso.'
+        : labForm.status === 'reprovada'
+          ? 'Reprovacao do laboratorio salva. A carga ficou registrada como reprovada.'
+          : 'Aprovacao do laboratorio salva. A carga ja aparece em Recebimentos como pendencia de balanca.');
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -615,15 +709,15 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
 
       <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
-          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Nova liberação manual</h2>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{editingLabId ? 'Editar liberacao do laboratorio' : 'Nova liberacao manual'}</h2>
           <p className="mt-1 text-sm text-slate-500">Use quando o grão chegar primeiro no laboratório. A balança completa NF-e, pesos e dados finais depois.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Input label="Data" type="date" value={labForm.data} onChange={(value) => updateLabForm('data', value)} required />
           <Select label="Laboratório" value={labForm.laboratorio_id} onChange={(value) => updateLabForm('laboratorio_id', value)} options={options.laboratorios} />
-          <Select label="Fornecedor" value={labForm.fornecedor_id} onChange={(value) => updateLabForm('fornecedor_id', value)} options={options.fornecedores} required />
-          <Select label="Produto" value={labForm.produto_id} onChange={(value) => updateLabForm('produto_id', value)} options={options.produtos} required />
-          <Select label="Veículo / placa" value={labForm.veiculo_id} onChange={(value) => updateLabForm('veiculo_id', value)} options={options.veiculos} labelKey="placa" required />
+          <Input label="Fornecedor" value={labForm.fornecedor_nome_manual} onChange={(value) => updateLabForm('fornecedor_nome_manual', value)} required />
+          <Input label="Produto" value={labForm.produto_nome_manual} onChange={(value) => updateLabForm('produto_nome_manual', value)} required />
+          <Input label="Veiculo / placa" value={labForm.veiculo_placa_manual} onChange={(value) => updateLabForm('veiculo_placa_manual', value)} required />
           <Input label="Numero da nota" value={labForm.nf_numero} onChange={(value) => updateLabForm('nf_numero', value)} />
           <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
           <Input label="Umidade %" type="number" step="0.001" value={labForm.umidade} onChange={(value) => updateLabForm('umidade', value)} />
@@ -643,10 +737,15 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           Observação do laboratório
           <textarea value={labForm.observacao || ''} onChange={(event) => updateLabForm('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
         </label>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <button disabled={savingLab} className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:opacity-60">
-            <Save size={17} /> {savingLab ? 'Salvando...' : 'Salvar liberação do laboratório'}
+            <Save size={17} /> {savingLab ? 'Salvando...' : editingLabId ? 'Atualizar liberacao do laboratorio' : 'Salvar liberacao do laboratorio'}
           </button>
+          {editingLabId && (
+            <button type="button" onClick={cancelLabEdit} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <X size={16} /> Cancelar edicao
+            </button>
+          )}
         </div>
       </form>
 
@@ -666,6 +765,8 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
             onEdit={updateEdit}
             onReason={(value) => setReason((current) => ({ ...current, [row.id]: value }))}
             onProcess={process}
+            onEditLab={editLab}
+            onDeleteLab={removeLab}
           />
         ))}
 
@@ -678,46 +779,53 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
 
       <section className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Cargas aprovadas ({approved.length})</h2>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Liberadas</span>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Cargas analisadas ({analyzed.length})</h2>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Aprovadas e reprovadas</span>
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-xs font-bold uppercase text-slate-500">
               <tr>
-                {['Data', 'NF', 'Fornecedor', 'Produto', 'Placa', 'Ticket', 'Umidade', 'Liberado por', 'Peso liquido', 'PDF'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
+                {['Data', 'NF', 'Fornecedor', 'Produto', 'Placa', 'Ticket', 'Umidade', 'Liberado por', 'Status', 'Peso liquido', 'PDF', 'Acoes'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
               </tr>
             </thead>
             <tbody>
-              {approved.map((row) => (
+              {analyzed.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="px-3 py-3">{dateBr(row.data)}</td>
                   <td className="px-3 py-3">{row.nf_numero || '-'}</td>
-                  <td className="px-3 py-3 font-semibold text-slate-800">{row.fornecedor?.nome || '-'}</td>
-                  <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
-                  <td className="px-3 py-3">{row.veiculo?.placa || '-'}</td>
+                  <td className="px-3 py-3 font-semibold text-slate-800">{fornecedorNome(row)}</td>
+                  <td className="px-3 py-3">{produtoNome(row)}</td>
+                  <td className="px-3 py-3">{placaVeiculo(row)}</td>
                   <td className="px-3 py-3">{row.ticket_numero || '-'}</td>
                   <td className="px-3 py-3">{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</td>
                   <td className="px-3 py-3">{row.liberado_por || '-'}</td>
+                  <td className="px-3 py-3"><StatusBadge row={row} /></td>
                   <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
                   <td className="px-3 py-3">
                     <button type="button" onClick={() => exportLaboratoryReleasePdf(row)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                       <Download size={14} /> Baixar PDF
                     </button>
                   </td>
+                  <td className="px-3 py-3">
+                    <div className="flex gap-1">
+                      {can('balancas', 'editar') && <button type="button" onClick={() => editLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar"><Edit size={16} /></button>}
+                      {can('balancas', 'excluir') && <button type="button" onClick={() => removeLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir"><Trash2 size={16} /></button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!approved.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhuma carga aprovada nos filtros atuais.</p>}
+          {!analyzed.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhuma carga analisada nos filtros atuais.</p>}
         </div>
       </section>
     </div>
   );
 }
 
-function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onProcess }) {
+function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onProcess, onEditLab, onDeleteLab }) {
   return (
     <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel">
       <div className="grid gap-3 border-b bg-slate-50 p-4 lg:grid-cols-[150px_1fr_190px] lg:items-center">
@@ -734,9 +842,9 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
 
       <div className="grid border-b text-sm md:grid-cols-2 xl:grid-cols-4">
         <LabCell label="Data" value={dateBr(row.data)} />
-        <LabCell label="Produto" value={row.produto?.nome || '-'} />
-        <LabCell label="Placa" value={row.veiculo?.placa || '-'} />
-        <LabCell label="Fornecedor" value={row.fornecedor?.nome || '-'} />
+        <LabCell label="Produto" value={produtoNome(row)} />
+        <LabCell label="Placa" value={placaVeiculo(row)} />
+        <LabCell label="Fornecedor" value={fornecedorNome(row)} />
       </div>
 
       <div className="grid gap-3 p-4 lg:grid-cols-4">
@@ -761,6 +869,8 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
       </div>
 
       <div className="flex flex-col gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end">
+        {can('balancas', 'editar') && <button type="button" onClick={() => onEditLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-white"><Edit size={16} /> Editar</button>}
+        {can('balancas', 'excluir') && <button type="button" onClick={() => onDeleteLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><Trash2 size={16} /> Excluir</button>}
         {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'aprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"><Check size={16} /> Aprovar e liberar</button>}
         {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'reprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 px-4 text-sm font-bold text-amber-700 hover:bg-amber-50"><X size={16} /> Reprovar</button>}
         {can('balancas', 'cancelar') && <button type="button" onClick={() => onProcess(row, 'cancelar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><X size={16} /> Cancelar</button>}
@@ -819,9 +929,9 @@ function exportLaboratoryReleasePdf(row) {
   y += 58;
   drawPdfRow(doc, margin, y, width, [
     ['Data', dateBr(row.data)],
-    ['Produto', row.produto?.nome || '-'],
-    ['Placa', row.veiculo?.placa || '-'],
-    ['Fornecedor', row.fornecedor?.nome || '-'],
+    ['Produto', produtoNome(row)],
+    ['Placa', placaVeiculo(row)],
+    ['Fornecedor', fornecedorNome(row)],
   ]);
 
   y += 56;
@@ -945,9 +1055,9 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
               <tr key={row.id} className={row.divergente ? 'border-b bg-rose-50 align-top' : 'border-b align-top'}>
                 <td className="px-3 py-3">{dateBr(row.data)}</td>
                 <td className="px-3 py-3">{row.balanca?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.fornecedor?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.veiculo?.placa || '-'}</td>
+                <td className="px-3 py-3">{fornecedorNome(row)}</td>
+                <td className="px-3 py-3">{produtoNome(row)}</td>
+                <td className="px-3 py-3">{placaVeiculo(row)}</td>
                 <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
                 <td className="px-3 py-3">{row.peso_nf ? kg(row.peso_nf) : '-'}</td>
                 <td className="px-3 py-3">
@@ -1136,7 +1246,7 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
   );
 }
 
-function RecebimentosTable({ rows, loading, can, onEdit, onDelete }) {
+function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
       <table className="w-full min-w-[1180px] text-left text-sm">
@@ -1151,9 +1261,9 @@ function RecebimentosTable({ rows, loading, can, onEdit, onDelete }) {
               <td className="px-4 py-3">{dateBr(row.data)}</td>
               <td className="px-4 py-3 font-semibold">{row.nf_numero || '-'}</td>
               <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
-              <td className="px-4 py-3">{row.fornecedor?.nome || '-'}</td>
-              <td className="px-4 py-3">{row.produto?.nome || '-'}</td>
-              <td className="px-4 py-3">{row.veiculo?.placa || '-'}</td>
+              <td className="px-4 py-3">{fornecedorNome(row)}</td>
+              <td className="px-4 py-3">{produtoNome(row)}</td>
+              <td className="px-4 py-3">{placaVeiculo(row)}</td>
               <td className="px-4 py-3">{kg(row.peso_bruto)}</td>
               <td className="px-4 py-3">{kg(row.tara)}</td>
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
@@ -1164,6 +1274,7 @@ function RecebimentosTable({ rows, loading, can, onEdit, onDelete }) {
               <td className="px-4 py-3"><StatusBadge row={row} /></td>
               <td className="px-4 py-3">
                 <div className="flex gap-1">
+                  {onView && <button type="button" onClick={() => onView(row)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Visualizar"><Eye size={16} /></button>}
                   {can('balancas', 'editar') && onEdit && <button type="button" onClick={() => onEdit(row)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"><Edit size={16} /></button>}
                   {can('balancas', 'excluir') && onDelete && <button type="button" onClick={() => onDelete(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>}
                 </div>
@@ -1455,6 +1566,24 @@ function rowToForm(row) {
   return Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
 }
 
+function rowToLaboratorioForm(row) {
+  return {
+    ...defaultLaboratorioForm,
+    data: row.data || todayIso(),
+    laboratorio_id: row.laboratorio_id || '',
+    fornecedor_nome_manual: fornecedorNome(row, ''),
+    produto_nome_manual: produtoNome(row, ''),
+    veiculo_placa_manual: placaVeiculo(row, ''),
+    nf_numero: row.nf_numero || '',
+    ticket_numero: row.ticket_numero || '',
+    umidade: row.umidade ?? '',
+    liberado_por: row.liberado_por || '',
+    status: row.status || 'aprovada',
+    motivo_reprovacao: row.motivo_reprovacao || '',
+    observacao: row.observacao || '',
+  };
+}
+
 function normalizeRecebimentoPayload(form) {
   return {
     ...form,
@@ -1554,11 +1683,23 @@ function filterRecebimentos(rows, query) {
   if (!term) return rows;
   return rows.filter((row) => [
     row.nf_numero,
-    row.fornecedor?.nome,
-    row.produto?.nome,
-    row.veiculo?.placa,
+    fornecedorNome(row, ''),
+    produtoNome(row, ''),
+    placaVeiculo(row, ''),
     row.balanca?.nome,
   ].filter(Boolean).some((value) => String(value).toLowerCase().includes(term)));
+}
+
+function fornecedorNome(row, fallback = '-') {
+  return row.fornecedor_nome_manual || row.fornecedor?.nome || fallback;
+}
+
+function produtoNome(row, fallback = '-') {
+  return row.produto_nome_manual || row.produto?.nome || fallback;
+}
+
+function placaVeiculo(row, fallback = '-') {
+  return row.veiculo_placa_manual || row.veiculo?.placa || fallback;
 }
 
 function groupSum(rows, getName, field) {
@@ -1585,7 +1726,7 @@ function buildProductsDistribution(rows) {
 
   const map = new Map();
   rows.forEach((row) => {
-    const name = row.produto?.nome || 'Sem produto';
+    const name = produtoNome(row, 'Sem produto');
     map.set(name, (map.get(name) || 0) + Number(row.peso_liquido || 0));
   });
 
@@ -1608,7 +1749,7 @@ function buildSupplierDifferences(rows) {
   const map = new Map();
 
   rows.forEach((row) => {
-    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const name = fornecedorNome(row, 'Sem fornecedor');
     const current = map.get(name) || { name, kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
     current.kgNota += Number(row.peso_nf || 0);
     current.kgRecebido += Number(row.peso_liquido || 0);
@@ -1630,7 +1771,7 @@ function buildSupplierMoisture(rows) {
     const umidade = Number(row.umidade);
     if (!Number.isFinite(umidade) || umidade <= 0) return;
 
-    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const name = fornecedorNome(row, 'Sem fornecedor');
     const kgRecebido = Number(row.peso_liquido || 0);
     const weight = kgRecebido > 0 ? kgRecebido : 1;
     const current = map.get(name) || { name, weightedMoisture: 0, weight: 0, registros: 0, kgRecebido: 0 };
@@ -1656,7 +1797,7 @@ function buildBestSuppliersRanking(rows) {
   const map = new Map();
 
   rows.forEach((row) => {
-    const name = row.fornecedor?.nome || 'Sem fornecedor';
+    const name = fornecedorNome(row, 'Sem fornecedor');
     const kgRecebido = Number(row.peso_liquido || 0);
     const kgNota = Number(row.peso_nf || 0);
     const current = map.get(name) || {
