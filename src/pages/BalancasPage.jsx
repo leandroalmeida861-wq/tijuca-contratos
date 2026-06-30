@@ -52,8 +52,8 @@ import { dateBr, kg } from '../lib/formatters.js';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
-  { key: 'recebimentos', label: 'Recebimentos' },
   { key: 'laboratorio', label: 'Aprovação Laboratório' },
+  { key: 'recebimentos', label: 'Recebimentos' },
   { key: 'relatorios', label: 'Relatórios' },
 ];
 
@@ -91,6 +91,18 @@ const defaultRecebimento = {
   observacao: '',
   valor_unitario: '',
   valor_total: '',
+};
+
+const defaultLaboratorioForm = {
+  data: todayIso(),
+  laboratorio_id: '',
+  fornecedor_id: '',
+  produto_id: '',
+  veiculo_id: '',
+  ticket_numero: '',
+  umidade: '',
+  liberado_por: '',
+  observacao: '',
 };
 
 export default function BalancasPage() {
@@ -267,6 +279,11 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const [editing, setEditing] = useState(null);
 
   const filtered = filterRecebimentos(rows, query);
+  const releasedForScale = rows.filter((row) =>
+    row.status === 'aprovada'
+    && row.veiculo_id
+    && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero)
+  );
 
   function newForm() {
     setEditing(null);
@@ -291,6 +308,33 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
 
   return (
     <div className="grid gap-4">
+      {releasedForScale.length > 0 && (
+        <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-panel">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-800">Liberadas pelo laboratório aguardando balança</h2>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">Preencha o recebimento de acordo com a placa do veículo liberado.</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700">{releasedForScale.length} carga(s)</span>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {releasedForScale.map((row) => (
+              <div key={row.id} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm shadow-sm md:flex-row md:items-center md:justify-between">
+                <div className="grid gap-1 font-semibold text-slate-700 md:grid-cols-4 md:gap-4">
+                  <span>Placa: <strong>{row.veiculo?.placa || '-'}</strong></span>
+                  <span>Produto: <strong>{row.produto?.nome || '-'}</strong></span>
+                  <span>Fornecedor: <strong>{row.fornecedor?.nome || '-'}</strong></span>
+                  <span>Umidade: <strong>{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</strong></span>
+                </div>
+                <button type="button" onClick={() => edit(row)} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-3 text-xs font-bold text-white hover:bg-tijuca-700">
+                  <Edit size={14} /> Preencher balança
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:flex-row md:items-center md:justify-between">
         <label className="flex h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500 md:min-w-80">
           <Search size={16} />
@@ -461,6 +505,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
 function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [edits, setEdits] = useState({});
   const [reason, setReason] = useState({});
+  const [labForm, setLabForm] = useState(defaultLaboratorioForm);
+  const [savingLab, setSavingLab] = useState(false);
   const pending = rows.filter((row) => row.status === 'pendente');
   const approved = rows.filter((row) => row.status === 'aprovada');
 
@@ -508,6 +554,41 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
     }
   }
 
+  function updateLabForm(field, value) {
+    setLabForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveManualRelease(event) {
+    event.preventDefault();
+    setError('');
+
+    if (!labForm.veiculo_id || !labForm.fornecedor_id || !labForm.produto_id) {
+      setError('Informe veículo, fornecedor e produto para liberar a carga. Como corrigir: selecione os três campos obrigatórios e tente novamente.');
+      return;
+    }
+
+    setSavingLab(true);
+    try {
+      await createRecebimento({
+        ...normalizeRecebimentoPayload({
+          ...defaultRecebimento,
+          ...labForm,
+          peso_bruto: 0,
+          tara: 0,
+          peso_nf: '',
+        }),
+        status: 'aprovada',
+      });
+      setLabForm({ ...defaultLaboratorioForm, data: todayIso() });
+      setMessage('Liberação do laboratório salva. A carga já aparece em Recebimentos para a balança preencher pela placa.');
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    } finally {
+      setSavingLab(false);
+    }
+  }
+
   if (!can('balancas', 'aprovar') && !can('balancas', 'cancelar')) {
     return <Alert tone="error" text="Voce nao tem permissao para aprovar, reprovar ou cancelar cargas de laboratorio." />;
   }
@@ -520,6 +601,32 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           Primeiro faca a analise do laboratorio. Depois de aprovada, a carga fica liberada para seguir o fluxo de balanca e pode gerar a etiqueta em PDF.
         </p>
       </div>
+
+      <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+        <div>
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Nova liberação manual</h2>
+          <p className="mt-1 text-sm text-slate-500">Use quando o grão chegar primeiro no laboratório. A balança completa NF-e, pesos e dados finais depois.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Input label="Data" type="date" value={labForm.data} onChange={(value) => updateLabForm('data', value)} required />
+          <Select label="Laboratório" value={labForm.laboratorio_id} onChange={(value) => updateLabForm('laboratorio_id', value)} options={options.laboratorios} />
+          <Select label="Fornecedor" value={labForm.fornecedor_id} onChange={(value) => updateLabForm('fornecedor_id', value)} options={options.fornecedores} required />
+          <Select label="Produto" value={labForm.produto_id} onChange={(value) => updateLabForm('produto_id', value)} options={options.produtos} required />
+          <Select label="Veículo / placa" value={labForm.veiculo_id} onChange={(value) => updateLabForm('veiculo_id', value)} options={options.veiculos} labelKey="placa" required />
+          <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
+          <Input label="Umidade %" type="number" step="0.001" value={labForm.umidade} onChange={(value) => updateLabForm('umidade', value)} />
+          <Input label="Liberado por" value={labForm.liberado_por} onChange={(value) => updateLabForm('liberado_por', value)} />
+        </div>
+        <label className="grid gap-2 text-sm font-semibold text-slate-700">
+          Observação do laboratório
+          <textarea value={labForm.observacao || ''} onChange={(event) => updateLabForm('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
+        </label>
+        <div>
+          <button disabled={savingLab} className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:opacity-60">
+            <Save size={17} /> {savingLab ? 'Salvando...' : 'Salvar liberação do laboratório'}
+          </button>
+        </div>
+      </form>
 
       <section className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -1603,3 +1710,4 @@ function formatGeneric(value) {
   if (value === false) return 'Inativo';
   return value ?? '-';
 }
+
