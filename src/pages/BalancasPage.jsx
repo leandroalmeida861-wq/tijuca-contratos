@@ -225,7 +225,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
   }, [rows]);
 
   const bySupplier = groupSum(rows, (row) => fornecedorNome(row, 'Sem fornecedor'), 'peso_liquido').slice(0, 6);
-  const byStatus = groupCount(rows, (row) => statusLabel(row.status));
+  const byStatus = groupCount(rows, (row) => recebimentoStatusLabel(row));
   const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
   const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
   const supplierMoisture = useMemo(() => buildSupplierMoisture(rows), [rows]);
@@ -287,11 +287,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const [viewing, setViewing] = useState(null);
 
   const filtered = filterRecebimentos(rows, query);
-  const releasedForScale = rows.filter((row) =>
-    row.status === 'aprovada'
-    && row.veiculo_id
-    && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero)
-  );
+  const releasedForScale = rows.filter(isLaboratorioPendenteBalanca);
 
   function newForm() {
     setEditing(null);
@@ -516,7 +512,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
 function RecebimentoViewModal({ row, onClose }) {
   const details = [
     ['Data', dateBr(row.data)],
-    ['Status', statusLabel(row.status)],
+    ['Status', recebimentoStatusLabel(row)],
     ['NF', row.nf_numero || '-'],
     ['Chave NF-e', row.nf_chave_acesso || '-'],
     ['Balança', row.balanca?.nome || '-'],
@@ -1257,7 +1253,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-b last:border-0">
+            <tr key={row.id} className={recebimentoRowClass(row)}>
               <td className="px-4 py-3">{dateBr(row.data)}</td>
               <td className="px-4 py-3 font-semibold">{row.nf_numero || '-'}</td>
               <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
@@ -1516,6 +1512,14 @@ function SupplierMoistureTooltip({ active, payload }) {
 }
 
 function StatusBadge({ row }) {
+  if (isLaboratorioPendenteBalanca(row)) {
+    return (
+      <span className="inline-flex max-w-64 rounded-md bg-amber-100 px-2 py-1 text-xs font-bold leading-snug text-amber-800 ring-1 ring-amber-200">
+        Aprovado pelo Laboratorio - Pendente finalizar recebimento
+      </span>
+    );
+  }
+
   const classes = {
     pendente: 'bg-amber-100 text-amber-800 ring-amber-200',
     aprovada: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
@@ -1700,6 +1704,23 @@ function produtoNome(row, fallback = '-') {
 
 function placaVeiculo(row, fallback = '-') {
   return row.veiculo_placa_manual || row.veiculo?.placa || fallback;
+}
+
+function isLaboratorioPendenteBalanca(row) {
+  return row.status === 'aprovada'
+    && (row.veiculo_id || row.veiculo_placa_manual)
+    && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
+}
+
+function recebimentoRowClass(row) {
+  const base = 'border-b last:border-0';
+  if (isLaboratorioPendenteBalanca(row)) return `${base} bg-amber-50/80 hover:bg-amber-100/80`;
+  return base;
+}
+
+function recebimentoStatusLabel(row) {
+  if (isLaboratorioPendenteBalanca(row)) return 'Aprovado pelo Laboratorio - Pendente finalizar recebimento';
+  return statusLabel(row.status);
 }
 
 function groupSum(rows, getName, field) {
