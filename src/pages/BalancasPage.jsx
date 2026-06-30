@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
 import {
   Bar,
   BarChart,
@@ -458,6 +459,292 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
 }
 
 function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
+  const [edits, setEdits] = useState({});
+  const [reason, setReason] = useState({});
+  const pending = rows.filter((row) => row.status === 'pendente');
+  const approved = rows.filter((row) => row.status === 'aprovada');
+
+  function updateEdit(id, field, value) {
+    setEdits((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
+  }
+
+  async function process(row, action) {
+    const edit = edits[row.id] || {};
+    try {
+      if (action === 'aprovar') {
+        await approveRecebimento(row.id, {
+          ticket_numero: edit.ticket_numero || row.ticket_numero,
+          umidade: edit.umidade ?? row.umidade,
+          liberado_por: edit.liberado_por || row.liberado_por,
+        });
+        setMessage('Carga aprovada pelo laboratorio.');
+      }
+      if (action === 'reprovar') {
+        const motivo = reason[row.id]?.trim();
+        if (!motivo) {
+          setError('Informe o motivo da reprovacao. Como corrigir: escreva o motivo no campo Motivo e tente novamente.');
+          return;
+        }
+        await rejectRecebimento(row.id, {
+          motivo_reprovacao: motivo,
+          ticket_numero: edit.ticket_numero || row.ticket_numero,
+          umidade: edit.umidade ?? row.umidade,
+          liberado_por: edit.liberado_por || row.liberado_por,
+        });
+        setMessage('Carga reprovada com motivo registrado.');
+      }
+      if (action === 'cancelar') {
+        const motivo = reason[row.id]?.trim();
+        if (!motivo) {
+          setError('Informe o motivo do cancelamento. Como corrigir: escreva o motivo no campo Motivo e tente novamente.');
+          return;
+        }
+        await cancelRecebimento(row.id, motivo);
+        setMessage('Carga cancelada com motivo registrado.');
+      }
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
+  if (!can('balancas', 'aprovar') && !can('balancas', 'cancelar')) {
+    return <Alert tone="error" text="Voce nao tem permissao para aprovar, reprovar ou cancelar cargas de laboratorio." />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+        <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Liberacao de laboratorio</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Primeiro faca a analise do laboratorio. Depois de aprovada, a carga fica liberada para seguir o fluxo de balanca e pode gerar a etiqueta em PDF.
+        </p>
+      </div>
+
+      <section className="grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Cargas pendentes ({pending.length})</h2>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">Aguardando analise</span>
+        </div>
+
+        {pending.map((row) => (
+          <LaboratoryReleaseCard
+            key={row.id}
+            row={row}
+            edit={edits[row.id] || {}}
+            reason={reason[row.id] || ''}
+            can={can}
+            onEdit={updateEdit}
+            onReason={(value) => setReason((current) => ({ ...current, [row.id]: value }))}
+            onProcess={process}
+          />
+        ))}
+
+        {!pending.length && (
+          <div className="rounded-lg border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500 shadow-panel">
+            Nenhuma carga pendente para laboratorio.
+          </div>
+        )}
+      </section>
+
+      <section className="grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Cargas aprovadas ({approved.length})</h2>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Liberadas</span>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="text-xs font-bold uppercase text-slate-500">
+              <tr>
+                {['Data', 'Fornecedor', 'Produto', 'Placa', 'Ticket', 'Umidade', 'Liberado por', 'Peso liquido', 'PDF'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {approved.map((row) => (
+                <tr key={row.id} className="border-b last:border-0">
+                  <td className="px-3 py-3">{dateBr(row.data)}</td>
+                  <td className="px-3 py-3 font-semibold text-slate-800">{row.fornecedor?.nome || '-'}</td>
+                  <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
+                  <td className="px-3 py-3">{row.veiculo?.placa || '-'}</td>
+                  <td className="px-3 py-3">{row.ticket_numero || '-'}</td>
+                  <td className="px-3 py-3">{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</td>
+                  <td className="px-3 py-3">{row.liberado_por || '-'}</td>
+                  <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
+                  <td className="px-3 py-3">
+                    <button type="button" onClick={() => exportLaboratoryReleasePdf(row)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                      <Download size={14} /> Baixar PDF
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!approved.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhuma carga aprovada nos filtros atuais.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onProcess }) {
+  return (
+    <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel">
+      <div className="grid gap-3 border-b bg-slate-50 p-4 lg:grid-cols-[150px_1fr_190px] lg:items-center">
+        <div className="rounded-lg bg-slate-900 px-4 py-3 text-center text-lg font-extrabold text-white">AgroFlow</div>
+        <div className="text-center">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">Procedimento operacional padrao</p>
+          <h3 className="text-base font-extrabold uppercase text-slate-900">Controle de qualidade de materia-prima</h3>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-2 text-xs font-bold text-slate-600">
+          <p>Etiqueta de liberacao</p>
+          <p>Versao 05</p>
+        </div>
+      </div>
+
+      <div className="grid border-b text-sm md:grid-cols-2 xl:grid-cols-4">
+        <LabCell label="Data" value={dateBr(row.data)} />
+        <LabCell label="Produto" value={row.produto?.nome || '-'} />
+        <LabCell label="Placa" value={row.veiculo?.placa || '-'} />
+        <LabCell label="Fornecedor" value={row.fornecedor?.nome || '-'} />
+      </div>
+
+      <div className="grid gap-3 p-4 lg:grid-cols-4">
+        <SmallField label="Ticket">
+          <SmallInput value={edit.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => onEdit(row.id, 'ticket_numero', value)} />
+        </SmallField>
+        <SmallField label="Umidade (%)">
+          <SmallInput type="number" value={edit.umidade ?? row.umidade ?? ''} onChange={(value) => onEdit(row.id, 'umidade', value)} />
+        </SmallField>
+        <SmallField label="Liberado por">
+          <SmallInput value={edit.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => onEdit(row.id, 'liberado_por', value)} />
+        </SmallField>
+        <SmallField label="Peso liquido">
+          <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700">{kg(row.peso_liquido)}</div>
+        </SmallField>
+        <div className="lg:col-span-4">
+          <label className="grid gap-1 text-xs font-bold text-slate-600">
+            Motivo para reprovar ou cancelar
+            <textarea value={reason} onChange={(event) => onReason(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-tijuca-500" placeholder="Obrigatorio para reprovar/cancelar" />
+          </label>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end">
+        {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'aprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"><Check size={16} /> Aprovar e liberar</button>}
+        {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'reprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 px-4 text-sm font-bold text-amber-700 hover:bg-amber-50"><X size={16} /> Reprovar</button>}
+        {can('balancas', 'cancelar') && <button type="button" onClick={() => onProcess(row, 'cancelar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><X size={16} /> Cancelar</button>}
+      </div>
+    </article>
+  );
+}
+
+function LabCell({ label, value }) {
+  return (
+    <div className="border-b border-r border-slate-200 p-3 last:border-r-0 md:border-b-0">
+      <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 min-h-6 text-sm font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function SmallField({ label, children }) {
+  return (
+    <label className="grid gap-1 text-xs font-bold text-slate-600">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function exportLaboratoryReleasePdf(row) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a5' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 24;
+  const width = pageWidth - margin * 2;
+  let y = 24;
+
+  doc.setDrawColor(30, 41, 59);
+  doc.setLineWidth(1);
+  doc.rect(margin, y, width, pageHeight - margin * 2);
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(margin, y, 100, 58, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('AgroFlow', margin + 12, y + 35);
+
+  doc.setTextColor(17, 24, 39);
+  doc.setFontSize(12);
+  doc.text('PROCEDIMENTO OPERACIONAL PADRAO', margin + 120, y + 22);
+  doc.setFontSize(9);
+  doc.text('POP 01 - Qualificacao de fornecedores e controle de materia-prima', margin + 120, y + 38);
+
+  doc.setFontSize(10);
+  doc.text('ETIQUETA DE LIBERACAO', pageWidth - margin - 132, y + 22);
+  doc.text('Versao 05', pageWidth - margin - 132, y + 38);
+
+  y += 58;
+  drawPdfRow(doc, margin, y, width, [
+    ['Data', dateBr(row.data)],
+    ['Produto', row.produto?.nome || '-'],
+    ['Placa', row.veiculo?.placa || '-'],
+    ['Fornecedor', row.fornecedor?.nome || '-'],
+  ]);
+
+  y += 56;
+  drawPdfRow(doc, margin, y, width, [
+    ['Ticket', row.ticket_numero || '-'],
+    ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
+    ['Peso liquido', kg(row.peso_liquido)],
+    ['Peso NF', row.peso_nf ? kg(row.peso_nf) : '-'],
+  ]);
+
+  y += 56;
+  drawPdfRow(doc, margin, y, width, [
+    ['Liberado por', row.liberado_por || '-'],
+    ['Status', statusLabel(row.status)],
+    ['Diferenca', kg(row.diferenca_kg)],
+    ['NF', row.nf_numero || '-'],
+  ]);
+
+  y += 68;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Controle de qualidade de materia-prima', margin + 12, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Carga aprovada pelo laboratorio e liberada para seguir o fluxo operacional de balanca.', margin + 12, y + 18);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Aprovado por:', margin + 12, pageHeight - 44);
+  doc.line(margin + 84, pageHeight - 45, margin + 250, pageHeight - 45);
+  doc.text(row.liberado_por || '-', margin + 90, pageHeight - 52);
+
+  const fileName = `liberacao-laboratorio-${row.nf_numero || row.ticket_numero || row.id}.pdf`.replace(/[^\w.-]+/g, '-');
+  doc.save(fileName);
+}
+
+function drawPdfRow(doc, x, y, width, cells) {
+  const colWidth = width / cells.length;
+  doc.setDrawColor(30, 41, 59);
+  doc.setTextColor(17, 24, 39);
+
+  cells.forEach(([labelText, value], index) => {
+    const cellX = x + index * colWidth;
+    doc.rect(cellX, y, colWidth, 56);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text(labelText, cellX + 8, y + 15);
+    doc.setFontSize(12);
+    const lines = doc.splitTextToSize(String(value || '-'), colWidth - 16).slice(0, 2);
+    doc.text(lines, cellX + 8, y + 34);
+  });
+}
+
+function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [edits, setEdits] = useState({});
   const [reason, setReason] = useState({});
   const pending = rows.filter((row) => row.status === 'pendente');
