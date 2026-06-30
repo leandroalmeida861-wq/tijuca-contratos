@@ -99,9 +99,12 @@ const defaultLaboratorioForm = {
   fornecedor_id: '',
   produto_id: '',
   veiculo_id: '',
+  nf_numero: '',
   ticket_numero: '',
   umidade: '',
   liberado_por: '',
+  status: 'aprovada',
+  motivo_reprovacao: '',
   observacao: '',
 };
 
@@ -312,15 +315,16 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
         <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-panel">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-800">Liberadas pelo laboratório aguardando balança</h2>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">Preencha o recebimento de acordo com a placa do veículo liberado.</p>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-800">Aprovado laboratorio com pendencia de balanca</h2>
+              <p className="mt-1 text-sm font-semibold text-emerald-700">Preencha o recebimento de acordo com a placa do veiculo liberado.</p>
             </div>
             <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700">{releasedForScale.length} carga(s)</span>
           </div>
           <div className="mt-3 grid gap-2">
             {releasedForScale.map((row) => (
               <div key={row.id} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm shadow-sm md:flex-row md:items-center md:justify-between">
-                <div className="grid gap-1 font-semibold text-slate-700 md:grid-cols-4 md:gap-4">
+                <div className="grid gap-1 font-semibold text-slate-700 md:grid-cols-5 md:gap-4">
+                  <span>NF: <strong>{row.nf_numero || '-'}</strong></span>
                   <span>Placa: <strong>{row.veiculo?.placa || '-'}</strong></span>
                   <span>Produto: <strong>{row.produto?.nome || '-'}</strong></span>
                   <span>Fornecedor: <strong>{row.fornecedor?.nome || '-'}</strong></span>
@@ -566,6 +570,10 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
       setError('Informe veículo, fornecedor e produto para liberar a carga. Como corrigir: selecione os três campos obrigatórios e tente novamente.');
       return;
     }
+    if (labForm.status === 'reprovada' && !labForm.motivo_reprovacao?.trim()) {
+      setError('Informe o motivo da reprovacao. Como corrigir: preencha o motivo quando marcar o resultado como reprovado.');
+      return;
+    }
 
     setSavingLab(true);
     try {
@@ -577,10 +585,13 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           tara: 0,
           peso_nf: '',
         }),
-        status: 'aprovada',
+        status: labForm.status || 'aprovada',
+        motivo_reprovacao: labForm.status === 'reprovada' ? labForm.motivo_reprovacao : null,
       });
       setLabForm({ ...defaultLaboratorioForm, data: todayIso() });
-      setMessage('Liberação do laboratório salva. A carga já aparece em Recebimentos para a balança preencher pela placa.');
+      setMessage(labForm.status === 'reprovada'
+        ? 'Reprovacao do laboratorio salva. A carga ficou registrada como reprovada.'
+        : 'Aprovacao do laboratorio salva. A carga ja aparece em Recebimentos como pendencia de balanca.');
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -613,10 +624,21 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           <Select label="Fornecedor" value={labForm.fornecedor_id} onChange={(value) => updateLabForm('fornecedor_id', value)} options={options.fornecedores} required />
           <Select label="Produto" value={labForm.produto_id} onChange={(value) => updateLabForm('produto_id', value)} options={options.produtos} required />
           <Select label="Veículo / placa" value={labForm.veiculo_id} onChange={(value) => updateLabForm('veiculo_id', value)} options={options.veiculos} labelKey="placa" required />
+          <Input label="Numero da nota" value={labForm.nf_numero} onChange={(value) => updateLabForm('nf_numero', value)} />
           <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
           <Input label="Umidade %" type="number" step="0.001" value={labForm.umidade} onChange={(value) => updateLabForm('umidade', value)} />
           <Input label="Liberado por" value={labForm.liberado_por} onChange={(value) => updateLabForm('liberado_por', value)} />
+          <Select label="Resultado" value={labForm.status} onChange={(value) => updateLabForm('status', value)} options={[
+            { id: 'aprovada', nome: 'Aprovado' },
+            { id: 'reprovada', nome: 'Reprovado' },
+          ]} required />
         </div>
+        {labForm.status === 'reprovada' && (
+          <label className="grid gap-2 text-sm font-semibold text-slate-700">
+            Motivo da reprovacao
+            <textarea value={labForm.motivo_reprovacao || ''} onChange={(event) => updateLabForm('motivo_reprovacao', event.target.value)} rows={2} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
+          </label>
+        )}
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
           Observação do laboratório
           <textarea value={labForm.observacao || ''} onChange={(event) => updateLabForm('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
@@ -664,13 +686,14 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-xs font-bold uppercase text-slate-500">
               <tr>
-                {['Data', 'Fornecedor', 'Produto', 'Placa', 'Ticket', 'Umidade', 'Liberado por', 'Peso liquido', 'PDF'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
+                {['Data', 'NF', 'Fornecedor', 'Produto', 'Placa', 'Ticket', 'Umidade', 'Liberado por', 'Peso liquido', 'PDF'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
               </tr>
             </thead>
             <tbody>
               {approved.map((row) => (
                 <tr key={row.id} className="border-b last:border-0">
                   <td className="px-3 py-3">{dateBr(row.data)}</td>
+                  <td className="px-3 py-3">{row.nf_numero || '-'}</td>
                   <td className="px-3 py-3 font-semibold text-slate-800">{row.fornecedor?.nome || '-'}</td>
                   <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
                   <td className="px-3 py-3">{row.veiculo?.placa || '-'}</td>
@@ -1710,4 +1733,3 @@ function formatGeneric(value) {
   if (value === false) return 'Inativo';
   return value ?? '-';
 }
-
