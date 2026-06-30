@@ -946,6 +946,9 @@ function exportLaboratoryReleasePdf(row) {
     ['NF', row.nf_numero || '-'],
   ]);
 
+  y += 64;
+  drawPdfTextBox(doc, margin, y, width, 52, 'Observacao do laboratorio', row.observacao || '-');
+
   y += 68;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -961,6 +964,19 @@ function exportLaboratoryReleasePdf(row) {
 
   const fileName = `liberacao-laboratorio-${row.nf_numero || row.ticket_numero || row.id}.pdf`.replace(/[^\w.-]+/g, '-');
   doc.save(fileName);
+}
+
+function drawPdfTextBox(doc, x, y, width, height, labelText, value) {
+  doc.setDrawColor(30, 41, 59);
+  doc.setTextColor(17, 24, 39);
+  doc.rect(x, y, width, height);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text(labelText, x + 8, y + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const lines = doc.splitTextToSize(String(value || '-'), width - 16).slice(0, 3);
+  doc.text(lines, x + 8, y + 30);
 }
 
 function drawPdfRow(doc, x, y, width, cells) {
