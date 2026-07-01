@@ -422,6 +422,9 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           next.qtd_eixos = vehicle.qtd_eixos || '';
         }
       }
+      if (name === 'peso_nf' || name === 'valor_unitario') {
+        next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario);
+      }
       return next;
     });
   }
@@ -449,17 +452,23 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         veiculos: mergeOption(current.veiculos, vehicle),
       }));
 
-      setForm((current) => ({
-        ...current,
-        nf_numero: parsed.numero || current.nf_numero,
-        nf_chave_acesso: parsed.chaveAcesso || current.nf_chave_acesso,
-        data: current.data || todayIso(),
-        transportadora_id: carrier?.id || current.transportadora_id,
-        veiculo_id: vehicle?.id || current.veiculo_id,
-        peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
-        valor_unitario: formatDecimalPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 6)) || current.valor_unitario,
-        valor_total: formatDecimalPt(parsed.valorTotalNota, 2) || current.valor_total,
-      }));
+      setForm((current) => {
+        const next = {
+          ...current,
+          nf_numero: parsed.numero || current.nf_numero,
+          nf_chave_acesso: parsed.chaveAcesso || current.nf_chave_acesso,
+          data: current.data || todayIso(),
+          transportadora_id: carrier?.id || current.transportadora_id,
+          veiculo_id: vehicle?.id || current.veiculo_id,
+          peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
+          valor_unitario: formatMoneyPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 2)) || current.valor_unitario,
+          valor_total: current.valor_total,
+        };
+        next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario)
+          || formatMoneyPt(parsed.valorTotalNota, 2)
+          || current.valor_total;
+        return next;
+      });
       setXmlInfo(`XML importado: NF ${parsed.numero || '-'} | Fornecedor e produto devem ser selecionados manualmente.`);
     } catch (err) {
       setError(toUserError(err));
@@ -528,8 +537,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
-        <DecimalInput label="Valor unitário" decimals={localeDecimalPlaces(form.valor_unitario, 6)} value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
-        <DecimalInput label="Valor total" decimals={2} value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
+        <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
+        <MoneyInput label="Valor total" value={form.valor_total} readOnly />
       </div>
 
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
@@ -573,8 +582,8 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
-    ['Valor unitário', row.valor_unitario ?? '-'],
-    ['Valor total', row.valor_total ?? '-'],
+    ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
+    ['Valor total', row.valor_total === null || row.valor_total === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_total, 2)}`],
     ['Motivo reprovação', row.motivo_reprovacao || '-'],
     ['Motivo cancelamento', row.motivo_cancelamento || '-'],
     ['Observação', row.observacao || '-'],
@@ -1609,26 +1618,42 @@ function Input({ label, value, onChange, type = 'text', required, step, error })
   );
 }
 
-function DecimalInput({ label, value, onChange, decimals = 2, error }) {
+function MoneyInput({ label, value, onChange, placeholder = '0,00', readOnly = false, error }) {
   const inputClass = error
-    ? 'h-11 rounded-lg border border-rose-500 bg-rose-50 px-3 outline-none ring-4 ring-rose-100 animate-pulse'
-    : 'h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100';
+    ? 'h-11 w-full rounded-lg border border-rose-500 bg-rose-50 pl-10 pr-3 outline-none ring-4 ring-rose-100 animate-pulse'
+    : 'h-11 w-full rounded-lg border border-slate-300 pl-10 pr-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100 disabled:bg-slate-100 disabled:text-slate-600';
 
   function handleChange(rawValue) {
-    onChange(formatDecimalTyping(rawValue, decimals));
+    if (readOnly) return;
+    onChange(sanitizeMoneyInput(rawValue));
+  }
+
+  function handleBlur() {
+    if (readOnly) return;
+    const numeric = nullableLocaleNumber(value);
+    if (numeric === null) {
+      onChange('');
+      return;
+    }
+    onChange(formatMoneyPt(numeric, Math.max(inputDecimalPlaces(value), 2)));
   }
 
   return (
     <label className="grid gap-2 text-sm font-semibold text-slate-700">
       {label}
-      <input
-        className={inputClass}
-        value={value ?? ''}
-        onChange={(event) => handleChange(event.target.value)}
-        type="text"
-        inputMode="numeric"
-        placeholder={decimals === 2 ? '0,00' : '0,000000'}
-      />
+      <span className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-slate-500">R$</span>
+        <input
+          className={inputClass}
+          value={value ?? ''}
+          onChange={(event) => handleChange(event.target.value)}
+          onBlur={handleBlur}
+          type="text"
+          inputMode="decimal"
+          placeholder={placeholder}
+          readOnly={readOnly}
+        />
+      </span>
       {error && <span className="text-xs font-bold text-rose-700">{error}</span>}
     </label>
   );
@@ -1738,8 +1763,8 @@ function validateRecebimentoForm(form) {
 function rowToForm(row) {
   if (!row) return { ...defaultRecebimento };
   const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
-  form.valor_unitario = formatDecimalPt(row.valor_unitario, 6);
-  form.valor_total = formatDecimalPt(row.valor_total, 2);
+  form.valor_unitario = formatMoneyPt(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
+  form.valor_total = formatMoneyPt(row.valor_total, 2);
   return form;
 }
 
@@ -1812,23 +1837,52 @@ function nullableNumber(value) {
 
 function nullableLocaleNumber(value) {
   if (value === '' || value === null || value === undefined) return null;
-  const normalized = String(value).trim().replace(/\./g, '').replace(',', '.');
+  const normalized = normalizeLocaleNumber(value);
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatDecimalTyping(value, decimals = 2) {
-  const digits = String(value || '').replace(/\D/g, '');
-  if (!digits) return '';
-  const scale = Math.max(0, Number(decimals) || 0);
-  const padded = digits.padStart(scale + 1, '0');
-  const integer = scale ? padded.slice(0, -scale) : padded;
-  const decimal = scale ? padded.slice(-scale) : '';
-  const formattedInteger = formatThousandsPt(integer);
-  return scale ? `${formattedInteger},${decimal}` : formattedInteger;
+function normalizeLocaleNumber(value) {
+  const clean = String(value || '').trim().replace(/[^\d,.-]/g, '');
+  if (!clean) return '';
+  const lastComma = clean.lastIndexOf(',');
+  const lastDot = clean.lastIndexOf('.');
+  const decimalIndex = Math.max(lastComma, lastDot);
+  if (decimalIndex === -1) return clean.replace(/[^\d-]/g, '');
+  const integer = clean.slice(0, decimalIndex).replace(/[^\d-]/g, '');
+  const decimal = clean.slice(decimalIndex + 1).replace(/\D/g, '');
+  return `${integer || '0'}.${decimal}`;
 }
 
-function formatDecimalPt(value, decimals = 2) {
+function sanitizeMoneyInput(value) {
+  return String(value || '').replace(/[^\d,.]/g, '');
+}
+
+function calculateValorTotalDisplay(pesoNf, valorUnitario) {
+  const peso = nullableLocaleNumber(pesoNf);
+  const unitario = nullableLocaleNumber(valorUnitario);
+  if (peso === null || unitario === null) return '';
+  return formatMoneyPt(peso * unitario, 2);
+}
+
+function inputDecimalPlaces(value) {
+  const text = String(value || '');
+  const lastComma = text.lastIndexOf(',');
+  const lastDot = text.lastIndexOf('.');
+  const decimalIndex = Math.max(lastComma, lastDot);
+  if (decimalIndex === -1) return 0;
+  return text.slice(decimalIndex + 1).replace(/\D/g, '').length;
+}
+
+function numberDecimalPlaces(value) {
+  const text = String(value ?? '');
+  const decimal = text.includes('e-')
+    ? Number(value).toFixed(Number(text.split('e-')[1] || 6)).replace(/0+$/, '').split('.')[1]
+    : text.split('.')[1];
+  return decimal?.length || 0;
+}
+
+function formatMoneyPt(value, decimals = 2) {
   if (value === '' || value === null || value === undefined) return '';
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
@@ -1847,11 +1901,6 @@ function displayDecimalPlaces(value, fallback = 2) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
   return Math.min(Math.max(Math.trunc(numeric), 2), 10);
-}
-
-function localeDecimalPlaces(value, fallback = 2) {
-  const decimal = String(value || '').split(',')[1] || '';
-  return decimal.length ? decimal.length : fallback;
 }
 
 function findDuplicateLookup(config, form, rows, editingId) {
