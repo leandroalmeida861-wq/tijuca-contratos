@@ -226,7 +226,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
     };
   }, [rows]);
 
-  const bySupplier = groupSum(rows, (row) => fornecedorNome(row, 'Sem fornecedor'), 'peso_liquido').slice(0, 6);
+  const bySupplier = groupSupplierSum(rows, 'peso_liquido').slice(0, 6);
   const byStatus = groupCount(rows, (row) => recebimentoStatusLabel(row));
   const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
   const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
@@ -422,6 +422,9 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           next.qtd_eixos = vehicle.qtd_eixos || '';
         }
       }
+      if (name === 'fornecedor_id' && value) {
+        next.fornecedor_nome_manual = '';
+      }
       if (name === 'peso_nf' || name === 'valor_unitario') {
         next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario);
       }
@@ -437,6 +440,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
     try {
       const parsed = parseNfeRecebimento(await file.text());
       const mainItem = parsed.itens[0] || {};
+      const matchedSupplier = findFornecedorFromNfe(parsed, localOptions.fornecedores);
       const [carrier, vehicle] = await Promise.all([
         parsed.transportadora.nome
           ? findOrCreateLookup('recebimento_transportadoras', 'nome', parsed.transportadora.nome, { nome: parsed.transportadora.nome, cnpj: parsed.transportadora.cnpj })
@@ -460,6 +464,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           data: current.data || todayIso(),
           transportadora_id: carrier?.id || current.transportadora_id,
           veiculo_id: vehicle?.id || current.veiculo_id,
+          fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
+          fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
           peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
           valor_unitario: formatMoneyPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 2)) || current.valor_unitario,
           valor_total: current.valor_total,
@@ -469,7 +475,11 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           || current.valor_total;
         return next;
       });
-      setXmlInfo(`XML importado: NF ${parsed.numero || '-'} | Fornecedor e produto devem ser selecionados manualmente.`);
+      setXmlInfo([
+        `XML importado: NF ${parsed.numero || '-'}`,
+        matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
+        'Produto deve ser selecionado manualmente.',
+      ].join(' | '));
     } catch (err) {
       setError(toUserError(err));
     }
@@ -1746,7 +1756,7 @@ function validateRecebimentoForm(form) {
   requireField('data', 'Data');
   requireField('balanca_id', 'Balanca');
   requireField('nf_numero', 'Numero da NF');
-  requireField('fornecedor_id', 'Fornecedor', Boolean(form.fornecedor_id || form.fornecedor_nome_manual));
+  requireField('fornecedor_id', 'Fornecedor cadastrado', Boolean(form.fornecedor_id));
   requireField('produto_id', 'Produto', Boolean(form.produto_id || form.produto_nome_manual));
   requireField('veiculo_id', 'Veiculo', Boolean(form.veiculo_id || form.veiculo_placa_manual));
   requireField('peso_bruto', 'Peso bruto KG', form.peso_bruto !== '' && form.peso_bruto !== null && form.peso_bruto !== undefined);
@@ -1796,6 +1806,7 @@ function normalizeRecebimentoPayload(form) {
     umidade: nullableNumber(form.umidade),
     valor_unitario: nullableLocaleNumber(form.valor_unitario),
     valor_total: nullableLocaleNumber(form.valor_total),
+    fornecedor_nome_manual: form.fornecedor_id ? null : form.fornecedor_nome_manual,
   };
 }
 
@@ -1961,7 +1972,31 @@ function filterRecebimentos(rows, query) {
 }
 
 function fornecedorNome(row, fallback = '-') {
-  return row.fornecedor_nome_manual || row.fornecedor?.nome || fallback;
+  return row.fornecedor?.nome || row.fornecedor_nome_manual || fallback;
+}
+
+function fornecedorGroupKey(row) {
+  if (row.fornecedor_id || row.fornecedor?.id) return `id:${row.fornecedor_id || row.fornecedor.id}`;
+  const normalized = normalizeSupplierName(row.fornecedor_nome_manual || row.fornecedor?.nome || '');
+  return normalized ? `manual:${normalized}` : 'manual:sem-fornecedor';
+}
+
+function normalizeSupplierName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\bs\/a\b/g, ' sa ')
+    .replace(/[^\w\s]+/g, ' ')
+    .replace(/\b(ltda|limitada|sa|s|a|eireli|me|epp|do|da|de|dos|das)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findFornecedorFromNfe(parsed, fornecedores = []) {
+  const documentoXml = onlyDigits(parsed?.emitente?.documento);
+  if (!documentoXml) return null;
+  return (fornecedores || []).find((fornecedor) => onlyDigits(fornecedor.cnpj) === documentoXml) || null;
 }
 
 function produtoNome(row, fallback = '-') {
@@ -2003,6 +2038,17 @@ function groupSum(rows, getName, field) {
   return Array.from(map, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
+function groupSupplierSum(rows, field) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = fornecedorGroupKey(row);
+    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), value: 0 };
+    current.value += Number(row[field] || 0);
+    map.set(key, current);
+  });
+  return Array.from(map.values()).sort((a, b) => b.value - a.value);
+}
+
 function groupCount(rows, getName) {
   const map = new Map();
   rows.forEach((row) => {
@@ -2041,13 +2087,13 @@ function buildSupplierDifferences(rows) {
   const map = new Map();
 
   rows.forEach((row) => {
-    const name = fornecedorNome(row, 'Sem fornecedor');
-    const current = map.get(name) || { name, kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
+    const key = fornecedorGroupKey(row);
+    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
     current.kgNota += Number(row.peso_nf || 0);
     current.kgRecebido += Number(row.peso_liquido || 0);
     current.diferencaKg = current.kgRecebido - current.kgNota;
     current.percentualDiferenca = current.kgNota ? (current.diferencaKg / current.kgNota) * 100 : 0;
-    map.set(name, current);
+    map.set(key, current);
   });
 
   return Array.from(map.values())
@@ -2063,15 +2109,15 @@ function buildSupplierMoisture(rows) {
     const umidade = Number(row.umidade);
     if (!Number.isFinite(umidade) || umidade <= 0) return;
 
-    const name = fornecedorNome(row, 'Sem fornecedor');
+    const key = fornecedorGroupKey(row);
     const kgRecebido = Number(row.peso_liquido || 0);
     const weight = kgRecebido > 0 ? kgRecebido : 1;
-    const current = map.get(name) || { name, weightedMoisture: 0, weight: 0, registros: 0, kgRecebido: 0 };
+    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), weightedMoisture: 0, weight: 0, registros: 0, kgRecebido: 0 };
     current.weightedMoisture += umidade * weight;
     current.weight += weight;
     current.registros += 1;
     current.kgRecebido += kgRecebido;
-    map.set(name, current);
+    map.set(key, current);
   });
 
   return Array.from(map.values())
@@ -2089,11 +2135,11 @@ function buildBestSuppliersRanking(rows) {
   const map = new Map();
 
   rows.forEach((row) => {
-    const name = fornecedorNome(row, 'Sem fornecedor');
+    const key = fornecedorGroupKey(row);
     const kgRecebido = Number(row.peso_liquido || 0);
     const kgNota = Number(row.peso_nf || 0);
-    const current = map.get(name) || {
-      name,
+    const current = map.get(key) || {
+      name: fornecedorNome(row, 'Sem fornecedor'),
       cargas: 0,
       aprovadas: 0,
       kgRecebido: 0,
@@ -2106,7 +2152,7 @@ function buildBestSuppliersRanking(rows) {
     current.kgRecebido += kgRecebido;
     current.kgNota += kgNota;
     current.diferencaAbsKg += Math.abs(kgRecebido - kgNota);
-    map.set(name, current);
+    map.set(key, current);
   });
 
   const suppliers = Array.from(map.values()).filter((item) => item.cargas > 0);

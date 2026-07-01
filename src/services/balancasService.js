@@ -200,7 +200,7 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     row.data,
     row.nf_numero,
     row.balanca?.nome,
-    row.fornecedor_nome_manual || row.fornecedor?.nome,
+    row.fornecedor?.nome || row.fornecedor_nome_manual,
     row.produto_nome_manual || row.produto?.nome,
     row.veiculo_placa_manual || row.veiculo?.placa,
     row.peso_bruto,
