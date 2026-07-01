@@ -11,7 +11,6 @@ import {
   Search,
   Trash2,
   Truck,
-  Users,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -213,25 +212,26 @@ export default function BalancasPage() {
 }
 
 function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {
+  const recebimentosBalanca = useMemo(() => rows.filter(isRecebimentoFinalizadoBalanca), [rows]);
+  const aprovadasLaboratorio = useMemo(() => rows.filter(isAprovadaLaboratorio), [rows]);
+  const pendentesFinalizar = useMemo(() => rows.filter(isLaboratorioPendenteBalanca), [rows]);
   const metrics = useMemo(() => {
-    const recebimentosBalanca = rows.filter(isRecebimentoFinalizadoBalanca);
     return {
       cargas: rows.length,
-      kgRecebidos: rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
-      fornecedores: new Set(rows.map((row) => row.fornecedor_id || row.fornecedor?.id).filter(Boolean)).size,
+      aprovadasLaboratorio: aprovadasLaboratorio.length,
+      kgRecebidos: recebimentosBalanca.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
       recebimentosBalanca: recebimentosBalanca.length,
-      pendentesFinalizar: rows.filter(isLaboratorioPendenteBalanca).length,
-      aprovadas: rows.filter((row) => row.status === 'aprovada').length,
+      pendentesFinalizar: pendentesFinalizar.length,
       reprovadas: rows.filter((row) => row.status === 'reprovada').length,
     };
-  }, [rows]);
+  }, [aprovadasLaboratorio, pendentesFinalizar, recebimentosBalanca, rows]);
 
-  const bySupplier = groupSupplierSum(rows, 'peso_liquido').slice(0, 6);
-  const byStatus = groupCount(rows, (row) => recebimentoStatusLabel(row));
-  const productsDistribution = useMemo(() => buildProductsDistribution(rows), [rows]);
-  const supplierDifferences = useMemo(() => buildSupplierDifferences(rows), [rows]);
-  const supplierMoisture = useMemo(() => buildSupplierMoisture(rows), [rows]);
-  const bestSuppliers = useMemo(() => buildBestSuppliersRanking(rows), [rows]);
+  const bySupplier = groupSupplierSum(recebimentosBalanca, 'peso_liquido').filter((item) => item.value > 0).slice(0, 6);
+  const byStatus = useMemo(() => buildDashboardStatus(aprovadasLaboratorio, recebimentosBalanca, pendentesFinalizar), [aprovadasLaboratorio, pendentesFinalizar, recebimentosBalanca]);
+  const productsDistribution = useMemo(() => buildProductsDistribution(recebimentosBalanca), [recebimentosBalanca]);
+  const supplierDifferences = useMemo(() => buildSupplierDifferences(recebimentosBalanca), [recebimentosBalanca]);
+  const supplierMoisture = useMemo(() => buildSupplierMoisture(aprovadasLaboratorio), [aprovadasLaboratorio]);
+  const bestSuppliers = useMemo(() => buildBestSuppliersRanking(recebimentosBalanca), [recebimentosBalanca]);
 
   return (
     <div className="grid gap-5">
@@ -244,9 +244,9 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
       ) : (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Metric title="Aprovadas no laboratório" value={metrics.aprovadasLaboratorio} icon={FlaskConical} />
             <Metric title="Recebimentos na balança" value={metrics.recebimentosBalanca} icon={Truck} />
             <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
-            <Metric title="Fornecedores no periodo" value={metrics.fornecedores} icon={Users} />
             <Metric title="Pendentes finalizar recebimento" value={metrics.pendentesFinalizar} icon={FlaskConical} />
           </section>
 
@@ -2013,6 +2013,10 @@ function isLaboratorioPendenteBalanca(row) {
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
 }
 
+function isAprovadaLaboratorio(row) {
+  return row.status === 'aprovada';
+}
+
 function isRecebimentoFinalizadoBalanca(row) {
   return row.status === 'aprovada' && !isLaboratorioPendenteBalanca(row);
 }
@@ -2056,6 +2060,14 @@ function groupCount(rows, getName) {
     map.set(name, (map.get(name) || 0) + 1);
   });
   return Array.from(map, ([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+}
+
+function buildDashboardStatus(aprovadasLaboratorio, recebimentosBalanca, pendentesFinalizar) {
+  return [
+    { name: 'Aprovadas no Laboratório', value: aprovadasLaboratorio.length },
+    { name: 'Finalizadas na Balança', value: recebimentosBalanca.length },
+    { name: 'Pendentes de Recebimento', value: pendentesFinalizar.length },
+  ];
 }
 
 function buildProductsDistribution(rows) {
