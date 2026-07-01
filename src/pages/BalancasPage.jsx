@@ -214,11 +214,13 @@ export default function BalancasPage() {
 
 function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {
   const metrics = useMemo(() => {
+    const recebimentosBalanca = rows.filter(isRecebimentoFinalizadoBalanca);
     return {
       cargas: rows.length,
       kgRecebidos: rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0),
       fornecedores: new Set(rows.map((row) => row.fornecedor_id || row.fornecedor?.id).filter(Boolean)).size,
-      pendentes: rows.filter((row) => row.status === 'pendente').length,
+      recebimentosBalanca: recebimentosBalanca.length,
+      pendentesFinalizar: rows.filter(isLaboratorioPendenteBalanca).length,
       aprovadas: rows.filter((row) => row.status === 'aprovada').length,
       reprovadas: rows.filter((row) => row.status === 'reprovada').length,
     };
@@ -242,17 +244,17 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
       ) : (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Metric title="Cargas no periodo" value={metrics.cargas} icon={Truck} />
+            <Metric title="Recebimentos na balança" value={metrics.recebimentosBalanca} icon={Truck} />
             <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
             <Metric title="Fornecedores no periodo" value={metrics.fornecedores} icon={Users} />
-            <Metric title="Pendentes laboratório" value={metrics.pendentes} icon={FlaskConical} />
+            <Metric title="Pendentes finalizar recebimento" value={metrics.pendentesFinalizar} icon={FlaskConical} />
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
             <ChartCard title="Volume por fornecedor">
               <BarList data={bySupplier} valueFormatter={kg} />
             </ChartCard>
-            <ChartCard title="Status dos recebimentos">
+            <ChartCard title="Status dos recebimentos na balança">
               <BarList data={byStatus} valueFormatter={(value) => `${value} carga(s)`} />
             </ChartCard>
           </section>
@@ -1855,6 +1857,10 @@ function isLaboratorioPendenteBalanca(row) {
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
 }
 
+function isRecebimentoFinalizadoBalanca(row) {
+  return row.status === 'aprovada' && !isLaboratorioPendenteBalanca(row);
+}
+
 function recebimentoRowClass(row) {
   const base = 'border-b last:border-0';
   if (isLaboratorioPendenteBalanca(row)) return `${base} bg-amber-50/80 hover:bg-amber-100/80`;
@@ -1862,7 +1868,8 @@ function recebimentoRowClass(row) {
 }
 
 function recebimentoStatusLabel(row) {
-  if (isLaboratorioPendenteBalanca(row)) return 'Aprovado pelo Laboratorio - Pendente finalizar recebimento';
+  if (isLaboratorioPendenteBalanca(row)) return 'Aprovada laboratório';
+  if (isRecebimentoFinalizadoBalanca(row)) return 'Aprovada balança';
   return statusLabel(row.status);
 }
 
