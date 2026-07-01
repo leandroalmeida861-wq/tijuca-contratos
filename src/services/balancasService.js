@@ -11,6 +11,15 @@ const RECEBIMENTO_SELECT = `
   produto:produtos(id,nome,unidade)
 `;
 
+const PORTARIA_SELECT = `
+  *,
+  veiculo:recebimento_veiculos(id,placa,tipo_veiculo,qtd_eixos),
+  motorista:recebimento_motoristas(id,nome),
+  transportadora:recebimento_transportadoras(id,nome),
+  fornecedor:fornecedores(id,nome,cnpj),
+  produto:produtos(id,nome,unidade)
+`;
+
 export const lookupTables = {
   balancas: {
     table: 'balancas',
@@ -102,6 +111,42 @@ export async function listRecebimentos(filters = {}) {
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+export async function listPortariaEntradas() {
+  const { data, error } = await supabase
+    .from('portaria_entradas')
+    .select(PORTARIA_SELECT)
+    .order('created_at', { ascending: false });
+  if (error && isMissingPortariaTable(error)) return [];
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createPortariaEntrada(payload) {
+  const { data, error } = await supabase
+    .from('portaria_entradas')
+    .insert(cleanPayload(payload))
+    .select(PORTARIA_SELECT)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePortariaEntrada(id, payload) {
+  const { data, error } = await supabase
+    .from('portaria_entradas')
+    .update(cleanPayload(payload))
+    .eq('id', id)
+    .select(PORTARIA_SELECT)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePortariaEntrada(id) {
+  const { error } = await supabase.from('portaria_entradas').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function getRecebimento(id) {
@@ -236,7 +281,7 @@ export function toUserError(error) {
     return 'Vínculo inválido. Como corrigir: escolha um cadastro existente de fornecedor, produto, balança ou laboratório.';
   }
   if (lower.includes('schema cache') || lower.includes('does not exist') || lower.includes('could not find')) {
-    return 'Banco ainda não reconheceu o módulo Balanças. Como corrigir: aplique o SQL supabase/balancas-modulo-recebimento.sql no Supabase e recarregue o app.';
+    return 'Banco ainda não reconheceu o módulo Balanças. Como corrigir: aplique os SQLs supabase/balancas-modulo-recebimento.sql e supabase/portaria-balancas.sql no Supabase e recarregue o app.';
   }
   return message || 'Não foi possível concluir a operação. Como corrigir: confira os dados e tente novamente.';
 }
@@ -246,6 +291,15 @@ function cleanPayload(payload) {
     Object.entries(payload)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => [key, value === '' ? null : value]),
+  );
+}
+
+function isMissingPortariaTable(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('portaria_entradas') && (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('schema cache')
   );
 }
 

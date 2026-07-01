@@ -31,19 +31,23 @@ import {
 import {
   approveRecebimento,
   cancelRecebimento,
+  createPortariaEntrada,
   createLookup,
   createRecebimento,
   deleteLookup,
+  deletePortariaEntrada,
   deleteRecebimento,
   exportRecebimentosCsv,
   findOrCreateLookup,
   listLookup,
+  listPortariaEntradas,
   listRecebimentos,
   loadBalancasOptions,
   lookupTables,
   rejectRecebimento,
   toUserError,
   updateLookup,
+  updatePortariaEntrada,
   updateRecebimento,
 } from '../services/balancasService.js';
 import { parseNfeRecebimento } from '../lib/nfeRecebimento.js';
@@ -52,6 +56,7 @@ import { dateBr, kg } from '../lib/formatters.js';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
+  { key: 'portaria', label: 'Portaria' },
   { key: 'laboratorio', label: 'Aprovação Laboratório' },
   { key: 'recebimentos', label: 'Recebimentos' },
   { key: 'relatorios', label: 'Relatórios' },
@@ -96,6 +101,25 @@ const defaultRecebimento = {
   valor_total: '',
 };
 
+const defaultPortariaForm = {
+  data_entrada: todayIso(),
+  hora_entrada: currentTime(),
+  placa: '',
+  veiculo_id: '',
+  motorista_id: '',
+  fornecedor_id: '',
+  cnpj_fornecedor: '',
+  produto_id: '',
+  numero_nf: '',
+  serie_nf: '',
+  peso_nf_kg: '',
+  transportadora_id: '',
+  tipo_veiculo: '',
+  qtd_eixos: '',
+  observacao: '',
+  status: 'AGUARDANDO_LABORATORIO',
+};
+
 const defaultLaboratorioForm = {
   data: todayIso(),
   laboratorio_id: '',
@@ -118,6 +142,7 @@ export default function BalancasPage() {
   const cadastroParam = searchParams.get('cadastro');
   const [activeTab, setActiveTab] = useState(tabKeys.has(tabParam) ? tabParam : 'dashboard');
   const [rows, setRows] = useState([]);
+  const [portariaRows, setPortariaRows] = useState([]);
   const [options, setOptions] = useState(emptyOptions());
   const [filters, setFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(true);
@@ -134,6 +159,7 @@ export default function BalancasPage() {
       ]);
       setOptions(nextOptions);
       setRows(nextRows);
+      setPortariaRows(await listPortariaEntradas());
     } catch (err) {
       setError(toUserError(err));
     } finally {
@@ -203,6 +229,7 @@ export default function BalancasPage() {
       {error && <Alert tone="error" text={error} />}
 
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
+      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={can} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={can} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={can} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
@@ -278,6 +305,242 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function PortariaTab({ rows, options, can, loading, reload, setError, setMessage }) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const [form, setForm] = useState(defaultPortariaForm);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const canCreate = can('balancas', 'cadastrar');
+  const canEdit = can('balancas', 'editar');
+  const canDelete = can('balancas', 'excluir') || can('balancas', 'cancelar');
+
+  function openNew() {
+    setEditing(null);
+    setForm(defaultPortariaForm);
+    setFieldErrors({});
+    setFormOpen(true);
+  }
+
+  function openEdit(row) {
+    setEditing(row);
+    setForm(portariaRowToForm(row));
+    setFieldErrors({});
+    setFormOpen(true);
+  }
+
+  function updateField(name, value) {
+    setFieldErrors((current) => {
+      if (!current[name]) return current;
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+
+    setForm((current) => {
+      const next = { ...current, [name]: value };
+      if (name === 'placa') applyVehicleByPlate(next, value, options);
+      if (name === 'fornecedor_id') applySupplier(next, value, options);
+      return next;
+    });
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setError('');
+    const validation = validatePortariaForm(form, rows, editing?.id);
+    if (validation.message) {
+      setFieldErrors(validation.fields);
+      setError(validation.message);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = normalizePortariaPayload(form);
+      if (editing?.id) await updatePortariaEntrada(editing.id, payload);
+      else await createPortariaEntrada(payload);
+      setMessage(editing?.id ? 'Entrada da portaria atualizada com sucesso.' : 'Entrada da portaria cadastrada com sucesso.');
+      setFormOpen(false);
+      setEditing(null);
+      setForm(defaultPortariaForm);
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(row) {
+    if (!window.confirm(`Excluir a entrada da portaria da NF ${row.numero_nf || row.id}?`)) return;
+    try {
+      await deletePortariaEntrada(row.id);
+      setMessage('Entrada da portaria excluida com sucesso.');
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
+  async function sendToLab(row) {
+    if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return;
+    try {
+      await createRecebimento({
+        data: row.data_entrada,
+        veiculo_id: row.veiculo_id,
+        motorista_id: row.motorista_id,
+        transportadora_id: row.transportadora_id,
+        fornecedor_id: row.fornecedor_id,
+        produto_id: row.produto_id,
+        tipo_veiculo: row.tipo_veiculo,
+        qtd_eixos: row.qtd_eixos,
+        nf_numero: row.numero_nf,
+        peso_nf: row.peso_nf_kg,
+        peso_bruto: 0,
+        tara: 0,
+        status: 'pendente',
+        observacao: row.observacao,
+      });
+      await updatePortariaEntrada(row.id, { status: 'ENVIADO_LABORATORIO' });
+      setMessage('Entrada disponibilizada para Aprovação Laboratório.');
+      await reload();
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
+  return (
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-extrabold text-slate-950">Portaria</h2>
+          <p className="text-sm font-medium text-slate-500">Registre a chegada do veículo antes do laboratório e da balança.</p>
+        </div>
+        {canCreate && (
+          <button type="button" onClick={openNew} className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700">
+            <Plus size={17} /> Nova entrada
+          </button>
+        )}
+      </div>
+
+      {formOpen && (
+        <form onSubmit={submit} noValidate className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Input label="Data de entrada" type="date" value={form.data_entrada} onChange={(value) => updateField('data_entrada', value)} error={fieldErrors.data_entrada} />
+            <Input label="Hora de entrada" type="time" value={form.hora_entrada} onChange={(value) => updateField('hora_entrada', value)} error={fieldErrors.hora_entrada} />
+            <Input label="Placa do veículo" value={form.placa} onChange={(value) => updateField('placa', normalizePlate(value))} error={fieldErrors.placa} />
+            <Input label="Veículo" value={form.tipo_veiculo} onChange={() => {}} readOnly error={fieldErrors.veiculo_id} />
+            <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={options.motoristas} />
+            <SearchableSelect label="Transportadora" value={form.transportadora_id} onChange={(value) => updateField('transportadora_id', value)} options={options.transportadoras} />
+            <SearchableSelect label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={options.fornecedores} error={fieldErrors.fornecedor_id} />
+            <Input label="CNPJ do fornecedor" value={formatDocument(form.cnpj_fornecedor)} onChange={() => {}} readOnly error={fieldErrors.cnpj_fornecedor} />
+            <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={options.produtos} error={fieldErrors.produto_id} />
+            <Input label="Número da NF" value={form.numero_nf} onChange={(value) => updateField('numero_nf', onlyDigits(value))} error={fieldErrors.numero_nf} />
+            <Input label="Série da NF" value={form.serie_nf} onChange={(value) => updateField('serie_nf', value.slice(0, 10).toUpperCase())} error={fieldErrors.serie_nf} />
+            <Input label="Peso NF KG" value={form.peso_nf_kg} onChange={(value) => updateField('peso_nf_kg', sanitizeWeightInput(value))} error={fieldErrors.peso_nf_kg} />
+            <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
+            <Input label="Quantidade de eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
+          </div>
+          <label className="grid gap-2 text-sm font-semibold text-slate-700">
+            Observação
+            <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button disabled={saving} className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-5 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:opacity-60">
+              <Save size={17} /> {saving ? 'Salvando...' : 'Salvar entrada'}
+            </button>
+            <button type="button" onClick={() => setFormOpen(false)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <X size={16} /> Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
+        <table className="min-w-[1180px] w-full text-left text-sm">
+          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              {['Data/Hora', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso NF KG', 'Status', 'Ações'].map((column) => (
+                <th key={column} className="px-3 py-3">{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={10} className="px-3 py-8 text-center font-semibold text-slate-500">Carregando portaria...</td></tr>
+            ) : rows.length ? rows.map((row) => (
+              <tr key={row.id} className="border-b last:border-0">
+                <td className="px-3 py-3 font-semibold">{dateBr(row.data_entrada)} {row.hora_entrada?.slice(0, 5) || ''}</td>
+                <td className="px-3 py-3 font-extrabold">{row.placa}</td>
+                <td className="px-3 py-3">{row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'}</td>
+                <td className="px-3 py-3">{row.motorista?.nome || '-'}</td>
+                <td className="px-3 py-3">{row.fornecedor?.nome || '-'}</td>
+                <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
+                <td className="px-3 py-3">{row.numero_nf}/{row.serie_nf}</td>
+                <td className="px-3 py-3">{kg(row.peso_nf_kg)}</td>
+                <td className="px-3 py-3"><PortariaStatus status={row.status} /></td>
+                <td className="px-3 py-3">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setViewing(row)} className="text-slate-600 hover:text-tijuca-700" title="Visualizar"><Eye size={17} /></button>
+                    {canEdit && <button type="button" onClick={() => openEdit(row)} className="text-slate-600 hover:text-tijuca-700" title="Editar"><Edit size={17} /></button>}
+                    {canCreate && row.status === 'AGUARDANDO_LABORATORIO' && <button type="button" onClick={() => sendToLab(row)} className="text-tijuca-700 hover:text-tijuca-900" title="Enviar para laboratório"><Check size={17} /></button>}
+                    {canDelete && <button type="button" onClick={() => remove(row)} className="text-rose-600 hover:text-rose-700" title="Excluir"><Trash2 size={17} /></button>}
+                  </div>
+                </td>
+              </tr>
+            )) : (
+              <tr><td colSpan={10} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada cadastrada.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {viewing && <PortariaViewModal row={viewing} onClose={() => setViewing(null)} />}
+    </div>
+  );
+}
+
+function PortariaViewModal({ row, onClose }) {
+  const fields = [
+    ['Data/Hora', `${dateBr(row.data_entrada)} ${row.hora_entrada?.slice(0, 5) || ''}`],
+    ['Placa', row.placa],
+    ['Veículo', row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'],
+    ['Motorista', row.motorista?.nome || '-'],
+    ['Transportadora', row.transportadora?.nome || '-'],
+    ['Fornecedor', row.fornecedor?.nome || '-'],
+    ['CNPJ', formatDocument(row.cnpj_fornecedor)],
+    ['Produto', row.produto?.nome || '-'],
+    ['NF/Série', `${row.numero_nf || '-'}/${row.serie_nf || '-'}`],
+    ['Peso NF', kg(row.peso_nf_kg)],
+    ['Status', row.status || '-'],
+    ['Observação', row.observacao || '-'],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
+      <div className="w-full max-w-3xl rounded-xl bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-950">Entrada da Portaria</h2>
+            <p className="text-sm font-semibold text-slate-500">NF {row.numero_nf || '-'} - {row.placa || '-'}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {fields.map(([labelText, value]) => (
+            <div key={labelText} className="rounded-lg bg-slate-50 p-3">
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">{labelText}</p>
+              <p className="mt-1 break-words text-sm font-bold text-slate-800">{value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1611,6 +1874,24 @@ function StatusBadge({ row }) {
   );
 }
 
+function PortariaStatus({ status }) {
+  const labels = {
+    AGUARDANDO_LABORATORIO: 'Aguardando laboratório',
+    ENVIADO_LABORATORIO: 'Enviado ao laboratório',
+    CANCELADA: 'Cancelada',
+  };
+  const classes = {
+    AGUARDANDO_LABORATORIO: 'bg-amber-100 text-amber-700 ring-amber-200',
+    ENVIADO_LABORATORIO: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    CANCELADA: 'bg-slate-100 text-slate-700 ring-slate-200',
+  };
+  return (
+    <span className={`rounded-md px-2 py-1 text-xs font-bold ring-1 ${classes[status] || classes.AGUARDANDO_LABORATORIO}`}>
+      {labels[status] || status || '-'}
+    </span>
+  );
+}
+
 function Alert({ tone, text }) {
   const style = tone === 'error'
     ? 'border-rose-200 bg-rose-50 text-rose-700'
@@ -1618,14 +1899,14 @@ function Alert({ tone, text }) {
   return <div className={`rounded-lg border p-3 text-sm font-semibold ${style}`}>{text}</div>;
 }
 
-function Input({ label, value, onChange, type = 'text', required, step, error }) {
+function Input({ label, value, onChange, type = 'text', required, step, error, readOnly }) {
   const inputClass = error
     ? 'h-11 rounded-lg border border-rose-500 bg-rose-50 px-3 outline-none ring-4 ring-rose-100 animate-pulse'
-    : 'h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100';
+    : 'h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100 read-only:bg-slate-100 read-only:text-slate-600';
   return (
     <label className="grid gap-2 text-sm font-semibold text-slate-700">
       {label}
-      <input className={inputClass} value={value ?? ''} onChange={(event) => onChange(event.target.value)} type={type} required={required} step={step} />
+      <input className={inputClass} value={value ?? ''} onChange={(event) => onChange(event.target.value)} type={type} required={required} step={step} readOnly={readOnly} />
       {error && <span className="text-xs font-bold text-rose-700">{error}</span>}
     </label>
   );
@@ -1773,12 +2054,82 @@ function validateRecebimentoForm(form) {
   };
 }
 
+function validatePortariaForm(form, rows, editingId) {
+  const missing = [];
+  const fields = {};
+
+  function requireField(key, label, valid = Boolean(form[key])) {
+    if (valid) return;
+    fields[key] = 'Campo obrigatorio';
+    missing.push(label);
+  }
+
+  requireField('data_entrada', 'Data de entrada');
+  requireField('hora_entrada', 'Hora de entrada');
+  requireField('placa', 'Placa do veiculo', isValidPlate(form.placa));
+  requireField('veiculo_id', 'Veiculo cadastrado');
+  requireField('fornecedor_id', 'Fornecedor');
+  requireField('cnpj_fornecedor', 'CNPJ do fornecedor', isValidCnpj(form.cnpj_fornecedor));
+  requireField('produto_id', 'Produto');
+  requireField('numero_nf', 'Numero da NF', Boolean(onlyDigits(form.numero_nf)));
+  requireField('serie_nf', 'Serie da NF');
+  requireField('peso_nf_kg', 'Peso NF KG', nullableLocaleNumber(form.peso_nf_kg) !== null && nullableLocaleNumber(form.peso_nf_kg) > 0);
+
+  if (form.placa && !form.veiculo_id) {
+    fields.placa = 'Veiculo nao cadastrado';
+    missing.push('Veiculo cadastrado');
+  }
+
+  const duplicate = rows.some((row) => row.id !== editingId
+    && row.fornecedor_id === form.fornecedor_id
+    && onlyDigits(row.numero_nf) === onlyDigits(form.numero_nf)
+    && normalizeName(row.serie_nf) === normalizeName(form.serie_nf)
+    && row.status !== 'CANCELADA');
+  if (duplicate) {
+    fields.numero_nf = 'NF duplicada';
+    fields.serie_nf = 'NF duplicada';
+    missing.push('NF ja cadastrada para este fornecedor e serie');
+  }
+
+  if (!missing.length) return { fields: {}, message: '' };
+  const hasVehicleError = fields.placa === 'Veiculo nao cadastrado';
+  return {
+    fields,
+    message: hasVehicleError
+      ? 'Veículo não cadastrado. Verifique a placa ou cadastre o veículo antes de continuar.'
+      : `Falta preencher ou corrigir: ${[...new Set(missing)].join(', ')}. Como corrigir: preencha os campos destacados em vermelho e tente salvar novamente.`,
+  };
+}
+
 function rowToForm(row) {
   if (!row) return { ...defaultRecebimento };
   const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
   form.valor_unitario = formatMoneyPt(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
   form.valor_total = formatMoneyPt(row.valor_total, 2);
   return form;
+}
+
+function portariaRowToForm(row) {
+  if (!row) return { ...defaultPortariaForm };
+  return {
+    ...defaultPortariaForm,
+    data_entrada: row.data_entrada || todayIso(),
+    hora_entrada: row.hora_entrada?.slice(0, 5) || currentTime(),
+    placa: row.placa || '',
+    veiculo_id: row.veiculo_id || '',
+    motorista_id: row.motorista_id || '',
+    fornecedor_id: row.fornecedor_id || '',
+    cnpj_fornecedor: row.cnpj_fornecedor || row.fornecedor?.cnpj || '',
+    produto_id: row.produto_id || '',
+    numero_nf: row.numero_nf || '',
+    serie_nf: row.serie_nf || '',
+    peso_nf_kg: formatWeightPt(row.peso_nf_kg),
+    transportadora_id: row.transportadora_id || '',
+    tipo_veiculo: row.tipo_veiculo || row.veiculo?.tipo_veiculo || '',
+    qtd_eixos: row.qtd_eixos ?? row.veiculo?.qtd_eixos ?? '',
+    observacao: row.observacao || '',
+    status: row.status || 'AGUARDANDO_LABORATORIO',
+  };
 }
 
 function rowToLaboratorioForm(row) {
@@ -1813,6 +2164,27 @@ function normalizeRecebimentoPayload(form) {
   };
 }
 
+function normalizePortariaPayload(form) {
+  return {
+    data_entrada: form.data_entrada,
+    hora_entrada: form.hora_entrada,
+    placa: normalizePlate(form.placa),
+    veiculo_id: form.veiculo_id,
+    motorista_id: form.motorista_id || null,
+    fornecedor_id: form.fornecedor_id,
+    cnpj_fornecedor: onlyDigits(form.cnpj_fornecedor),
+    produto_id: form.produto_id,
+    numero_nf: onlyDigits(form.numero_nf),
+    serie_nf: String(form.serie_nf || '').trim().toUpperCase(),
+    peso_nf_kg: nullableLocaleNumber(form.peso_nf_kg),
+    transportadora_id: form.transportadora_id || null,
+    tipo_veiculo: form.tipo_veiculo || null,
+    qtd_eixos: nullableNumber(form.qtd_eixos),
+    observacao: form.observacao || null,
+    status: form.status || 'AGUARDANDO_LABORATORIO',
+  };
+}
+
 function defaultLookupForm(fields, row = {}) {
   return Object.fromEntries(fields.map((field) => [field.name, row[field.name] ?? '']));
 }
@@ -1843,6 +2215,31 @@ function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
+function currentTime() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function applyVehicleByPlate(next, value, options) {
+  const plate = normalizePlate(value);
+  next.placa = plate;
+  next.veiculo_id = '';
+  next.tipo_veiculo = '';
+  next.qtd_eixos = '';
+  const vehicle = (options.veiculos || []).find((item) => normalizePlate(item.placa) === plate);
+  if (!vehicle) return;
+  next.veiculo_id = vehicle.id;
+  next.tipo_veiculo = vehicle.tipo_veiculo || '';
+  next.qtd_eixos = vehicle.qtd_eixos || '';
+  if (vehicle.motorista_id) next.motorista_id = vehicle.motorista_id;
+  if (vehicle.transportadora_id) next.transportadora_id = vehicle.transportadora_id;
+}
+
+function applySupplier(next, value, options) {
+  const supplier = (options.fornecedores || []).find((item) => item.id === value);
+  next.cnpj_fornecedor = supplier?.cnpj || '';
+}
+
 function nullableNumber(value) {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -1854,6 +2251,43 @@ function nullableLocaleNumber(value) {
   const normalized = normalizeLocaleNumber(value);
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function sanitizeWeightInput(value) {
+  return String(value || '').replace(/[^\d,.]/g, '');
+}
+
+function formatWeightPt(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  return numeric.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+function isValidPlate(value) {
+  return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(normalizePlate(value));
+}
+
+function isValidCnpj(value) {
+  const cnpj = onlyDigits(value);
+  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
+  const calc = (base) => {
+    const weights = base.length === 12
+      ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+      : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const sum = base.split('').reduce((acc, digit, index) => acc + Number(digit) * weights[index], 0);
+    const rest = sum % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
+  const first = calc(cnpj.slice(0, 12));
+  const second = calc(cnpj.slice(0, 12) + first);
+  return cnpj.endsWith(`${first}${second}`);
+}
+
+function formatDocument(value) {
+  const digits = onlyDigits(value);
+  if (digits.length <= 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/, (_, a, b, c, d) => `${a}.${b}.${c}${d ? `-${d}` : ''}`).replace(/[.-]$/, '');
+  return digits.slice(0, 14).replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, (_, a, b, c, d, e) => `${a}.${b}.${c}/${d}${e ? `-${e}` : ''}`).replace(/[./-]$/, '');
 }
 
 function normalizeLocaleNumber(value) {
