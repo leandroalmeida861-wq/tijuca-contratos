@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import {
@@ -285,6 +285,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const formRef = useRef(null);
 
   const filtered = filterRecebimentos(rows, query);
   const releasedForScale = rows.filter(isLaboratorioPendenteBalanca);
@@ -298,6 +299,13 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
     setEditing(row);
     setFormOpen(true);
   }
+
+  useEffect(() => {
+    if (!formOpen) return;
+    window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }, [formOpen, editing?.id]);
 
   async function remove(row) {
     if (!window.confirm(`Excluir o recebimento da NF ${row.nf_numero || row.id}?`)) return;
@@ -313,26 +321,26 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   return (
     <div className="grid gap-4">
       {releasedForScale.length > 0 && (
-        <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-panel">
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-panel">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-emerald-800">Aprovado laboratorio com pendencia de balanca</h2>
-              <p className="mt-1 text-sm font-semibold text-emerald-700">Preencha o recebimento de acordo com a placa do veiculo liberado.</p>
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-amber-900">Aprovado pelo laboratorio - pendente finalizar recebimento</h2>
+              <p className="mt-1 text-sm font-semibold text-amber-800">Clique em preencher balanca para abrir o cadastro abaixo e concluir NF, pesos e balanca.</p>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-emerald-700">{releasedForScale.length} carga(s)</span>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-amber-800">{releasedForScale.length} carga(s)</span>
           </div>
           <div className="mt-3 grid gap-2">
             {releasedForScale.map((row) => (
-              <div key={row.id} className="flex flex-col gap-2 rounded-lg bg-white p-3 text-sm shadow-sm md:flex-row md:items-center md:justify-between">
-                <div className="grid gap-1 font-semibold text-slate-700 md:grid-cols-5 md:gap-4">
-                  <span>NF: <strong>{row.nf_numero || '-'}</strong></span>
-                  <span>Placa: <strong>{placaVeiculo(row)}</strong></span>
-                  <span>Produto: <strong>{produtoNome(row)}</strong></span>
-                  <span>Fornecedor: <strong>{fornecedorNome(row)}</strong></span>
-                  <span>Umidade: <strong>{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</strong></span>
+              <div key={row.id} className="grid gap-3 rounded-lg border border-amber-100 bg-white p-3 text-sm shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  <PendingScaleField label="NF" value={row.nf_numero || 'Pendente'} />
+                  <PendingScaleField label="Placa" value={placaVeiculo(row)} strong />
+                  <PendingScaleField label="Produto" value={produtoNome(row)} />
+                  <PendingScaleField label="Fornecedor" value={fornecedorNome(row)} />
+                  <PendingScaleField label="Umidade" value={row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'} />
                 </div>
-                <button type="button" onClick={() => edit(row)} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-3 text-xs font-bold text-white hover:bg-tijuca-700">
-                  <Edit size={14} /> Preencher balança
+                <button type="button" onClick={() => edit(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-xs font-extrabold text-white shadow-sm hover:bg-tijuca-700">
+                  <Edit size={14} /> Preencher balanca
                 </button>
               </div>
             ))}
@@ -353,22 +361,33 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
       </div>
 
       {formOpen && (
-        <RecebimentoForm
-          row={editing}
-          options={options}
-          onClose={() => setFormOpen(false)}
-          onSaved={async () => {
-            setFormOpen(false);
-            setMessage(editing ? 'Recebimento atualizado com sucesso.' : 'Recebimento cadastrado com sucesso.');
-            await reload();
-          }}
-          setError={setError}
-        />
+        <div ref={formRef} className="scroll-mt-4">
+          <RecebimentoForm
+            row={editing}
+            options={options}
+            onClose={() => setFormOpen(false)}
+            onSaved={async () => {
+              setFormOpen(false);
+              setMessage(editing ? 'Recebimento atualizado com sucesso.' : 'Recebimento cadastrado com sucesso.');
+              await reload();
+            }}
+            setError={setError}
+          />
+        </div>
       )}
 
       {viewing && <RecebimentoViewModal row={viewing} onClose={() => setViewing(null)} />}
 
       <RecebimentosTable rows={filtered} loading={loading} can={can} onView={setViewing} onEdit={edit} onDelete={remove} />
+    </div>
+  );
+}
+
+function PendingScaleField({ label, value, strong }) {
+  return (
+    <div className="rounded-md bg-slate-50 px-3 py-2">
+      <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={`mt-1 break-words text-sm ${strong ? 'font-extrabold text-slate-950' : 'font-bold text-slate-800'}`}>{value || '-'}</p>
     </div>
   );
 }
