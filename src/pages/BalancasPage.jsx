@@ -244,10 +244,10 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
       ) : (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Metric title="Aprovadas no laboratório" value={metrics.aprovadasLaboratorio} icon={FlaskConical} />
-            <Metric title="Recebimentos na balança" value={metrics.recebimentosBalanca} icon={Truck} />
-            <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
-            <Metric title="Pendentes finalizar recebimento" value={metrics.pendentesFinalizar} icon={FlaskConical} />
+            <Metric title="Aprovadas no laboratório" value={metrics.aprovadasLaboratorio} icon={FlaskConical} color={chartColor(1)} />
+            <Metric title="Recebimentos na balança" value={metrics.recebimentosBalanca} icon={Truck} color={chartColor(3)} />
+            <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} color={chartColor(4)} />
+            <Metric title="Pendentes finalizar recebimento" value={metrics.pendentesFinalizar} icon={FlaskConical} color={chartColor(2)} />
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
@@ -1383,14 +1383,17 @@ function Filters({ options, filters, setFilters, onApply, onClear }) {
   );
 }
 
-function Metric({ title, value, icon: Icon, danger }) {
+function Metric({ title, value, icon: Icon, danger, color }) {
+  const iconStyle = danger
+    ? undefined
+    : { backgroundColor: `${color || chartColor(4)}1A`, color: color || chartColor(4) };
   return (
     <article className="flex min-h-24 items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</p>
         <p className={`mt-2 text-2xl font-extrabold ${danger ? 'text-rose-700' : 'text-slate-950'}`}>{value}</p>
       </div>
-      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${danger ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${danger ? 'bg-rose-50 text-rose-700' : ''}`} style={iconStyle}>
         <Icon size={20} />
       </div>
     </article>
@@ -1418,7 +1421,7 @@ function BarList({ data, valueFormatter }) {
             <span>{valueFormatter(item.value)}</span>
           </div>
           <div className="h-3 rounded-full bg-slate-100">
-            <div className="h-full rounded-full" style={{ width: `${Math.max((item.value / max) * 100, 4)}%`, backgroundColor: chartColor(index) }} />
+            <div className="h-full rounded-full" style={{ width: `${Math.max((item.value / max) * 100, 4)}%`, backgroundColor: item.color || chartColor(index) }} />
           </div>
         </div>
       ))}
@@ -1509,7 +1512,7 @@ function SupplierMoistureChart({ data }) {
           <Tooltip content={<SupplierMoistureTooltip />} />
           <Bar dataKey="umidadeMedia" radius={[0, 6, 6, 0]}>
             {data.map((item, index) => (
-              <Cell key={item.name} fill={item.umidadeMedia > 14 ? '#d97706' : chartColor(index)} />
+              <Cell key={item.name} fill={item.umidadeMedia > 14 ? chartColor(index + 2) : chartColor(index)} />
             ))}
           </Bar>
         </BarChart>
@@ -1532,7 +1535,7 @@ function BestSuppliersChart({ data }) {
             <span className="shrink-0 text-tijuca-700">{item.score.toFixed(0)} pts</span>
           </div>
           <div className="h-3 rounded-full bg-white">
-            <div className="h-full rounded-full bg-tijuca-600" style={{ width: `${Math.max(item.score, 6)}%` }} />
+            <div className="h-full rounded-full" style={{ width: `${Math.max(item.score, 6)}%`, backgroundColor: chartColor(index) }} />
           </div>
           <div className="grid gap-1 text-[11px] font-semibold text-slate-500 sm:grid-cols-3">
             <span>{kg(item.kgRecebido)}</span>
@@ -2064,9 +2067,9 @@ function groupCount(rows, getName) {
 
 function buildDashboardStatus(aprovadasLaboratorio, recebimentosBalanca, pendentesFinalizar) {
   return [
-    { name: 'Aprovadas no Laboratório', value: aprovadasLaboratorio.length },
-    { name: 'Finalizadas na Balança', value: recebimentosBalanca.length },
-    { name: 'Pendentes de Recebimento', value: pendentesFinalizar.length },
+    { name: 'Aprovadas no Laboratório', value: aprovadasLaboratorio.length, color: chartColor(1) },
+    { name: 'Finalizadas na Balança', value: recebimentosBalanca.length, color: chartColor(3) },
+    { name: 'Pendentes de Recebimento', value: pendentesFinalizar.length, color: chartColor(2) },
   ];
 }
 
@@ -2206,7 +2209,21 @@ function differenceClass(value) {
 }
 
 function chartColor(index) {
-  return ['#12325f', '#0f7f89', '#24a6a0', '#4f9a59', '#d6a62b', '#d8783d', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#64748b'][index % 11];
+  const chartColors = [
+    '#0F172A',
+    '#0F766E',
+    '#D97706',
+    '#2563EB',
+    '#16A34A',
+    '#DC2626',
+    '#7C3AED',
+    '#DB2777',
+    '#0891B2',
+    '#65A30D',
+    '#EA580C',
+    '#4F46E5',
+  ];
+  return chartColors[index % chartColors.length];
 }
 
 function compactKg(value) {
