@@ -53,9 +53,9 @@ import { dateBr, kg } from '../lib/formatters.js';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
-  { key: 'laboratorio', label: 'AprovaÃ§Ã£o LaboratÃ³rio' },
+  { key: 'laboratorio', label: 'Aprovação Laboratório' },
   { key: 'recebimentos', label: 'Recebimentos' },
-  { key: 'relatorios', label: 'RelatÃ³rios' },
+  { key: 'relatorios', label: 'Relatórios' },
 ];
 
 const tabKeys = new Set([...tabs.map((tab) => tab.key), 'cadastros']);
@@ -164,7 +164,7 @@ export default function BalancasPage() {
   function applyFilters(event) {
     event?.preventDefault();
     if (filters.dataInicial && filters.dataFinal && filters.dataInicial > filters.dataFinal) {
-      setError('A data inicial nÃ£o pode ser maior que a data final. Como corrigir: ajuste o perÃ­odo e tente novamente.');
+      setError('A data inicial não pode ser maior que a data final. Como corrigir: ajuste o período e tente novamente.');
       return;
     }
     load(filters);
@@ -178,9 +178,9 @@ export default function BalancasPage() {
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-2xl font-extrabold text-slate-950">BalanÃ§as</h1>
+        <h1 className="text-2xl font-extrabold text-slate-950">Balanças</h1>
         <p className="mt-1 text-sm font-medium text-slate-500">
-          Recebimento, pesagem, conferÃªncia de NF-e, laboratÃ³rio e relatÃ³rios integrados ao AgroFlow.
+          Recebimento, pesagem, conferência de NF-e, laboratório e relatórios integrados ao AgroFlow.
         </p>
       </header>
 
@@ -237,7 +237,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
 
       {loading ? (
         <div className="grid min-h-40 place-items-center rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-panel">
-          Carregando dados de balanÃ§as...
+          Carregando dados de balanças...
         </div>
       ) : (
         <>
@@ -245,7 +245,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
             <Metric title="Cargas no periodo" value={metrics.cargas} icon={Truck} />
             <Metric title="KG recebidos no periodo" value={kg(metrics.kgRecebidos)} icon={Truck} />
             <Metric title="Fornecedores no periodo" value={metrics.fornecedores} icon={Users} />
-            <Metric title="Pendentes laboratÃ³rio" value={metrics.pendentes} icon={FlaskConical} />
+            <Metric title="Pendentes laboratório" value={metrics.pendentes} icon={FlaskConical} />
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
@@ -258,16 +258,16 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
-            <ChartCard title="DistribuiÃ§Ã£o de Produtos por KG">
+            <ChartCard title="Distribuição de Produtos por KG">
               <ProductsPieChart data={productsDistribution} />
             </ChartCard>
-            <ChartCard title="Ranking de DiferenÃ§a em KG por Fornecedor">
+            <ChartCard title="Ranking de Diferença em KG por Fornecedor">
               <SupplierDifferenceChart data={supplierDifferences} />
             </ChartCard>
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
-            <ChartCard title="Umidade MÃ©dia por Fornecedor">
+            <ChartCard title="Umidade Média por Fornecedor">
               <SupplierMoistureChart data={supplierMoisture} />
             </ChartCard>
             <ChartCard title="Ranking de Melhores Fornecedores">
@@ -311,7 +311,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
     if (!window.confirm(`Excluir o recebimento da NF ${row.nf_numero || row.id}?`)) return;
     try {
       await deleteRecebimento(row.id);
-      setMessage('Recebimento excluÃ­do com sucesso.');
+      setMessage('Recebimento excluído com sucesso.');
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -494,7 +494,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{row ? 'Editar recebimento' : 'Novo recebimento'}</h2>
-          <p className="mt-1 text-sm text-slate-500">Pesos calculados pelo banco: peso lÃ­quido, diferenÃ§a em KG e diferenÃ§a percentual.</p>
+          <p className="mt-1 text-sm text-slate-500">Pesos calculados pelo banco: peso líquido, diferença em KG e diferença percentual.</p>
         </div>
         {!row && (
           <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
@@ -510,14 +510,14 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input label="Data" type="date" value={form.data} onChange={(value) => updateField('data', value)} required error={fieldErrors.data} />
         <Select label="Balanca" value={form.balanca_id} onChange={(value) => updateField('balanca_id', value)} options={localOptions.balancas} error={fieldErrors.balanca_id} />
-        <Select label="LaboratÃ³rio" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={localOptions.laboratorios} />
+        <Select label="Laboratório" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={localOptions.laboratorios} />
         <Input label="Numero da NF" value={form.nf_numero} onChange={(value) => updateField('nf_numero', value)} error={fieldErrors.nf_numero} />
         <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={localOptions.fornecedores} error={fieldErrors.fornecedor_id} />
         <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={localOptions.produtos} fallbackValue={form.produto_nome_manual} error={fieldErrors.produto_id} />
         <SearchableSelect label="Veiculo" value={form.veiculo_id} onChange={(value) => updateField('veiculo_id', value)} options={localOptions.veiculos} labelKey="placa" fallbackValue={form.veiculo_placa_manual} error={fieldErrors.veiculo_id} />
         <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={localOptions.motoristas} />
         <SearchableSelect label="Transportadora" value={form.transportadora_id} onChange={(value) => updateField('transportadora_id', value)} options={localOptions.transportadoras} />
-        <Input label="Tipo de veÃ­culo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
+        <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
         <Input label="Qtd. eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
         <Input label="Chave da NF-e" value={form.nf_chave_acesso} onChange={(value) => updateField('nf_chave_acesso', value)} />
         <Input label="Peso bruto KG" type="number" step="0.001" value={form.peso_bruto} onChange={(value) => updateField('peso_bruto', value)} required error={fieldErrors.peso_bruto} />
@@ -526,12 +526,12 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
-        <Input label="Valor unitÃ¡rio" type="number" step="0.0000000001" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
+        <Input label="Valor unitário" type="number" step="0.0000000001" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
         <Input label="Valor total" type="number" step="0.01" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
       </div>
 
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
-        ObservaÃ§Ã£o
+        Observação
         <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
       </label>
 
@@ -553,29 +553,29 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Status', recebimentoStatusLabel(row)],
     ['NF', row.nf_numero || '-'],
     ['Chave NF-e', row.nf_chave_acesso || '-'],
-    ['BalanÃ§a', row.balanca?.nome || '-'],
-    ['LaboratÃ³rio', row.laboratorio?.nome || '-'],
+    ['Balança', row.balanca?.nome || '-'],
+    ['Laboratório', row.laboratorio?.nome || '-'],
     ['Fornecedor', fornecedorNome(row)],
     ['Produto', produtoNome(row)],
-    ['VeÃ­culo / placa', placaVeiculo(row)],
+    ['Veículo / placa', placaVeiculo(row)],
     ['Motorista', row.motorista?.nome || '-'],
     ['Transportadora', row.transportadora?.nome || '-'],
-    ['Tipo de veÃ­culo', row.tipo_veiculo || '-'],
+    ['Tipo de veículo', row.tipo_veiculo || '-'],
     ['Qtd. eixos', row.qtd_eixos || '-'],
     ['Peso bruto', kg(row.peso_bruto)],
     ['Tara', kg(row.tara)],
-    ['Peso lÃ­quido', kg(row.peso_liquido)],
+    ['Peso líquido', kg(row.peso_liquido)],
     ['Peso NF', row.peso_nf ? kg(row.peso_nf) : '-'],
-    ['DiferenÃ§a', kg(row.diferenca_kg)],
-    ['DiferenÃ§a %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
+    ['Diferença', kg(row.diferenca_kg)],
+    ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
     ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
-    ['Valor unitÃ¡rio', row.valor_unitario ?? '-'],
+    ['Valor unitário', row.valor_unitario ?? '-'],
     ['Valor total', row.valor_total ?? '-'],
-    ['Motivo reprovaÃ§Ã£o', row.motivo_reprovacao || '-'],
+    ['Motivo reprovação', row.motivo_reprovacao || '-'],
     ['Motivo cancelamento', row.motivo_cancelamento || '-'],
-    ['ObservaÃ§Ã£o', row.observacao || '-'],
+    ['Observação', row.observacao || '-'],
   ];
 
   return (
@@ -744,11 +744,11 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
       <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{editingLabId ? 'Editar liberacao do laboratorio' : 'Nova liberacao manual'}</h2>
-          <p className="mt-1 text-sm text-slate-500">Use quando o grÃ£o chegar primeiro no laboratÃ³rio. A balanÃ§a completa NF-e, pesos e dados finais depois.</p>
+          <p className="mt-1 text-sm text-slate-500">Use quando o grão chegar primeiro no laboratório. A balança completa NF-e, pesos e dados finais depois.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Input label="Data" type="date" value={labForm.data} onChange={(value) => updateLabForm('data', value)} required />
-          <Select label="LaboratÃ³rio" value={labForm.laboratorio_id} onChange={(value) => updateLabForm('laboratorio_id', value)} options={options.laboratorios} />
+          <Select label="Laboratório" value={labForm.laboratorio_id} onChange={(value) => updateLabForm('laboratorio_id', value)} options={options.laboratorios} />
           <Input label="Fornecedor" value={labForm.fornecedor_nome_manual} onChange={(value) => updateLabForm('fornecedor_nome_manual', value)} required />
           <Input label="Produto" value={labForm.produto_nome_manual} onChange={(value) => updateLabForm('produto_nome_manual', value)} required />
           <Input label="Veiculo / placa" value={labForm.veiculo_placa_manual} onChange={(value) => updateLabForm('veiculo_placa_manual', value)} required />
@@ -768,7 +768,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           </label>
         )}
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
-          ObservaÃ§Ã£o do laboratÃ³rio
+          Observação do laboratório
           <textarea value={labForm.observacao || ''} onChange={(event) => updateLabForm('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
         </label>
         <div className="flex flex-wrap gap-2">
@@ -1052,12 +1052,12 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
           umidade: edit.umidade ?? row.umidade,
           liberado_por: edit.liberado_por || row.liberado_por,
         });
-        setMessage('Carga aprovada pelo laboratÃ³rio.');
+        setMessage('Carga aprovada pelo laboratório.');
       }
       if (action === 'reprovar') {
         const motivo = reason[row.id]?.trim();
         if (!motivo) {
-          setError('Informe o motivo da reprovaÃ§Ã£o. Como corrigir: escreva o motivo no campo Motivo e tente novamente.');
+          setError('Informe o motivo da reprovação. Como corrigir: escreva o motivo no campo Motivo e tente novamente.');
           return;
         }
         await rejectRecebimento(row.id, {
@@ -1084,7 +1084,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
   }
 
   if (!can('balancas', 'aprovar') && !can('balancas', 'cancelar')) {
-    return <Alert tone="error" text="VocÃª nÃ£o tem permissÃ£o para aprovar, reprovar ou cancelar cargas de laboratÃ³rio." />;
+    return <Alert tone="error" text="Você não tem permissão para aprovar, reprovar ou cancelar cargas de laboratório." />;
   }
 
   return (
@@ -1097,7 +1097,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="text-xs font-bold uppercase text-slate-500">
             <tr>
-              {['Data', 'BalanÃ§a', 'Fornecedor', 'Produto', 'Placa', 'Peso lÃ­quido', 'Peso NF', 'DiferenÃ§a', 'Ticket', 'Umidade', 'Liberado por', 'Motivo', 'AÃ§Ãµes'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
+              {['Data', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Peso líquido', 'Peso NF', 'Diferença', 'Ticket', 'Umidade', 'Liberado por', 'Motivo', 'Ações'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -1117,7 +1117,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
                 <td className="px-3 py-3"><SmallInput type="number" value={edits[row.id]?.umidade ?? row.umidade ?? ''} onChange={(value) => updateEdit(row.id, 'umidade', value)} /></td>
                 <td className="px-3 py-3"><SmallInput value={edits[row.id]?.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => updateEdit(row.id, 'liberado_por', value)} /></td>
                 <td className="px-3 py-3">
-                  <textarea value={reason[row.id] || ''} onChange={(event) => setReason((current) => ({ ...current, [row.id]: event.target.value }))} rows={2} className="w-52 rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-tijuca-500" placeholder="ObrigatÃ³rio para reprovar/cancelar" />
+                  <textarea value={reason[row.id] || ''} onChange={(event) => setReason((current) => ({ ...current, [row.id]: event.target.value }))} rows={2} className="w-52 rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-tijuca-500" placeholder="Obrigatório para reprovar/cancelar" />
                 </td>
                 <td className="px-3 py-3">
                   <div className="flex flex-col gap-2">
@@ -1130,7 +1130,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
             ))}
           </tbody>
         </table>
-        {!pending.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhuma carga pendente para laboratÃ³rio.</p>}
+        {!pending.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhuma carga pendente para laboratório.</p>}
       </div>
     </div>
   );
@@ -1213,7 +1213,7 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
     if (!window.confirm(`Excluir ${row.nome || row.placa}?`)) return;
     try {
       await deleteLookup(config.table, row.id);
-      setMessage('Cadastro excluÃ­do com sucesso.');
+      setMessage('Cadastro excluído com sucesso.');
       await Promise.all([load(), reloadMain()]);
     } catch (err) {
       setError(toUserError(err));
@@ -1251,7 +1251,7 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="text-xs font-bold uppercase text-slate-500">
-              <tr>{config.columns.map((column) => <th key={column} className="border-b px-4 py-3">{label(column)}</th>)}<th className="border-b px-4 py-3">AÃ§Ãµes</th></tr>
+              <tr>{config.columns.map((column) => <th key={column} className="border-b px-4 py-3">{label(column)}</th>)}<th className="border-b px-4 py-3">Ações</th></tr>
             </thead>
             <tbody>
               {filtered.map((row) => (
@@ -1281,7 +1281,7 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">RelatÃ³rio de recebimentos</h2>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Relatório de recebimentos</h2>
             <p className="mt-1 text-sm text-slate-500">{rows.length} registro(s) encontrados nos filtros atuais.</p>
           </div>
           {can('balancas', 'exportar') && (
@@ -1302,7 +1302,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
       <table className="w-full min-w-[1180px] text-left text-sm">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>
-            {['Data', 'NF', 'BalanÃ§a', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'LÃ­quido', 'Peso NF', 'DiferenÃ§a', 'Status', 'AÃ§Ãµes'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
+            {['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso NF', 'Diferença', 'Status', 'Ações'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -1344,10 +1344,10 @@ function Filters({ options, filters, setFilters, onApply, onClear }) {
     <form onSubmit={onApply} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-6">
       <Input label="Data inicial" type="date" value={filters.dataInicial} onChange={(value) => setFilters((current) => ({ ...current, dataInicial: value }))} />
       <Input label="Data final" type="date" value={filters.dataFinal} onChange={(value) => setFilters((current) => ({ ...current, dataFinal: value }))} />
-      <Select label="BalanÃ§a" value={filters.balancaId} onChange={(value) => setFilters((current) => ({ ...current, balancaId: value }))} options={options.balancas} />
+      <Select label="Balança" value={filters.balancaId} onChange={(value) => setFilters((current) => ({ ...current, balancaId: value }))} options={options.balancas} />
       <Select label="Fornecedor" value={filters.fornecedorId} onChange={(value) => setFilters((current) => ({ ...current, fornecedorId: value }))} options={options.fornecedores} />
       <Select label="Produto" value={filters.produtoId} onChange={(value) => setFilters((current) => ({ ...current, produtoId: value }))} options={options.produtos} />
-      <Select label="LaboratÃ³rio" value={filters.laboratorioId} onChange={(value) => setFilters((current) => ({ ...current, laboratorioId: value }))} options={options.laboratorios} />
+      <Select label="Laboratório" value={filters.laboratorioId} onChange={(value) => setFilters((current) => ({ ...current, laboratorioId: value }))} options={options.laboratorios} />
       <Select label="Status" value={filters.status} onChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={[
         { id: 'pendente', nome: 'Pendente' },
         { id: 'aprovada', nome: 'Aprovada' },
@@ -1476,7 +1476,7 @@ function SupplierDifferenceChart({ data }) {
 }
 
 function SupplierMoistureChart({ data }) {
-  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem umidade registrada no perÃ­odo.</p>;
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem umidade registrada no período.</p>;
 
   return (
     <div className="h-80 min-w-0">
@@ -1515,7 +1515,7 @@ function BestSuppliersChart({ data }) {
           </div>
           <div className="grid gap-1 text-[11px] font-semibold text-slate-500 sm:grid-cols-3">
             <span>{kg(item.kgRecebido)}</span>
-            <span>{item.taxaAprovacao.toFixed(0)}% aprovaÃ§Ã£o</span>
+            <span>{item.taxaAprovacao.toFixed(0)}% aprovação</span>
             <span>{item.divergenciaPercentualAbs.toFixed(2)}% diverg.</span>
           </div>
         </div>
@@ -1531,7 +1531,7 @@ function ProductPieTooltip({ active, payload }) {
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
       <p className="font-extrabold text-slate-900">{item.name}</p>
       <p className="mt-1 font-semibold text-slate-600">Total: {kg(item.kgTotal)}</p>
-      <p className="font-semibold text-slate-600">ParticipaÃ§Ã£o: {item.percent.toFixed(2)}%</p>
+      <p className="font-semibold text-slate-600">Participação: {item.percent.toFixed(2)}%</p>
     </div>
   );
 }
@@ -1545,7 +1545,7 @@ function SupplierDifferenceTooltip({ active, payload }) {
       <p className="mt-1 font-semibold text-slate-600">KG da nota: {kg(item.kgNota)}</p>
       <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
       <p className={item.diferencaKg < 0 ? 'font-extrabold text-rose-700' : item.diferencaKg > 0 ? 'font-extrabold text-blue-700' : 'font-extrabold text-slate-600'}>
-        DiferenÃ§a: {kg(item.diferencaKg)}
+        Diferença: {kg(item.diferencaKg)}
       </p>
       <p className="font-semibold text-slate-600">Percentual: {item.percentualDiferenca.toFixed(2)}%</p>
     </div>
@@ -1558,7 +1558,7 @@ function SupplierMoistureTooltip({ active, payload }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
       <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">Umidade mÃ©dia: {item.umidadeMedia.toFixed(2)}%</p>
+      <p className="mt-1 font-semibold text-slate-600">Umidade média: {item.umidadeMedia.toFixed(2)}%</p>
       <p className="font-semibold text-slate-600">Registros com umidade: {item.registros}</p>
       <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
     </div>
