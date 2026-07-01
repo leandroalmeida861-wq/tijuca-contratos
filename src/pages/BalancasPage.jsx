@@ -457,8 +457,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         transportadora_id: carrier?.id || current.transportadora_id,
         veiculo_id: vehicle?.id || current.veiculo_id,
         peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
-        valor_unitario: mainItem.valorUnitario ?? current.valor_unitario,
-        valor_total: parsed.valorTotalNota ?? current.valor_total,
+        valor_unitario: formatDecimalPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 6)) || current.valor_unitario,
+        valor_total: formatDecimalPt(parsed.valorTotalNota, 2) || current.valor_total,
       }));
       setXmlInfo(`XML importado: NF ${parsed.numero || '-'} | Fornecedor e produto devem ser selecionados manualmente.`);
     } catch (err) {
@@ -528,8 +528,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
-        <Input label="Valor unitário" type="number" step="0.0000000001" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
-        <Input label="Valor total" type="number" step="0.01" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
+        <DecimalInput label="Valor unitário" decimals={localeDecimalPlaces(form.valor_unitario, 6)} value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
+        <DecimalInput label="Valor total" decimals={2} value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
       </div>
 
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
@@ -1609,6 +1609,31 @@ function Input({ label, value, onChange, type = 'text', required, step, error })
   );
 }
 
+function DecimalInput({ label, value, onChange, decimals = 2, error }) {
+  const inputClass = error
+    ? 'h-11 rounded-lg border border-rose-500 bg-rose-50 px-3 outline-none ring-4 ring-rose-100 animate-pulse'
+    : 'h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100';
+
+  function handleChange(rawValue) {
+    onChange(formatDecimalTyping(rawValue, decimals));
+  }
+
+  return (
+    <label className="grid gap-2 text-sm font-semibold text-slate-700">
+      {label}
+      <input
+        className={inputClass}
+        value={value ?? ''}
+        onChange={(event) => handleChange(event.target.value)}
+        type="text"
+        inputMode="numeric"
+        placeholder={decimals === 2 ? '0,00' : '0,000000'}
+      />
+      {error && <span className="text-xs font-bold text-rose-700">{error}</span>}
+    </label>
+  );
+}
+
 function SmallInput({ value, onChange, type = 'text' }) {
   return <input type={type} value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs outline-none focus:border-tijuca-500" />;
 }
@@ -1712,7 +1737,10 @@ function validateRecebimentoForm(form) {
 
 function rowToForm(row) {
   if (!row) return { ...defaultRecebimento };
-  return Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
+  const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
+  form.valor_unitario = formatDecimalPt(row.valor_unitario, 6);
+  form.valor_total = formatDecimalPt(row.valor_total, 2);
+  return form;
 }
 
 function rowToLaboratorioForm(row) {
@@ -1741,8 +1769,8 @@ function normalizeRecebimentoPayload(form) {
     tara: Number(form.tara || 0),
     peso_nf: nullableNumber(form.peso_nf),
     umidade: nullableNumber(form.umidade),
-    valor_unitario: nullableNumber(form.valor_unitario),
-    valor_total: nullableNumber(form.valor_total),
+    valor_unitario: nullableLocaleNumber(form.valor_unitario),
+    valor_total: nullableLocaleNumber(form.valor_total),
   };
 }
 
@@ -1780,6 +1808,50 @@ function nullableNumber(value) {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function nullableLocaleNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const normalized = String(value).trim().replace(/\./g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDecimalTyping(value, decimals = 2) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const scale = Math.max(0, Number(decimals) || 0);
+  const padded = digits.padStart(scale + 1, '0');
+  const integer = scale ? padded.slice(0, -scale) : padded;
+  const decimal = scale ? padded.slice(-scale) : '';
+  const formattedInteger = formatThousandsPt(integer);
+  return scale ? `${formattedInteger},${decimal}` : formattedInteger;
+}
+
+function formatDecimalPt(value, decimals = 2) {
+  if (value === '' || value === null || value === undefined) return '';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '';
+  const scale = Math.max(0, Number(decimals) || 0);
+  const [integer, decimal = ''] = numeric.toFixed(scale).split('.');
+  const formattedInteger = formatThousandsPt(integer);
+  return scale ? `${formattedInteger},${decimal}` : formattedInteger;
+}
+
+function formatThousandsPt(value) {
+  const clean = String(value || '0').replace(/^0+(?=\d)/, '') || '0';
+  return clean.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function displayDecimalPlaces(value, fallback = 2) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.min(Math.max(Math.trunc(numeric), 2), 10);
+}
+
+function localeDecimalPlaces(value, fallback = 2) {
+  const decimal = String(value || '').split(',')[1] || '';
+  return decimal.length ? decimal.length : fallback;
 }
 
 function findDuplicateLookup(config, form, rows, editingId) {

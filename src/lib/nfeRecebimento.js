@@ -23,13 +23,17 @@ export function parseNfeRecebimento(xml) {
 
   const itens = sectionsAll(xml, 'det').map((det) => {
     const prod = section(det, 'prod') || det;
+    const valorUnitarioRaw = tagText(prod, 'vUnCom');
+    const valorTotalRaw = tagText(prod, 'vProd');
     return {
       codigo: tagText(prod, 'cProd'),
       nome: tagText(prod, 'xProd') || '(sem descrição)',
       unidade: tagText(prod, 'uCom'),
       quantidade: numberValue(tagText(prod, 'qCom')),
-      valorUnitario: numberValue(tagText(prod, 'vUnCom')),
-      valorTotal: numberValue(tagText(prod, 'vProd')),
+      valorUnitario: numberValue(valorUnitarioRaw),
+      valorUnitarioDecimais: decimalPlaces(valorUnitarioRaw),
+      valorTotal: numberValue(valorTotalRaw),
+      valorTotalDecimais: decimalPlaces(valorTotalRaw),
     };
   });
 
@@ -97,6 +101,11 @@ function numberValue(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(String(value).replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function decimalPlaces(value) {
+  const decimal = String(value || '').trim().replace(',', '.').split('.')[1] || '';
+  return decimal.length;
 }
 
 function onlyDigits(value) {
