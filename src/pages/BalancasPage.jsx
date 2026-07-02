@@ -766,7 +766,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
         matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : `Produto do XML nao encontrado com seguranca no cadastro (${xmlProduct.item?.nome || 'sem descricao'}). Selecione o produto antes de salvar.`,
-        isSacaUnit(xmlUnit) ? `Quantidade convertida: ${xmlQuantity || 0} SC x ${xmlPesoPorSaca || 60} KG = ${formatWeightPt(xmlPesoNotaKg)} KG` : `Quantidade da nota em KG: ${formatWeightPt(xmlPesoNotaKg)}`,
+        conversionMessage(xmlQuantity, xmlUnit, xmlPesoNotaKg, xmlPesoPorSaca),
         carrier ? `Transportadora vinculada: ${carrier.nome}` : 'Transportadora do XML nao foi cadastrada automaticamente.',
         vehicle ? `Veiculo vinculado pela placa: ${vehicle.placa}` : 'Veiculo do XML nao foi cadastrado automaticamente.',
       ].join(' | '));
@@ -837,6 +837,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Select label="Unidade da nota" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
           { id: 'KG', nome: 'KG' },
           { id: 'SC', nome: 'SC / Saca' },
+          { id: 'TON', nome: 'TON / Tonelada' },
         ]} />
         {isSacaUnit(form.unidade_nota) && (
           <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
@@ -2403,17 +2404,36 @@ function normalizarQuantidadeParaKg(quantidade, unidade, pesoPorSaca = 60) {
     const sackWeight = nullableLocaleNumber(pesoPorSaca) ?? 60;
     return Number((numericQuantity * sackWeight).toFixed(3));
   }
+  if (isTonUnit(normalizedUnit)) {
+    return Number((numericQuantity * 1000).toFixed(3));
+  }
   return Number(numericQuantity.toFixed(3));
 }
 
 function normalizeNotaUnidade(unidade) {
   const value = String(unidade || 'KG').trim().toUpperCase();
   if (isSacaUnit(value)) return 'SC';
+  if (isTonUnit(value)) return 'TON';
   return 'KG';
 }
 
 function isSacaUnit(unidade) {
   return ['SACA', 'SACAS', 'SC', 'SCS'].includes(String(unidade || '').trim().toUpperCase());
+}
+
+function isTonUnit(unidade) {
+  return ['T', 'TON', 'TONS', 'TONELADA', 'TONELADAS'].includes(String(unidade || '').trim().toUpperCase());
+}
+
+function conversionMessage(quantity, unit, convertedWeight, sackWeight = 60) {
+  const normalizedUnit = normalizeNotaUnidade(unit);
+  if (isSacaUnit(normalizedUnit)) {
+    return `Quantidade convertida: ${quantity || 0} SC x ${sackWeight || 60} KG = ${formatWeightPt(convertedWeight)} KG`;
+  }
+  if (isTonUnit(normalizedUnit)) {
+    return `Quantidade convertida: ${quantity || 0} TON x 1.000 KG = ${formatWeightPt(convertedWeight)} KG`;
+  }
+  return `Quantidade da nota em KG: ${formatWeightPt(convertedWeight)}`;
 }
 
 function resolveHumidityValue(primary = {}, fallback = {}) {
