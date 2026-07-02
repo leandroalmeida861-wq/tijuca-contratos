@@ -735,8 +735,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           veiculo_id: vehicle?.id || current.veiculo_id,
           fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
-          produto_id: matchedProduct?.id || current.produto_id,
-          produto_nome_manual: matchedProduct?.id ? '' : current.produto_nome_manual,
+          produto_id: matchedProduct?.id || '',
+          produto_nome_manual: matchedProduct?.id ? '' : '',
           peso_nf: xmlQuantity ?? current.peso_nf,
           valor_unitario: formatMoneyPt(xmlUnitValue, displayDecimalPlaces(xmlProduct.unitDecimalPlaces, 2)) || current.valor_unitario,
           valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
@@ -749,7 +749,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       setXmlInfo([
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
-        matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : 'Produto do XML nao encontrado no cadastro. Selecione o produto antes de salvar.',
+        matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : `Produto do XML nao encontrado com seguranca no cadastro (${xmlProduct.item?.nome || 'sem descricao'}). Selecione o produto antes de salvar.`,
         carrier ? `Transportadora vinculada: ${carrier.nome}` : 'Transportadora do XML nao foi cadastrada automaticamente.',
         vehicle ? `Veiculo vinculado pela placa: ${vehicle.placa}` : 'Veiculo do XML nao foi cadastrado automaticamente.',
       ].join(' | '));
@@ -2465,6 +2465,10 @@ function normalizeProductName(value) {
     .trim();
 }
 
+function productTokens(value) {
+  return normalizeProductName(value).split(/\s+/).filter(Boolean);
+}
+
 function findFornecedorFromNfe(parsed, fornecedores = []) {
   const documentoXml = onlyDigits(parsed?.emitente?.documento);
   if (!documentoXml) return null;
@@ -2491,12 +2495,40 @@ function findVeiculoFromNfe(parsed, veiculos = []) {
 function findProdutoFromNfe(item, produtos = []) {
   const normalizedXmlName = normalizeProductName(item?.nome);
   if (!normalizedXmlName) return null;
-  return (produtos || []).find((produto) => {
-    const normalizedProduct = normalizeProductName(produto.nome);
-    return normalizedProduct === normalizedXmlName
-      || normalizedProduct.includes(normalizedXmlName)
-      || normalizedXmlName.includes(normalizedProduct);
-  }) || null;
+  const candidates = (produtos || [])
+    .map((produto) => {
+      const normalizedProduct = normalizeProductName(produto.nome);
+      return { produto, score: productMatchScore(normalizedXmlName, normalizedProduct) };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length) return null;
+  const [best, second] = candidates;
+  if (second && second.score === best.score) return null;
+  return best.produto;
+}
+
+function productMatchScore(normalizedXmlName, normalizedProduct) {
+  if (!normalizedXmlName || !normalizedProduct) return 0;
+  if (normalizedProduct === normalizedXmlName) return 100;
+
+  const xmlTokens = productTokens(normalizedXmlName);
+  const productTokenList = productTokens(normalizedProduct);
+  if (!xmlTokens.length || !productTokenList.length) return 0;
+
+  const xmlSet = new Set(xmlTokens);
+  const productSet = new Set(productTokenList);
+  const sameTokenSet = xmlSet.size === productSet.size && [...xmlSet].every((token) => productSet.has(token));
+  if (sameTokenSet) return 95;
+
+  const xmlHasAllProductTokens = [...productSet].every((token) => xmlSet.has(token));
+  const productHasAllXmlTokens = [...xmlSet].every((token) => productSet.has(token));
+
+  if (xmlHasAllProductTokens && xmlTokens.length === productTokenList.length) return 90;
+  if (productHasAllXmlTokens && xmlTokens.length === productTokenList.length) return 90;
+
+  return 0;
 }
 
 function resolveNfeProduct(parsed, produtos = []) {
