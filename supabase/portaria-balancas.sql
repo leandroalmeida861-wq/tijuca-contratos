@@ -5,6 +5,7 @@ create table if not exists public.portaria_entradas (
   id uuid primary key default gen_random_uuid(),
   data_entrada date not null default current_date,
   hora_entrada time not null default localtime,
+  balanca_id uuid references public.balancas(id) on delete set null,
   placa text not null,
   veiculo_id uuid not null references public.recebimento_veiculos(id) on delete restrict,
   motorista_id uuid references public.recebimento_motoristas(id) on delete set null,
@@ -27,6 +28,9 @@ create table if not exists public.portaria_entradas (
   constraint portaria_entradas_peso_check check (peso_nf_kg > 0)
 );
 
+alter table public.portaria_entradas
+add column if not exists balanca_id uuid references public.balancas(id) on delete set null;
+
 create unique index if not exists portaria_nf_fornecedor_serie_unica
 on public.portaria_entradas (fornecedor_id, numero_nf, serie_nf)
 where status <> 'CANCELADA';
@@ -34,6 +38,7 @@ where status <> 'CANCELADA';
 create index if not exists portaria_entradas_data_idx on public.portaria_entradas (data_entrada desc);
 create index if not exists portaria_entradas_placa_idx on public.portaria_entradas (placa);
 create index if not exists portaria_entradas_status_idx on public.portaria_entradas (status);
+create index if not exists portaria_entradas_balanca_idx on public.portaria_entradas (balanca_id);
 create index if not exists portaria_entradas_fornecedor_idx on public.portaria_entradas (fornecedor_id);
 create index if not exists portaria_entradas_produto_idx on public.portaria_entradas (produto_id);
 

@@ -104,6 +104,7 @@ const defaultRecebimento = {
 const defaultPortariaForm = {
   data_entrada: todayIso(),
   hora_entrada: currentTime(),
+  balanca_id: '',
   placa: '',
   veiculo_id: '',
   motorista_id: '',
@@ -393,6 +394,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     try {
       await createRecebimento({
         data: row.data_entrada,
+        balanca_id: row.balanca_id,
         veiculo_id: row.veiculo_id,
         motorista_id: row.motorista_id,
         transportadora_id: row.transportadora_id,
@@ -434,6 +436,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Input label="Data de entrada" type="date" value={form.data_entrada} onChange={(value) => updateField('data_entrada', value)} error={fieldErrors.data_entrada} />
             <Input label="Hora de entrada" type="time" value={form.hora_entrada} onChange={(value) => updateField('hora_entrada', value)} error={fieldErrors.hora_entrada} />
+            <Select label="Balança" value={form.balanca_id} onChange={(value) => updateField('balanca_id', value)} options={options.balancas} error={fieldErrors.balanca_id} />
             <Input label="Placa do veículo" value={form.placa} onChange={(value) => updateField('placa', normalizePlate(value))} error={fieldErrors.placa} />
             <Input label="Veículo" value={form.tipo_veiculo} onChange={() => {}} readOnly error={fieldErrors.veiculo_id} />
             <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={options.motoristas} />
@@ -466,17 +469,18 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
         <table className="min-w-[1180px] w-full text-left text-sm">
           <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              {['Data/Hora', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso NF KG', 'Status', 'Ações'].map((column) => (
+              {['Data/Hora', 'Balança', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso NF KG', 'Status', 'Ações'].map((column) => (
                 <th key={column} className="px-3 py-3">{column}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="px-3 py-8 text-center font-semibold text-slate-500">Carregando portaria...</td></tr>
+              <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Carregando portaria...</td></tr>
             ) : rows.length ? rows.map((row) => (
               <tr key={row.id} className="border-b last:border-0">
                 <td className="px-3 py-3 font-semibold">{dateBr(row.data_entrada)} {row.hora_entrada?.slice(0, 5) || ''}</td>
+                <td className="px-3 py-3">{balancaNome(row, options)}</td>
                 <td className="px-3 py-3 font-extrabold">{row.placa}</td>
                 <td className="px-3 py-3">{row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'}</td>
                 <td className="px-3 py-3">{row.motorista?.nome || '-'}</td>
@@ -495,20 +499,21 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={10} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada cadastrada.</td></tr>
+              <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada cadastrada.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {viewing && <PortariaViewModal row={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <PortariaViewModal row={viewing} options={options} onClose={() => setViewing(null)} />}
     </div>
   );
 }
 
-function PortariaViewModal({ row, onClose }) {
+function PortariaViewModal({ row, options, onClose }) {
   const fields = [
     ['Data/Hora', `${dateBr(row.data_entrada)} ${row.hora_entrada?.slice(0, 5) || ''}`],
+    ['Balança', balancaNome(row, options)],
     ['Placa', row.placa],
     ['Veículo', row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'],
     ['Motorista', row.motorista?.nome || '-'],
@@ -913,6 +918,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
     try {
       if (action === 'aprovar') {
         await approveRecebimento(row.id, {
+          nf_numero: edit.nf_numero || row.nf_numero,
           ticket_numero: edit.ticket_numero || row.ticket_numero,
           umidade: edit.umidade ?? row.umidade,
           liberado_por: edit.liberado_por || row.liberado_por,
@@ -927,6 +933,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         }
         await rejectRecebimento(row.id, {
           motivo_reprovacao: motivo,
+          nf_numero: edit.nf_numero || row.nf_numero,
           ticket_numero: edit.ticket_numero || row.ticket_numero,
           umidade: edit.umidade ?? row.umidade,
           liberado_por: edit.liberado_por || row.liberado_por,
@@ -1171,7 +1178,10 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
         <LabCell label="Fornecedor" value={fornecedorNome(row)} />
       </div>
 
-      <div className="grid gap-3 p-4 lg:grid-cols-4">
+      <div className="grid gap-3 p-4 lg:grid-cols-5">
+        <SmallField label="Número da NF">
+          <SmallInput value={edit.nf_numero ?? row.nf_numero ?? ''} onChange={(value) => onEdit(row.id, 'nf_numero', onlyDigits(value))} />
+        </SmallField>
         <SmallField label="Ticket">
           <SmallInput value={edit.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => onEdit(row.id, 'ticket_numero', value)} />
         </SmallField>
@@ -2121,6 +2131,7 @@ function portariaRowToForm(row) {
     ...defaultPortariaForm,
     data_entrada: row.data_entrada || todayIso(),
     hora_entrada: row.hora_entrada?.slice(0, 5) || currentTime(),
+    balanca_id: row.balanca_id || '',
     placa: row.placa || '',
     veiculo_id: row.veiculo_id || '',
     motorista_id: row.motorista_id || '',
@@ -2171,7 +2182,7 @@ function normalizeRecebimentoPayload(form) {
 }
 
 function normalizePortariaPayload(form) {
-  return {
+  const payload = {
     data_entrada: form.data_entrada,
     hora_entrada: form.hora_entrada,
     placa: normalizePlate(form.placa),
@@ -2189,6 +2200,10 @@ function normalizePortariaPayload(form) {
     observacao: form.observacao || null,
     status: form.status || 'AGUARDANDO_LABORATORIO',
   };
+
+  if (form.balanca_id) payload.balanca_id = form.balanca_id;
+
+  return payload;
 }
 
 function defaultLookupForm(fields, row = {}) {
@@ -2416,6 +2431,10 @@ function filterRecebimentos(rows, query) {
 
 function fornecedorNome(row, fallback = '-') {
   return row.fornecedor?.nome || row.fornecedor_nome_manual || fallback;
+}
+
+function balancaNome(row, options, fallback = '-') {
+  return row.balanca?.nome || options?.balancas?.find((item) => item.id === row.balanca_id)?.nome || fallback;
 }
 
 function fornecedorGroupKey(row) {

@@ -172,9 +172,10 @@ export async function deleteRecebimento(id) {
   if (error) throw error;
 }
 
-export async function approveRecebimento(id, { ticket_numero, umidade, liberado_por }) {
+export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade, liberado_por }) {
   return updateRecebimento(id, {
     status: 'aprovada',
+    nf_numero,
     ticket_numero,
     umidade,
     liberado_por,
@@ -183,10 +184,11 @@ export async function approveRecebimento(id, { ticket_numero, umidade, liberado_
   });
 }
 
-export async function rejectRecebimento(id, { motivo_reprovacao, ticket_numero, umidade, liberado_por }) {
+export async function rejectRecebimento(id, { motivo_reprovacao, nf_numero, ticket_numero, umidade, liberado_por }) {
   return updateRecebimento(id, {
     status: 'reprovada',
     motivo_reprovacao,
+    nf_numero,
     ticket_numero,
     umidade,
     liberado_por,
