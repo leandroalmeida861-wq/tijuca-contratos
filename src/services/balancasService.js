@@ -343,6 +343,14 @@ function stripMissingOptionalColumns(error, payload) {
     changed = true;
   }
 
+  if ((fallbackPayload.quantidade_nota !== undefined || fallbackPayload.unidade_nota !== undefined || fallbackPayload.peso_por_saca !== undefined)
+    && (isMissingColumn(error, 'quantidade_nota') || isMissingColumn(error, 'unidade_nota') || isMissingColumn(error, 'peso_por_saca'))) {
+    delete fallbackPayload.quantidade_nota;
+    delete fallbackPayload.unidade_nota;
+    delete fallbackPayload.peso_por_saca;
+    changed = true;
+  }
+
   return changed ? fallbackPayload : null;
 }
 

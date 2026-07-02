@@ -89,6 +89,9 @@ create table if not exists public.recebimentos (
   peso_bruto numeric(14, 3) not null default 0,
   tara numeric(14, 3) not null default 0,
   peso_nf numeric(14, 3),
+  quantidade_nota numeric(14, 3),
+  unidade_nota text default 'KG',
+  peso_por_saca numeric(14, 3) default 60,
   peso_liquido numeric(14, 3) generated always as (peso_bruto - tara) stored,
   diferenca_kg numeric(14, 3) generated always as ((peso_bruto - tara) - coalesce(peso_nf, 0)) stored,
   diferenca_pct numeric(14, 4) generated always as (
@@ -122,6 +125,11 @@ create table if not exists public.recebimentos (
 alter table public.recebimentos
 add column if not exists umidade_01 numeric(8, 3),
 add column if not exists umidade_02 numeric(8, 3);
+
+alter table public.recebimentos
+add column if not exists quantidade_nota numeric(14, 3),
+add column if not exists unidade_nota text default 'KG',
+add column if not exists peso_por_saca numeric(14, 3) default 60;
 
 create table if not exists public.recebimento_logs (
   id uuid primary key default gen_random_uuid(),

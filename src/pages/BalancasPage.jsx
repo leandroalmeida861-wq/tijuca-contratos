@@ -93,6 +93,9 @@ const defaultRecebimento = {
   peso_bruto: '',
   tara: '',
   peso_nf: '',
+  quantidade_nota: '',
+  unidade_nota: 'KG',
+  peso_por_saca: '60',
   umidade: '',
   ticket_numero: '',
   liberado_por: '',
@@ -704,8 +707,14 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       if (name === 'fornecedor_id' && value) {
         next.fornecedor_nome_manual = '';
       }
-      if (name === 'peso_nf' || name === 'valor_unitario') {
-        next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario);
+      if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca') {
+        if (isSacaUnit(next.unidade_nota) && !next.peso_por_saca) next.peso_por_saca = '60';
+        if (!isSacaUnit(next.unidade_nota)) next.peso_por_saca = '';
+        const convertedWeight = normalizarQuantidadeParaKg(next.quantidade_nota, next.unidade_nota, next.peso_por_saca || 60);
+        next.peso_nf = convertedWeight === null ? '' : String(convertedWeight);
+      }
+      if (name === 'peso_nf' || name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca' || name === 'valor_unitario') {
+        next.valor_total = calculateValorTotalNotaDisplay(next);
       }
       return next;
     });
@@ -723,7 +732,10 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       const matchedProduct = xmlProduct.product;
       const carrier = findTransportadoraFromNfe(parsed, localOptions.transportadoras);
       const vehicle = findVeiculoFromNfe(parsed, localOptions.veiculos);
-      const xmlQuantity = xmlProduct.quantity ?? parsed.pesoLiquidoNf;
+      const xmlQuantity = xmlProduct.quantity;
+      const xmlUnit = normalizeNotaUnidade(xmlProduct.unit || xmlProduct.item?.unidade || 'KG');
+      const xmlPesoPorSaca = isSacaUnit(xmlUnit) ? 60 : '';
+      const xmlPesoNotaKg = normalizarQuantidadeParaKg(xmlQuantity, xmlUnit, xmlPesoPorSaca || 60) ?? parsed.pesoLiquidoNf;
       const xmlTotal = xmlProduct.totalValue ?? parsed.valorTotalNota;
       const xmlUnitValue = xmlProduct.unitValue ?? calculateUnitValue(xmlTotal, xmlQuantity);
       const xmlUnitDecimals = xmlProduct.unitDecimalPlaces ?? numberDecimalPlaces(xmlUnitValue);
@@ -740,17 +752,21 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
           produto_id: matchedProduct?.id || '',
           produto_nome_manual: matchedProduct?.id ? '' : '',
-          peso_nf: xmlQuantity ?? current.peso_nf,
+          quantidade_nota: xmlQuantity ?? current.quantidade_nota,
+          unidade_nota: xmlUnit || current.unidade_nota || 'KG',
+          peso_por_saca: isSacaUnit(xmlUnit) ? String(xmlPesoPorSaca || 60) : current.peso_por_saca,
+          peso_nf: xmlPesoNotaKg ?? current.peso_nf,
           valor_unitario: formatMoneyPtCompact(xmlUnitValue, displayDecimalPlaces(xmlUnitDecimals, 2)) || current.valor_unitario,
           valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
         };
-        if (!next.valor_total) next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario) || current.valor_total;
+        if (!next.valor_total) next.valor_total = calculateValorTotalNotaDisplay(next) || current.valor_total;
         return next;
       });
       setXmlInfo([
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
         matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : `Produto do XML nao encontrado com seguranca no cadastro (${xmlProduct.item?.nome || 'sem descricao'}). Selecione o produto antes de salvar.`,
+        isSacaUnit(xmlUnit) ? `Quantidade convertida: ${xmlQuantity || 0} SC x ${xmlPesoPorSaca || 60} KG = ${formatWeightPt(xmlPesoNotaKg)} KG` : `Quantidade da nota em KG: ${formatWeightPt(xmlPesoNotaKg)}`,
         carrier ? `Transportadora vinculada: ${carrier.nome}` : 'Transportadora do XML nao foi cadastrada automaticamente.',
         vehicle ? `Veiculo vinculado pela placa: ${vehicle.placa}` : 'Veiculo do XML nao foi cadastrado automaticamente.',
       ].join(' | '));
@@ -817,12 +833,20 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Input label="Chave da NF-e" value={form.nf_chave_acesso} onChange={(value) => updateField('nf_chave_acesso', value)} />
         <Input label="Peso bruto KG" type="number" step="0.001" value={form.peso_bruto} onChange={(value) => updateField('peso_bruto', value)} required error={fieldErrors.peso_bruto} />
         <Input label="Tara KG" type="number" step="0.001" value={form.tara} onChange={(value) => updateField('tara', value)} required error={fieldErrors.tara} />
-        <Input label="Peso - Quantidade" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
+        <Input label="Quantidade da nota" type="number" step="0.001" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />
+        <Select label="Unidade da nota" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
+          { id: 'KG', nome: 'KG' },
+          { id: 'SC', nome: 'SC / Saca' },
+        ]} />
+        {isSacaUnit(form.unidade_nota) && (
+          <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
+        )}
+        <Input label="Peso convertido KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
         <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
         <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
-        <MoneyInput label="Valor total" value={form.valor_total} readOnly />
+        <MoneyInput label="Valor total" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
       </div>
 
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
@@ -2146,6 +2170,9 @@ function validatePortariaForm(form, rows, editingId) {
 function rowToForm(row) {
   if (!row) return { ...defaultRecebimento };
   const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
+  form.quantidade_nota = row.quantidade_nota ?? row.peso_nf ?? '';
+  form.unidade_nota = row.unidade_nota || 'KG';
+  form.peso_por_saca = row.peso_por_saca ?? (isSacaUnit(form.unidade_nota) ? '60' : '');
   form.valor_unitario = formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
   form.valor_total = formatMoneyPt(row.valor_total, 2);
   return form;
@@ -2202,6 +2229,9 @@ function normalizeRecebimentoPayload(form) {
     peso_bruto: Number(form.peso_bruto || 0),
     tara: Number(form.tara || 0),
     peso_nf: nullableNumber(form.peso_nf),
+    quantidade_nota: nullableNumber(form.quantidade_nota),
+    unidade_nota: form.unidade_nota || 'KG',
+    peso_por_saca: nullableNumber(form.peso_por_saca),
     umidade_01: nullableNumber(form.umidade_01),
     umidade_02: nullableNumber(form.umidade_02),
     umidade: resolveHumidityValue(form),
@@ -2356,6 +2386,34 @@ function calculateValorTotalDisplay(pesoNf, valorUnitario) {
   const unitario = nullableLocaleNumber(valorUnitario);
   if (peso === null || unitario === null) return '';
   return formatMoneyPt(peso * unitario, 2);
+}
+
+function calculateValorTotalNotaDisplay(form) {
+  const quantity = nullableLocaleNumber(form.quantidade_nota) ?? nullableLocaleNumber(form.peso_nf);
+  const unitario = nullableLocaleNumber(form.valor_unitario);
+  if (quantity === null || unitario === null) return '';
+  return formatMoneyPt(quantity * unitario, 2);
+}
+
+function normalizarQuantidadeParaKg(quantidade, unidade, pesoPorSaca = 60) {
+  const numericQuantity = nullableLocaleNumber(quantidade);
+  if (numericQuantity === null) return null;
+  const normalizedUnit = normalizeNotaUnidade(unidade);
+  if (isSacaUnit(normalizedUnit)) {
+    const sackWeight = nullableLocaleNumber(pesoPorSaca) ?? 60;
+    return Number((numericQuantity * sackWeight).toFixed(3));
+  }
+  return Number(numericQuantity.toFixed(3));
+}
+
+function normalizeNotaUnidade(unidade) {
+  const value = String(unidade || 'KG').trim().toUpperCase();
+  if (isSacaUnit(value)) return 'SC';
+  return 'KG';
+}
+
+function isSacaUnit(unidade) {
+  return ['SACA', 'SACAS', 'SC', 'SCS'].includes(String(unidade || '').trim().toUpperCase());
 }
 
 function resolveHumidityValue(primary = {}, fallback = {}) {
@@ -2593,6 +2651,7 @@ function resolveNfeProduct(parsed, produtos = []) {
       item: itens[0] || null,
       product: null,
       quantity: totalQuantity ?? parsed?.pesoLiquidoNf,
+      unit: itens[0]?.unidade || 'KG',
       totalValue,
       unitValue: calculateUnitValue(totalValue, totalQuantity ?? parsed?.pesoLiquidoNf),
       unitDecimalPlaces: 2,
@@ -2607,6 +2666,7 @@ function resolveNfeProduct(parsed, produtos = []) {
       quantity: 0,
       totalValue: 0,
       unitDecimalPlaces: item.valorUnitarioDecimais || 2,
+      unit: item.unidade || 'KG',
     };
     current.quantity += Number(item.quantidade || 0);
     current.totalValue += Number(item.valorTotal || 0);
@@ -2625,6 +2685,7 @@ function resolveNfeProduct(parsed, produtos = []) {
     quantity,
     totalValue,
     unitValue: unitValueFromXml ?? calculateUnitValue(totalValue, quantity),
+    unit: selected.unit || selected.item?.unidade || 'KG',
   };
 }
 
