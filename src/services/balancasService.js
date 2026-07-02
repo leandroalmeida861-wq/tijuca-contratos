@@ -162,10 +162,16 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
   const nfDigits = onlyDigits(nf_numero);
   if (!fornecedorId || !nfDigits) return null;
 
+  const { data: selectedSupplier, error: supplierError } = await supabase
+    .from('fornecedores')
+    .select('id,nome,cnpj')
+    .eq('id', fornecedorId)
+    .maybeSingle();
+  if (supplierError) throw supplierError;
+
   let query = supabase
     .from('recebimentos')
-    .select('id,nf_numero,status,fornecedor:fornecedores(id,nome)')
-    .eq('fornecedor_id', fornecedorId)
+    .select('id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
     .neq('status', 'cancelada');
 
   if (excludeId) query = query.neq('id', excludeId);
@@ -173,7 +179,19 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
   const { data, error } = await query;
   if (error) throw error;
 
-  return (data || []).find((row) => onlyDigits(row.nf_numero) === nfDigits) || null;
+  const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
+  const selectedSupplierName = normalize(selectedSupplier?.nome);
+
+  return (data || []).find((row) => {
+    if (onlyDigits(row.nf_numero) !== nfDigits) return false;
+    if (row.fornecedor?.id === fornecedorId) return true;
+
+    const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
+    if (selectedSupplierDoc && rowSupplierDoc && rowSupplierDoc === selectedSupplierDoc) return true;
+
+    const rowSupplierName = normalize(row.fornecedor?.nome);
+    return Boolean(selectedSupplierName && rowSupplierName && rowSupplierName === selectedSupplierName);
+  }) || null;
 }
 
 export async function createRecebimento(payload) {

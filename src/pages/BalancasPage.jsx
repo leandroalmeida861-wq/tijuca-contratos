@@ -648,6 +648,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
         <div ref={formRef} className="scroll-mt-4">
           <RecebimentoForm
             row={editing}
+            rows={rows}
             options={options}
             onClose={() => setFormOpen(false)}
             onSaved={async () => {
@@ -676,7 +677,7 @@ function PendingScaleField({ label, value, strong }) {
   );
 }
 
-function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
+function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }) {
   const [form, setForm] = useState(rowToForm(row));
   const [localOptions, setLocalOptions] = useState(options);
   const [xmlInfo, setXmlInfo] = useState('');
@@ -791,6 +792,16 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
     setSaving(true);
     try {
       const payload = normalizeRecebimentoPayload(form);
+      const localDuplicate = findDuplicateRecebimentoRows(rows, payload, row?.id, localOptions);
+      if (localDuplicate) {
+        const supplierName = localDuplicate.fornecedor?.nome || fornecedorNome(localDuplicate, 'este fornecedor');
+        const message = `NF duplicada. Como corrigir: ja existe um recebimento com a NF ${payload.nf_numero} para ${supplierName}, inclusive se ele ainda estiver pendente. Edite o recebimento existente ou confira o numero da NF.`;
+        setFieldErrors({ nf_numero: 'NF duplicada', fornecedor_id: 'Fornecedor ja possui esta NF' });
+        setFormError(message);
+        setError(message);
+        setSaving(false);
+        return;
+      }
       const duplicate = await findDuplicateRecebimentoNotaFornecedor({
         fornecedor_id: payload.fornecedor_id,
         nf_numero: payload.nf_numero,
@@ -2134,6 +2145,28 @@ function validateRecebimentoForm(form) {
     fields,
     message: `Falta preencher: ${missing.join(', ')}. Como corrigir: preencha os campos destacados em vermelho e tente salvar novamente.`,
   };
+}
+
+function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
+  const nfDigits = onlyDigits(payload.nf_numero);
+  if (!nfDigits || !payload.fornecedor_id) return null;
+
+  const selectedSupplier = (options.fornecedores || []).find((item) => item.id === payload.fornecedor_id);
+  const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
+  const selectedSupplierName = normalizeName(selectedSupplier?.nome);
+
+  return (rows || []).find((row) => {
+    if (row.id === editingId) return false;
+    if (String(row.status || '').toLowerCase() === 'cancelada') return false;
+    if (onlyDigits(row.nf_numero) !== nfDigits) return false;
+    if (row.fornecedor_id && row.fornecedor_id === payload.fornecedor_id) return true;
+
+    const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
+    if (selectedSupplierDoc && rowSupplierDoc && rowSupplierDoc === selectedSupplierDoc) return true;
+
+    const rowSupplierName = normalizeName(row.fornecedor?.nome || row.fornecedor_nome_manual);
+    return Boolean(selectedSupplierName && rowSupplierName && rowSupplierName === selectedSupplierName);
+  }) || null;
 }
 
 function validatePortariaForm(form, rows, editingId) {
