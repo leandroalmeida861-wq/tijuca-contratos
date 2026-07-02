@@ -38,6 +38,7 @@ import {
   deletePortariaEntrada,
   deleteRecebimento,
   exportRecebimentosCsv,
+  findDuplicateRecebimentoNotaFornecedor,
   listLookup,
   listPortariaEntradas,
   listRecebimentos,
@@ -790,6 +791,20 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
     setSaving(true);
     try {
       const payload = normalizeRecebimentoPayload(form);
+      const duplicate = await findDuplicateRecebimentoNotaFornecedor({
+        fornecedor_id: payload.fornecedor_id,
+        nf_numero: payload.nf_numero,
+        excludeId: row?.id,
+      });
+      if (duplicate) {
+        const supplierName = duplicate.fornecedor?.nome || 'este fornecedor';
+        const message = `NF duplicada. Como corrigir: ja existe um recebimento com a NF ${payload.nf_numero} para ${supplierName}. Confira a numeracao da nota ou edite o recebimento existente.`;
+        setFieldErrors({ nf_numero: 'NF duplicada', fornecedor_id: 'Fornecedor ja possui esta NF' });
+        setFormError(message);
+        setError(message);
+        setSaving(false);
+        return;
+      }
       if (row?.id) await updateRecebimento(row.id, payload);
       else await createRecebimento({ ...payload, status: 'pendente' });
       await onSaved();

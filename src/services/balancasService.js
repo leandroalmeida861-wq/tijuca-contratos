@@ -157,6 +157,25 @@ export async function getRecebimento(id) {
   return data;
 }
 
+export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf_numero, excludeId } = {}) {
+  const fornecedorId = fornecedor_id || '';
+  const nfDigits = onlyDigits(nf_numero);
+  if (!fornecedorId || !nfDigits) return null;
+
+  let query = supabase
+    .from('recebimentos')
+    .select('id,nf_numero,status,fornecedor:fornecedores(id,nome)')
+    .eq('fornecedor_id', fornecedorId)
+    .neq('status', 'cancelada');
+
+  if (excludeId) query = query.neq('id', excludeId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data || []).find((row) => onlyDigits(row.nf_numero) === nfDigits) || null;
+}
+
 export async function createRecebimento(payload) {
   const cleanedPayload = cleanPayload(payload);
   const { data, error } = await supabase.from('recebimentos').insert(cleanedPayload).select(RECEBIMENTO_SELECT).single();
@@ -369,4 +388,8 @@ function normalize(value) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w]+/g, '')
     .toLowerCase();
+}
+
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '');
 }

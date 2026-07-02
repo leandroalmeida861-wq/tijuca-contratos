@@ -239,6 +239,14 @@ create index if not exists recebimentos_balanca_idx on public.recebimentos(balan
 create index if not exists recebimentos_fornecedor_idx on public.recebimentos(fornecedor_id);
 create index if not exists recebimentos_produto_idx on public.recebimentos(produto_id);
 create index if not exists recebimentos_laboratorio_idx on public.recebimentos(laboratorio_id);
+create unique index if not exists recebimentos_fornecedor_nf_unica_idx
+on public.recebimentos (
+  fornecedor_id,
+  regexp_replace(coalesce(nf_numero, ''), '\D', '', 'g')
+)
+where fornecedor_id is not null
+  and nullif(regexp_replace(coalesce(nf_numero, ''), '\D', '', 'g'), '') is not null
+  and coalesce(status, '') <> 'cancelada';
 create index if not exists recebimento_logs_recebimento_idx on public.recebimento_logs(recebimento_id);
 
 alter table public.balancas enable row level security;
