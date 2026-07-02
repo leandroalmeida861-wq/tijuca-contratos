@@ -31,6 +31,9 @@ create table if not exists public.portaria_entradas (
 alter table public.portaria_entradas
 add column if not exists balanca_id uuid references public.balancas(id) on delete set null;
 
+alter table public.recebimentos
+add column if not exists portaria_id uuid references public.portaria_entradas(id) on delete set null;
+
 create unique index if not exists portaria_nf_fornecedor_serie_unica
 on public.portaria_entradas (fornecedor_id, numero_nf, serie_nf)
 where status <> 'CANCELADA';
@@ -41,6 +44,7 @@ create index if not exists portaria_entradas_status_idx on public.portaria_entra
 create index if not exists portaria_entradas_balanca_idx on public.portaria_entradas (balanca_id);
 create index if not exists portaria_entradas_fornecedor_idx on public.portaria_entradas (fornecedor_id);
 create index if not exists portaria_entradas_produto_idx on public.portaria_entradas (produto_id);
+create index if not exists recebimentos_portaria_idx on public.recebimentos (portaria_id);
 
 drop trigger if exists portaria_entradas_updated_at on public.portaria_entradas;
 create trigger portaria_entradas_updated_at

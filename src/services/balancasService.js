@@ -107,6 +107,8 @@ export async function listRecebimentos(filters = {}) {
   if (filters.produtoId) query = query.eq('produto_id', filters.produtoId);
   if (filters.laboratorioId) query = query.eq('laboratorio_id', filters.laboratorioId);
   if (filters.status) query = query.eq('status', filters.status);
+  if (filters.origemPortaria === 'com_portaria') query = query.not('portaria_id', 'is', null);
+  if (filters.origemPortaria === 'sem_portaria') query = query.is('portaria_id', null);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -156,7 +158,15 @@ export async function getRecebimento(id) {
 }
 
 export async function createRecebimento(payload) {
-  const { data, error } = await supabase.from('recebimentos').insert(cleanPayload(payload)).select(RECEBIMENTO_SELECT).single();
+  const cleanedPayload = cleanPayload(payload);
+  const { data, error } = await supabase.from('recebimentos').insert(cleanedPayload).select(RECEBIMENTO_SELECT).single();
+  if (error && cleanedPayload.portaria_id && isMissingColumn(error, 'portaria_id')) {
+    const fallbackPayload = { ...cleanedPayload };
+    delete fallbackPayload.portaria_id;
+    const fallback = await supabase.from('recebimentos').insert(fallbackPayload).select(RECEBIMENTO_SELECT).single();
+    if (fallback.error) throw fallback.error;
+    return fallback.data;
+  }
   if (error) throw error;
   return data;
 }
@@ -293,6 +303,16 @@ function cleanPayload(payload) {
     Object.entries(payload)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => [key, value === '' ? null : value]),
+  );
+}
+
+function isMissingColumn(error, column) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes(column.toLowerCase()) && (
+    message.includes('schema cache')
+    || message.includes('could not find')
+    || message.includes('does not exist')
+    || message.includes('column')
   );
 }
 

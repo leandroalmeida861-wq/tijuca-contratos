@@ -72,6 +72,7 @@ const defaultFilters = {
   produtoId: '',
   laboratorioId: '',
   status: '',
+  origemPortaria: '',
 };
 
 const defaultRecebimento = {
@@ -180,6 +181,11 @@ export default function BalancasPage() {
 
   function selectTab(tabKey) {
     setActiveTab(tabKey);
+    if (tabKey !== 'relatorios' && filters.origemPortaria) {
+      const nextFilters = { ...filters, origemPortaria: '' };
+      setFilters(nextFilters);
+      load(nextFilters);
+    }
     setSearchParams(tabKey === 'dashboard' ? {} : { tab: tabKey });
   }
 
@@ -393,6 +399,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return;
     try {
       await createRecebimento({
+        portaria_id: row.id,
         data: row.data_entrada,
         balanca_id: row.balanca_id,
         veiculo_id: row.veiculo_id,
@@ -1049,7 +1056,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           <Input label="Fornecedor" value={labForm.fornecedor_nome_manual} onChange={(value) => updateLabForm('fornecedor_nome_manual', value)} required />
           <Input label="Produto" value={labForm.produto_nome_manual} onChange={(value) => updateLabForm('produto_nome_manual', value)} required />
           <Input label="Veiculo / placa" value={labForm.veiculo_placa_manual} onChange={(value) => updateLabForm('veiculo_placa_manual', value)} required />
-          <Input label="Numero da nota" value={labForm.nf_numero} onChange={(value) => updateLabForm('nf_numero', value)} />
+          <Input label="Número da NF (opcional)" value={labForm.nf_numero} onChange={(value) => updateLabForm('nf_numero', onlyDigits(value))} />
           <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
           <Input label="Umidade %" type="number" step="0.001" value={labForm.umidade} onChange={(value) => updateLabForm('umidade', value)} />
           <Input label="Liberado por" value={labForm.liberado_por} onChange={(value) => updateLabForm('liberado_por', value)} />
@@ -1577,7 +1584,7 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
 function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clearFilters, can }) {
   return (
     <div className="grid gap-4">
-      <Filters options={options} filters={filters} setFilters={setFilters} onApply={applyFilters} onClear={clearFilters} />
+      <Filters options={options} filters={filters} setFilters={setFilters} onApply={applyFilters} onClear={clearFilters} showPortariaFilter />
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1639,7 +1646,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
   );
 }
 
-function Filters({ options, filters, setFilters, onApply, onClear }) {
+function Filters({ options, filters, setFilters, onApply, onClear, showPortariaFilter = false }) {
   return (
     <form onSubmit={onApply} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-6">
       <Input label="Data inicial" type="date" value={filters.dataInicial} onChange={(value) => setFilters((current) => ({ ...current, dataInicial: value }))} />
@@ -1648,6 +1655,12 @@ function Filters({ options, filters, setFilters, onApply, onClear }) {
       <Select label="Fornecedor" value={filters.fornecedorId} onChange={(value) => setFilters((current) => ({ ...current, fornecedorId: value }))} options={options.fornecedores} />
       <Select label="Produto" value={filters.produtoId} onChange={(value) => setFilters((current) => ({ ...current, produtoId: value }))} options={options.produtos} />
       <Select label="Laboratório" value={filters.laboratorioId} onChange={(value) => setFilters((current) => ({ ...current, laboratorioId: value }))} options={options.laboratorios} />
+      {showPortariaFilter && (
+        <Select label="Origem na Portaria" value={filters.origemPortaria} onChange={(value) => setFilters((current) => ({ ...current, origemPortaria: value }))} options={[
+          { id: 'com_portaria', nome: 'Com Portaria' },
+          { id: 'sem_portaria', nome: 'Sem Portaria' },
+        ]} />
+      )}
       <Select label="Status" value={filters.status} onChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={[
         { id: 'pendente', nome: 'Pendente' },
         { id: 'aprovada', nome: 'Aprovada' },
