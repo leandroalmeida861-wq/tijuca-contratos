@@ -724,6 +724,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       const xmlQuantity = xmlProduct.quantity ?? parsed.pesoLiquidoNf;
       const xmlTotal = xmlProduct.totalValue ?? parsed.valorTotalNota;
       const xmlUnitValue = xmlProduct.unitValue ?? calculateUnitValue(xmlTotal, xmlQuantity);
+      const xmlUnitDecimals = xmlProduct.unitDecimalPlaces ?? numberDecimalPlaces(xmlUnitValue);
 
       setForm((current) => {
         const next = {
@@ -738,12 +739,10 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           produto_id: matchedProduct?.id || '',
           produto_nome_manual: matchedProduct?.id ? '' : '',
           peso_nf: xmlQuantity ?? current.peso_nf,
-          valor_unitario: formatMoneyPt(xmlUnitValue, displayDecimalPlaces(xmlProduct.unitDecimalPlaces, 2)) || current.valor_unitario,
+          valor_unitario: formatMoneyPt(xmlUnitValue, displayDecimalPlaces(xmlUnitDecimals, 2)) || current.valor_unitario,
           valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
         };
-        next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario)
-          || formatMoneyPt(xmlTotal, 2)
-          || current.valor_total;
+        if (!next.valor_total) next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario) || current.valor_total;
         return next;
       });
       setXmlInfo([
@@ -2368,7 +2367,7 @@ function formatThousandsPt(value) {
 function displayDecimalPlaces(value, fallback = 2) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return Math.min(Math.max(Math.trunc(numeric), 2), 10);
+  return Math.min(Math.max(Math.trunc(numeric), 2), 6);
 }
 
 function findDuplicateLookup(config, form, rows, editingId) {
@@ -2569,12 +2568,13 @@ function resolveNfeProduct(parsed, produtos = []) {
   const selected = sorted[0];
   const quantity = selected.quantity || parsed?.pesoLiquidoNf;
   const totalValue = selected.totalValue || parsed?.valorTotalNota;
+  const unitValueFromXml = grouped.size === 1 && selected.item?.valorUnitario ? selected.item.valorUnitario : null;
 
   return {
     ...selected,
     quantity,
     totalValue,
-    unitValue: calculateUnitValue(totalValue, quantity) ?? selected.item?.valorUnitario,
+    unitValue: unitValueFromXml ?? calculateUnitValue(totalValue, quantity),
   };
 }
 
