@@ -552,8 +552,8 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const [viewing, setViewing] = useState(null);
   const formRef = useRef(null);
 
-  const filtered = filterRecebimentos(rows, query);
-  const releasedForScale = rows.filter(isLaboratorioPendenteBalanca);
+  const filtered = sortRecebimentoRows(filterRecebimentos(rows, query));
+  const releasedForScale = sortRecebimentoRows(rows.filter(isLaboratorioPendenteBalanca));
 
   function newForm() {
     setEditing(null);
@@ -604,9 +604,11 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
                   <PendingScaleField label="Fornecedor" value={fornecedorNome(row)} />
                   <PendingScaleField label="Umidade" value={row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'} />
                 </div>
-                <button type="button" onClick={() => edit(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-xs font-extrabold text-white shadow-sm hover:bg-tijuca-700">
-                  <Edit size={14} /> Preencher balanca
-                </button>
+                {can('balancas', 'editar') && (
+                  <button type="button" onClick={() => edit(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-xs font-extrabold text-white shadow-sm hover:bg-tijuca-700">
+                    <Edit size={14} /> Preencher balanca
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -664,6 +666,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const canImportXml = !row || isLaboratorioPendenteBalanca(row);
 
   useEffect(() => {
     setLocalOptions(options);
@@ -704,6 +707,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       const parsed = parseNfeRecebimento(await file.text());
       const mainItem = parsed.itens[0] || {};
       const matchedSupplier = findFornecedorFromNfe(parsed, localOptions.fornecedores);
+      const matchedProduct = findProdutoFromNfe(mainItem, localOptions.produtos);
       const [carrier, vehicle] = await Promise.all([
         parsed.transportadora.nome
           ? findOrCreateLookup('recebimento_transportadoras', 'nome', parsed.transportadora.nome, { nome: parsed.transportadora.nome, cnpj: parsed.transportadora.cnpj })
@@ -724,11 +728,13 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           ...current,
           nf_numero: parsed.numero || current.nf_numero,
           nf_chave_acesso: parsed.chaveAcesso || current.nf_chave_acesso,
-          data: current.data || todayIso(),
+          data: parsed.dataEmissao || current.data || todayIso(),
           transportadora_id: carrier?.id || current.transportadora_id,
           veiculo_id: vehicle?.id || current.veiculo_id,
           fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
+          produto_id: matchedProduct?.id || current.produto_id,
+          produto_nome_manual: matchedProduct?.id ? '' : current.produto_nome_manual,
           peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
           valor_unitario: formatMoneyPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 2)) || current.valor_unitario,
           valor_total: current.valor_total,
@@ -741,7 +747,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
       setXmlInfo([
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
-        'Produto deve ser selecionado manualmente.',
+        matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : 'Produto do XML nao encontrado no cadastro. Selecione o produto antes de salvar.',
       ].join(' | '));
     } catch (err) {
       setError(toUserError(err));
@@ -780,7 +786,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{row ? 'Editar recebimento' : 'Novo recebimento'}</h2>
           <p className="mt-1 text-sm text-slate-500">Pesos calculados pelo banco: peso líquido, diferença em KG e diferença percentual.</p>
         </div>
-        {!row && (
+        {canImportXml && (
           <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
             <FileUp size={17} /> Importar XML da NF-e
             <input type="file" accept=".xml,text/xml,application/xml" onChange={importXml} className="sr-only" />
@@ -895,8 +901,8 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [labForm, setLabForm] = useState(defaultLaboratorioForm);
   const [editingLabId, setEditingLabId] = useState(null);
   const [savingLab, setSavingLab] = useState(false);
-  const pending = rows.filter((row) => row.status === 'pendente');
-  const analyzed = rows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada');
+  const pending = sortRecebimentoRows(rows.filter((row) => row.status === 'pendente'));
+  const analyzed = sortRecebimentoRows(rows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
 
   function updateEdit(id, field, value) {
     setEdits((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
@@ -1856,7 +1862,7 @@ function StatusBadge({ row }) {
   if (isLaboratorioPendenteBalanca(row)) {
     return (
       <span className="inline-flex max-w-64 rounded-md bg-amber-100 px-2 py-1 text-xs font-bold leading-snug text-amber-800 ring-1 ring-amber-200">
-        Aprovado pelo Laboratorio - Pendente finalizar recebimento
+        Aprovado pelo Laboratório - Pendente finalizar recebimento
       </span>
     );
   }
@@ -2430,10 +2436,32 @@ function normalizeSupplierName(value) {
     .trim();
 }
 
+function normalizeProductName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\w\s]+/g, ' ')
+    .replace(/\b(em|grao|graos|granel)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function findFornecedorFromNfe(parsed, fornecedores = []) {
   const documentoXml = onlyDigits(parsed?.emitente?.documento);
   if (!documentoXml) return null;
   return (fornecedores || []).find((fornecedor) => onlyDigits(fornecedor.cnpj) === documentoXml) || null;
+}
+
+function findProdutoFromNfe(item, produtos = []) {
+  const normalizedXmlName = normalizeProductName(item?.nome);
+  if (!normalizedXmlName) return null;
+  return (produtos || []).find((produto) => {
+    const normalizedProduct = normalizeProductName(produto.nome);
+    return normalizedProduct === normalizedXmlName
+      || normalizedProduct.includes(normalizedXmlName)
+      || normalizedXmlName.includes(normalizedProduct);
+  }) || null;
 }
 
 function produtoNome(row, fallback = '-') {
@@ -2442,6 +2470,27 @@ function produtoNome(row, fallback = '-') {
 
 function placaVeiculo(row, fallback = '-') {
   return row.veiculo_placa_manual || row.veiculo?.placa || fallback;
+}
+
+function sortRecebimentoRows(rows) {
+  return [...rows].sort((a, b) => {
+    const priorityDiff = recebimentoSortPriority(a) - recebimentoSortPriority(b);
+    if (priorityDiff) return priorityDiff;
+    return rowDateTimeValue(b) - rowDateTimeValue(a);
+  });
+}
+
+function recebimentoSortPriority(row) {
+  if (isLaboratorioPendenteBalanca(row)) return 0;
+  if (row.status === 'aprovada') return 1;
+  return 2;
+}
+
+function rowDateTimeValue(row) {
+  const dateValue = row.data ? new Date(`${row.data}T00:00:00`).getTime() : 0;
+  const tieBreaker = row.created_at ? new Date(row.created_at).getTime() / 100000000 : 0;
+  const value = dateValue + tieBreaker;
+  return Number.isFinite(value) ? value : 0;
 }
 
 function isLaboratorioPendenteBalanca(row) {
@@ -2465,7 +2514,7 @@ function recebimentoRowClass(row) {
 }
 
 function recebimentoStatusLabel(row) {
-  if (isLaboratorioPendenteBalanca(row)) return 'Aprovada laboratório';
+  if (isLaboratorioPendenteBalanca(row)) return 'Aprovado pelo Laboratório - Pendente finalizar recebimento';
   if (isRecebimentoFinalizadoBalanca(row)) return 'Aprovada balança';
   return statusLabel(row.status);
 }
