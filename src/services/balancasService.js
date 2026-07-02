@@ -246,7 +246,7 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'Peso bruto',
     'Tara',
     'Peso líquido',
-    'Peso NF',
+    'Peso - Quantidade',
     'Diferença KG',
     'Diferença %',
     'Status',

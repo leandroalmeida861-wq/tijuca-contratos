@@ -38,7 +38,6 @@ import {
   deletePortariaEntrada,
   deleteRecebimento,
   exportRecebimentosCsv,
-  findOrCreateLookup,
   listLookup,
   listPortariaEntradas,
   listRecebimentos,
@@ -453,7 +452,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
             <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={options.produtos} error={fieldErrors.produto_id} />
             <Input label="Número da NF" value={form.numero_nf} onChange={(value) => updateField('numero_nf', onlyDigits(value))} error={fieldErrors.numero_nf} />
             <Input label="Série da NF" value={form.serie_nf} onChange={(value) => updateField('serie_nf', value.slice(0, 10).toUpperCase())} error={fieldErrors.serie_nf} />
-            <Input label="Peso NF KG" value={form.peso_nf_kg} onChange={(value) => updateField('peso_nf_kg', sanitizeWeightInput(value))} error={fieldErrors.peso_nf_kg} />
+            <Input label="Peso - Quantidade" value={form.peso_nf_kg} onChange={(value) => updateField('peso_nf_kg', sanitizeWeightInput(value))} error={fieldErrors.peso_nf_kg} />
             <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
             <Input label="Quantidade de eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
           </div>
@@ -476,7 +475,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
         <table className="min-w-[1180px] w-full text-left text-sm">
           <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
-              {['Data/Hora', 'Balança', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso NF KG', 'Status', 'Ações'].map((column) => (
+              {['Data/Hora', 'Balança', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso - Quantidade', 'Status', 'Ações'].map((column) => (
                 <th key={column} className="px-3 py-3">{column}</th>
               ))}
             </tr>
@@ -529,7 +528,7 @@ function PortariaViewModal({ row, options, onClose }) {
     ['CNPJ', formatDocument(row.cnpj_fornecedor)],
     ['Produto', row.produto?.nome || '-'],
     ['NF/Série', `${row.numero_nf || '-'}/${row.serie_nf || '-'}`],
-    ['Peso NF', kg(row.peso_nf_kg)],
+    ['Peso - Quantidade', kg(row.peso_nf_kg)],
     ['Status', row.status || '-'],
     ['Observação', row.observacao || '-'],
   ];
@@ -717,23 +716,14 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
 
     try {
       const parsed = parseNfeRecebimento(await file.text());
-      const mainItem = parsed.itens[0] || {};
+      const xmlProduct = resolveNfeProduct(parsed, localOptions.produtos);
       const matchedSupplier = findFornecedorFromNfe(parsed, localOptions.fornecedores);
-      const matchedProduct = findProdutoFromNfe(mainItem, localOptions.produtos);
-      const [carrier, vehicle] = await Promise.all([
-        parsed.transportadora.nome
-          ? findOrCreateLookup('recebimento_transportadoras', 'nome', parsed.transportadora.nome, { nome: parsed.transportadora.nome, cnpj: parsed.transportadora.cnpj })
-          : null,
-        parsed.placaVeiculo
-          ? findOrCreateLookup('recebimento_veiculos', 'placa', parsed.placaVeiculo, { placa: parsed.placaVeiculo })
-          : null,
-      ]);
-
-      setLocalOptions((current) => ({
-        ...current,
-        transportadoras: mergeOption(current.transportadoras, carrier),
-        veiculos: mergeOption(current.veiculos, vehicle),
-      }));
+      const matchedProduct = xmlProduct.product;
+      const carrier = findTransportadoraFromNfe(parsed, localOptions.transportadoras);
+      const vehicle = findVeiculoFromNfe(parsed, localOptions.veiculos);
+      const xmlQuantity = xmlProduct.quantity ?? parsed.pesoLiquidoNf;
+      const xmlTotal = xmlProduct.totalValue ?? parsed.valorTotalNota;
+      const xmlUnitValue = xmlProduct.unitValue ?? calculateUnitValue(xmlTotal, xmlQuantity);
 
       setForm((current) => {
         const next = {
@@ -747,12 +737,12 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
           produto_id: matchedProduct?.id || current.produto_id,
           produto_nome_manual: matchedProduct?.id ? '' : current.produto_nome_manual,
-          peso_nf: parsed.pesoLiquidoNf ?? current.peso_nf,
-          valor_unitario: formatMoneyPt(mainItem.valorUnitario, displayDecimalPlaces(mainItem.valorUnitarioDecimais, 2)) || current.valor_unitario,
-          valor_total: current.valor_total,
+          peso_nf: xmlQuantity ?? current.peso_nf,
+          valor_unitario: formatMoneyPt(xmlUnitValue, displayDecimalPlaces(xmlProduct.unitDecimalPlaces, 2)) || current.valor_unitario,
+          valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
         };
         next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario)
-          || formatMoneyPt(parsed.valorTotalNota, 2)
+          || formatMoneyPt(xmlTotal, 2)
           || current.valor_total;
         return next;
       });
@@ -760,6 +750,8 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
         matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : 'Produto do XML nao encontrado no cadastro. Selecione o produto antes de salvar.',
+        carrier ? `Transportadora vinculada: ${carrier.nome}` : 'Transportadora do XML nao foi cadastrada automaticamente.',
+        vehicle ? `Veiculo vinculado pela placa: ${vehicle.placa}` : 'Veiculo do XML nao foi cadastrado automaticamente.',
       ].join(' | '));
     } catch (err) {
       setError(toUserError(err));
@@ -824,7 +816,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
         <Input label="Chave da NF-e" value={form.nf_chave_acesso} onChange={(value) => updateField('nf_chave_acesso', value)} />
         <Input label="Peso bruto KG" type="number" step="0.001" value={form.peso_bruto} onChange={(value) => updateField('peso_bruto', value)} required error={fieldErrors.peso_bruto} />
         <Input label="Tara KG" type="number" step="0.001" value={form.tara} onChange={(value) => updateField('tara', value)} required error={fieldErrors.tara} />
-        <Input label="Peso NF KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
+        <Input label="Peso - Quantidade" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
         <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
@@ -867,7 +859,7 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Peso bruto', kg(row.peso_bruto)],
     ['Tara', kg(row.tara)],
     ['Peso líquido', kg(row.peso_liquido)],
-    ['Peso NF', row.peso_nf ? kg(row.peso_nf) : '-'],
+    ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
     ['Diferença', kg(row.diferenca_kg)],
     ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
     ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
@@ -1280,7 +1272,7 @@ function exportLaboratoryReleasePdf(row) {
     ['Ticket', row.ticket_numero || '-'],
     ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Peso liquido', kg(row.peso_liquido)],
-    ['Peso NF', row.peso_nf ? kg(row.peso_nf) : '-'],
+    ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
   ]);
 
   y += 56;
@@ -1404,7 +1396,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
         <table className="w-full min-w-[1180px] text-left text-sm">
           <thead className="text-xs font-bold uppercase text-slate-500">
             <tr>
-              {['Data', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Peso líquido', 'Peso NF', 'Diferença', 'Ticket', 'Umidade', 'Liberado por', 'Motivo', 'Ações'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
+              {['Data', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Peso líquido', 'Peso - Quantidade', 'Diferença', 'Ticket', 'Umidade', 'Liberado por', 'Motivo', 'Ações'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -1609,7 +1601,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
       <table className="w-full min-w-[1180px] text-left text-sm">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>
-            {['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso NF', 'Diferença', 'Status', 'Ações'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
+            {['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Diferença', 'Status', 'Ações'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -2102,7 +2094,7 @@ function validatePortariaForm(form, rows, editingId) {
   requireField('produto_id', 'Produto');
   requireField('numero_nf', 'Numero da NF', Boolean(onlyDigits(form.numero_nf)));
   requireField('serie_nf', 'Serie da NF');
-  requireField('peso_nf_kg', 'Peso NF KG', nullableLocaleNumber(form.peso_nf_kg) !== null && nullableLocaleNumber(form.peso_nf_kg) > 0);
+  requireField('peso_nf_kg', 'Peso - Quantidade', nullableLocaleNumber(form.peso_nf_kg) !== null && nullableLocaleNumber(form.peso_nf_kg) > 0);
 
   if (form.placa && !form.veiculo_id) {
     fields.placa = 'Veiculo nao cadastrado';
@@ -2233,12 +2225,6 @@ function emptyOptions() {
     produtos: [],
     laboratorios: [],
   };
-}
-
-function mergeOption(rows, option) {
-  if (!option?.id) return rows;
-  if (rows.some((row) => row.id === option.id)) return rows;
-  return [...rows, option];
 }
 
 function todayIso() {
@@ -2485,6 +2471,23 @@ function findFornecedorFromNfe(parsed, fornecedores = []) {
   return (fornecedores || []).find((fornecedor) => onlyDigits(fornecedor.cnpj) === documentoXml) || null;
 }
 
+function findTransportadoraFromNfe(parsed, transportadoras = []) {
+  const documentoXml = onlyDigits(parsed?.transportadora?.cnpj);
+  if (documentoXml) {
+    const byDocument = (transportadoras || []).find((item) => onlyDigits(item.cnpj) === documentoXml);
+    if (byDocument) return byDocument;
+  }
+  const normalizedName = normalizeSupplierName(parsed?.transportadora?.nome);
+  if (!normalizedName) return null;
+  return (transportadoras || []).find((item) => normalizeSupplierName(item.nome) === normalizedName) || null;
+}
+
+function findVeiculoFromNfe(parsed, veiculos = []) {
+  const plate = normalizePlate(parsed?.placaVeiculo);
+  if (!plate) return null;
+  return (veiculos || []).find((item) => normalizePlate(item.placa) === plate) || null;
+}
+
 function findProdutoFromNfe(item, produtos = []) {
   const normalizedXmlName = normalizeProductName(item?.nome);
   if (!normalizedXmlName) return null;
@@ -2494,6 +2497,66 @@ function findProdutoFromNfe(item, produtos = []) {
       || normalizedProduct.includes(normalizedXmlName)
       || normalizedXmlName.includes(normalizedProduct);
   }) || null;
+}
+
+function resolveNfeProduct(parsed, produtos = []) {
+  const itens = parsed?.itens || [];
+  const matchedItems = itens
+    .map((item) => ({ item, product: findProdutoFromNfe(item, produtos) }))
+    .filter((entry) => entry.product);
+
+  if (!matchedItems.length) {
+    const totalQuantity = sumNfeItems(itens, 'quantidade');
+    const totalValue = sumNfeItems(itens, 'valorTotal') ?? parsed?.valorTotalNota;
+    return {
+      item: itens[0] || null,
+      product: null,
+      quantity: totalQuantity ?? parsed?.pesoLiquidoNf,
+      totalValue,
+      unitValue: calculateUnitValue(totalValue, totalQuantity ?? parsed?.pesoLiquidoNf),
+      unitDecimalPlaces: 2,
+    };
+  }
+
+  const grouped = new Map();
+  for (const { item, product } of matchedItems) {
+    const current = grouped.get(product.id) || {
+      item,
+      product,
+      quantity: 0,
+      totalValue: 0,
+      unitDecimalPlaces: item.valorUnitarioDecimais || 2,
+    };
+    current.quantity += Number(item.quantidade || 0);
+    current.totalValue += Number(item.valorTotal || 0);
+    current.unitDecimalPlaces = Math.max(current.unitDecimalPlaces, item.valorUnitarioDecimais || 0);
+    grouped.set(product.id, current);
+  }
+
+  const sorted = [...grouped.values()].sort((a, b) => Number(b.totalValue || b.quantity || 0) - Number(a.totalValue || a.quantity || 0));
+  const selected = sorted[0];
+  const quantity = selected.quantity || parsed?.pesoLiquidoNf;
+  const totalValue = selected.totalValue || parsed?.valorTotalNota;
+
+  return {
+    ...selected,
+    quantity,
+    totalValue,
+    unitValue: calculateUnitValue(totalValue, quantity) ?? selected.item?.valorUnitario,
+  };
+}
+
+function sumNfeItems(items, key) {
+  const values = (items || []).map((item) => Number(item?.[key] || 0)).filter((value) => Number.isFinite(value) && value > 0);
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
+function calculateUnitValue(totalValue, quantity) {
+  const total = Number(totalValue || 0);
+  const qty = Number(quantity || 0);
+  if (!Number.isFinite(total) || !Number.isFinite(qty) || qty <= 0) return null;
+  return total / qty;
 }
 
 function produtoNome(row, fallback = '-') {
