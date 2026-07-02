@@ -1684,7 +1684,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
               <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
               <td className="px-4 py-3">{fornecedorNome(row)}</td>
               <td className="px-4 py-3">{produtoNome(row)}</td>
-              <td className="px-4 py-3">{placaVeiculo(row)}</td>
+              <td className="px-4 py-3"><PlateTag value={placaVeiculo(row)} /></td>
               <td className="px-4 py-3">{kg(row.peso_bruto)}</td>
               <td className="px-4 py-3">{kg(row.tara)}</td>
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
@@ -1707,6 +1707,16 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
       {loading && <p className="p-6 text-center text-sm font-semibold text-slate-500">Carregando recebimentos...</p>}
       {!loading && !rows.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhum recebimento encontrado.</p>}
     </div>
+  );
+}
+
+function PlateTag({ value }) {
+  const plate = formatPlateDisplay(value);
+  if (!plate || plate === '-') return <span className="text-slate-400">-</span>;
+  return (
+    <span className="inline-flex min-w-[82px] justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs font-extrabold uppercase tracking-wide text-slate-800 shadow-sm">
+      {plate}
+    </span>
   );
 }
 
@@ -2776,6 +2786,13 @@ function produtoNome(row, fallback = '-') {
 
 function placaVeiculo(row, fallback = '-') {
   return row.veiculo_placa_manual || row.veiculo?.placa || fallback;
+}
+
+function formatPlateDisplay(value) {
+  const cleaned = String(value || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!cleaned) return '-';
+  if (cleaned.length === 7) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ') || '-';
 }
 
 function sortRecebimentoRows(rows) {
