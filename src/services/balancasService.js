@@ -160,9 +160,8 @@ export async function getRecebimento(id) {
 export async function createRecebimento(payload) {
   const cleanedPayload = cleanPayload(payload);
   const { data, error } = await supabase.from('recebimentos').insert(cleanedPayload).select(RECEBIMENTO_SELECT).single();
-  if (error && cleanedPayload.portaria_id && isMissingColumn(error, 'portaria_id')) {
-    const fallbackPayload = { ...cleanedPayload };
-    delete fallbackPayload.portaria_id;
+  const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
+  if (error && fallbackPayload) {
     const fallback = await supabase.from('recebimentos').insert(fallbackPayload).select(RECEBIMENTO_SELECT).single();
     if (fallback.error) throw fallback.error;
     return fallback.data;
@@ -172,7 +171,14 @@ export async function createRecebimento(payload) {
 }
 
 export async function updateRecebimento(id, payload) {
-  const { data, error } = await supabase.from('recebimentos').update(cleanPayload(payload)).eq('id', id).select(RECEBIMENTO_SELECT).single();
+  const cleanedPayload = cleanPayload(payload);
+  const { data, error } = await supabase.from('recebimentos').update(cleanedPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
+  const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
+  if (error && fallbackPayload) {
+    const fallback = await supabase.from('recebimentos').update(fallbackPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
+    if (fallback.error) throw fallback.error;
+    return fallback.data;
+  }
   if (error) throw error;
   return data;
 }
@@ -182,25 +188,29 @@ export async function deleteRecebimento(id) {
   if (error) throw error;
 }
 
-export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade, liberado_por }) {
+export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade, umidade_01, umidade_02, liberado_por }) {
   return updateRecebimento(id, {
     status: 'aprovada',
     nf_numero,
     ticket_numero,
     umidade,
+    umidade_01,
+    umidade_02,
     liberado_por,
     motivo_reprovacao: null,
     motivo_cancelamento: null,
   });
 }
 
-export async function rejectRecebimento(id, { motivo_reprovacao, nf_numero, ticket_numero, umidade, liberado_por }) {
+export async function rejectRecebimento(id, { motivo_reprovacao, nf_numero, ticket_numero, umidade, umidade_01, umidade_02, liberado_por }) {
   return updateRecebimento(id, {
     status: 'reprovada',
     motivo_reprovacao,
     nf_numero,
     ticket_numero,
     umidade,
+    umidade_01,
+    umidade_02,
     liberado_por,
   });
 }
@@ -314,6 +324,26 @@ function isMissingColumn(error, column) {
     || message.includes('does not exist')
     || message.includes('column')
   );
+}
+
+function stripMissingOptionalColumns(error, payload) {
+  if (!error) return null;
+  const fallbackPayload = { ...payload };
+  let changed = false;
+
+  if (fallbackPayload.portaria_id !== undefined && isMissingColumn(error, 'portaria_id')) {
+    delete fallbackPayload.portaria_id;
+    changed = true;
+  }
+
+  if ((fallbackPayload.umidade_01 !== undefined || fallbackPayload.umidade_02 !== undefined)
+    && (isMissingColumn(error, 'umidade_01') || isMissingColumn(error, 'umidade_02'))) {
+    delete fallbackPayload.umidade_01;
+    delete fallbackPayload.umidade_02;
+    changed = true;
+  }
+
+  return changed ? fallbackPayload : null;
 }
 
 function isMissingPortariaTable(error) {

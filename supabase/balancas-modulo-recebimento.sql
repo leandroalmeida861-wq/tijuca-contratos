@@ -100,6 +100,8 @@ create table if not exists public.recebimentos (
   divergente boolean not null default false,
   status text not null default 'pendente',
   umidade numeric(8, 3),
+  umidade_01 numeric(8, 3),
+  umidade_02 numeric(8, 3),
   ticket_numero text,
   liberado_por text,
   motivo_reprovacao text,
@@ -116,6 +118,10 @@ create table if not exists public.recebimentos (
   constraint recebimentos_pesos_validos check (peso_bruto >= 0 and tara >= 0 and tara <= peso_bruto),
   constraint recebimentos_nf_chave_unica unique (nf_chave_acesso)
 );
+
+alter table public.recebimentos
+add column if not exists umidade_01 numeric(8, 3),
+add column if not exists umidade_02 numeric(8, 3);
 
 create table if not exists public.recebimento_logs (
   id uuid primary key default gen_random_uuid(),

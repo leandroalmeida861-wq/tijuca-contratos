@@ -130,6 +130,8 @@ const defaultLaboratorioForm = {
   nf_numero: '',
   ticket_numero: '',
   umidade: '',
+  umidade_01: '',
+  umidade_02: '',
   liberado_por: '',
   status: 'aprovada',
   motivo_reprovacao: '',
@@ -739,7 +741,7 @@ function RecebimentoForm({ row, options, onClose, onSaved, setError }) {
           produto_id: matchedProduct?.id || '',
           produto_nome_manual: matchedProduct?.id ? '' : '',
           peso_nf: xmlQuantity ?? current.peso_nf,
-          valor_unitario: formatMoneyPt(xmlUnitValue, displayDecimalPlaces(xmlUnitDecimals, 2)) || current.valor_unitario,
+          valor_unitario: formatMoneyPtCompact(xmlUnitValue, displayDecimalPlaces(xmlUnitDecimals, 2)) || current.valor_unitario,
           valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
         };
         if (!next.valor_total) next.valor_total = calculateValorTotalDisplay(next.peso_nf, next.valor_unitario) || current.valor_total;
@@ -861,10 +863,12 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
     ['Diferença', kg(row.diferenca_kg)],
     ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
-    ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
+    ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
+    ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
+    ['Umidade média', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
-    ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
+    ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
     ['Valor total', row.valor_total === null || row.valor_total === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_total, 2)}`],
     ['Motivo reprovação', row.motivo_reprovacao || '-'],
     ['Motivo cancelamento', row.motivo_cancelamento || '-'],
@@ -918,7 +922,9 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         await approveRecebimento(row.id, {
           nf_numero: edit.nf_numero || row.nf_numero,
           ticket_numero: edit.ticket_numero || row.ticket_numero,
-          umidade: edit.umidade ?? row.umidade,
+          umidade_01: edit.umidade_01 ?? row.umidade_01,
+          umidade_02: edit.umidade_02 ?? row.umidade_02,
+          umidade: resolveHumidityValue(edit, row),
           liberado_por: edit.liberado_por || row.liberado_por,
         });
         setMessage('Carga aprovada pelo laboratorio.');
@@ -933,7 +939,9 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           motivo_reprovacao: motivo,
           nf_numero: edit.nf_numero || row.nf_numero,
           ticket_numero: edit.ticket_numero || row.ticket_numero,
-          umidade: edit.umidade ?? row.umidade,
+          umidade_01: edit.umidade_01 ?? row.umidade_01,
+          umidade_02: edit.umidade_02 ?? row.umidade_02,
+          umidade: resolveHumidityValue(edit, row),
           liberado_por: edit.liberado_por || row.liberado_por,
         });
         setMessage('Carga reprovada com motivo registrado.');
@@ -1049,7 +1057,9 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           <Input label="Veiculo / placa" value={labForm.veiculo_placa_manual} onChange={(value) => updateLabForm('veiculo_placa_manual', value)} required />
           <Input label="Número da NF (opcional)" value={labForm.nf_numero} onChange={(value) => updateLabForm('nf_numero', onlyDigits(value))} />
           <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
-          <Input label="Umidade %" type="number" step="0.001" value={labForm.umidade} onChange={(value) => updateLabForm('umidade', value)} />
+          <Input label="Umidade % 01" type="number" step="0.001" value={labForm.umidade_01} onChange={(value) => updateLabForm('umidade_01', value)} />
+          <Input label="Umidade % 02" type="number" step="0.001" value={labForm.umidade_02} onChange={(value) => updateLabForm('umidade_02', value)} />
+          <Input label="Umidade média %" type="number" step="0.001" value={calculateHumidityAverageDisplay(labForm.umidade_01, labForm.umidade_02, labForm.umidade)} onChange={(value) => updateLabForm('umidade', value)} />
           <Input label="Liberado por" value={labForm.liberado_por} onChange={(value) => updateLabForm('liberado_por', value)} />
           <Select label="Resultado" value={labForm.status} onChange={(value) => updateLabForm('status', value)} options={[
             { id: 'aprovada', nome: 'Aprovado' },
@@ -1176,15 +1186,21 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
         <LabCell label="Fornecedor" value={fornecedorNome(row)} />
       </div>
 
-      <div className="grid gap-3 p-4 lg:grid-cols-5">
+      <div className="grid gap-3 p-4 lg:grid-cols-6">
         <SmallField label="Número da NF">
           <SmallInput value={edit.nf_numero ?? row.nf_numero ?? ''} onChange={(value) => onEdit(row.id, 'nf_numero', onlyDigits(value))} />
         </SmallField>
         <SmallField label="Ticket">
           <SmallInput value={edit.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => onEdit(row.id, 'ticket_numero', value)} />
         </SmallField>
-        <SmallField label="Umidade (%)">
-          <SmallInput type="number" value={edit.umidade ?? row.umidade ?? ''} onChange={(value) => onEdit(row.id, 'umidade', value)} />
+        <SmallField label="Umidade 01 (%)">
+          <SmallInput type="number" value={edit.umidade_01 ?? row.umidade_01 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_01', value)} />
+        </SmallField>
+        <SmallField label="Umidade 02 (%)">
+          <SmallInput type="number" value={edit.umidade_02 ?? row.umidade_02 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_02', value)} />
+        </SmallField>
+        <SmallField label="Umidade média (%)">
+          <SmallInput type="number" value={calculateHumidityAverageDisplay(edit.umidade_01 ?? row.umidade_01, edit.umidade_02 ?? row.umidade_02, edit.umidade ?? row.umidade)} onChange={(value) => onEdit(row.id, 'umidade', value)} />
         </SmallField>
         <SmallField label="Liberado por">
           <SmallInput value={edit.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => onEdit(row.id, 'liberado_por', value)} />
@@ -1192,7 +1208,7 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
         <SmallField label="Peso liquido">
           <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700">{kg(row.peso_liquido)}</div>
         </SmallField>
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-5">
           <label className="grid gap-1 text-xs font-bold text-slate-600">
             Motivo para reprovar ou cancelar
             <textarea value={reason} onChange={(event) => onReason(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-tijuca-500" placeholder="Obrigatorio para reprovar/cancelar" />
@@ -1269,7 +1285,9 @@ function exportLaboratoryReleasePdf(row) {
   y += 56;
   drawPdfRow(doc, margin, y, width, [
     ['Ticket', row.ticket_numero || '-'],
-    ['Umidade', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
+    ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
+    ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
+    ['Umidade média', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Peso liquido', kg(row.peso_liquido)],
     ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
   ]);
@@ -1347,7 +1365,9 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
       if (action === 'aprovar') {
         await approveRecebimento(row.id, {
           ticket_numero: edit.ticket_numero || row.ticket_numero,
-          umidade: edit.umidade ?? row.umidade,
+          umidade_01: edit.umidade_01 ?? row.umidade_01,
+          umidade_02: edit.umidade_02 ?? row.umidade_02,
+          umidade: resolveHumidityValue(edit, row),
           liberado_por: edit.liberado_por || row.liberado_por,
         });
         setMessage('Carga aprovada pelo laboratório.');
@@ -1361,7 +1381,9 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
         await rejectRecebimento(row.id, {
           motivo_reprovacao: motivo,
           ticket_numero: edit.ticket_numero || row.ticket_numero,
-          umidade: edit.umidade ?? row.umidade,
+          umidade_01: edit.umidade_01 ?? row.umidade_01,
+          umidade_02: edit.umidade_02 ?? row.umidade_02,
+          umidade: resolveHumidityValue(edit, row),
           liberado_por: edit.liberado_por || row.liberado_por,
         });
         setMessage('Carga reprovada com motivo registrado.');
@@ -2124,7 +2146,7 @@ function validatePortariaForm(form, rows, editingId) {
 function rowToForm(row) {
   if (!row) return { ...defaultRecebimento };
   const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
-  form.valor_unitario = formatMoneyPt(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
+  form.valor_unitario = formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
   form.valor_total = formatMoneyPt(row.valor_total, 2);
   return form;
 }
@@ -2164,6 +2186,8 @@ function rowToLaboratorioForm(row) {
     nf_numero: row.nf_numero || '',
     ticket_numero: row.ticket_numero || '',
     umidade: row.umidade ?? '',
+    umidade_01: row.umidade_01 ?? '',
+    umidade_02: row.umidade_02 ?? '',
     liberado_por: row.liberado_por || '',
     status: row.status || 'aprovada',
     motivo_reprovacao: row.motivo_reprovacao || '',
@@ -2178,7 +2202,9 @@ function normalizeRecebimentoPayload(form) {
     peso_bruto: Number(form.peso_bruto || 0),
     tara: Number(form.tara || 0),
     peso_nf: nullableNumber(form.peso_nf),
-    umidade: nullableNumber(form.umidade),
+    umidade_01: nullableNumber(form.umidade_01),
+    umidade_02: nullableNumber(form.umidade_02),
+    umidade: resolveHumidityValue(form),
     valor_unitario: nullableLocaleNumber(form.valor_unitario),
     valor_total: nullableLocaleNumber(form.valor_total),
     fornecedor_nome_manual: form.fornecedor_id ? null : form.fornecedor_nome_manual,
@@ -2332,6 +2358,20 @@ function calculateValorTotalDisplay(pesoNf, valorUnitario) {
   return formatMoneyPt(peso * unitario, 2);
 }
 
+function resolveHumidityValue(primary = {}, fallback = {}) {
+  const first = nullableNumber(primary.umidade_01 ?? fallback.umidade_01);
+  const second = nullableNumber(primary.umidade_02 ?? fallback.umidade_02);
+  if (first !== null && second !== null) return Number(((first + second) / 2).toFixed(3));
+  if (first !== null) return first;
+  if (second !== null) return second;
+  return nullableNumber(primary.umidade ?? fallback.umidade);
+}
+
+function calculateHumidityAverageDisplay(firstValue, secondValue, fallbackValue) {
+  const average = resolveHumidityValue({ umidade_01: firstValue, umidade_02: secondValue, umidade: fallbackValue });
+  return average === null ? '' : String(average);
+}
+
 function inputDecimalPlaces(value) {
   const text = String(value || '');
   const lastComma = text.lastIndexOf(',');
@@ -2357,6 +2397,16 @@ function formatMoneyPt(value, decimals = 2) {
   const [integer, decimal = ''] = numeric.toFixed(scale).split('.');
   const formattedInteger = formatThousandsPt(integer);
   return scale ? `${formattedInteger},${decimal}` : formattedInteger;
+}
+
+function formatMoneyPtCompact(value, decimals = 6, minDecimals = 2) {
+  const formatted = formatMoneyPt(value, decimals);
+  if (!formatted || !formatted.includes(',')) return formatted;
+  const [integer, decimal = ''] = formatted.split(',');
+  const min = Math.max(0, Number(minDecimals) || 0);
+  const trimmed = decimal.replace(/0+$/, '');
+  const finalDecimal = trimmed.length < min ? decimal.slice(0, min) : trimmed;
+  return finalDecimal ? `${integer},${finalDecimal}` : integer;
 }
 
 function formatThousandsPt(value) {
