@@ -251,7 +251,7 @@ begin
   insert into public.recebimento_logs (user_id, recebimento_id, acao, dados_anteriores, dados_novos)
   values (
     auth.uid(),
-    case when tg_op = 'DELETE' then old.recebimento_id else new.recebimento_id end,
+    case when tg_op = 'DELETE' then null else new.recebimento_id end,
     case tg_op
       when 'INSERT' then 'cadastrar_nota_complementar'
       when 'UPDATE' then 'editar_nota_complementar'
