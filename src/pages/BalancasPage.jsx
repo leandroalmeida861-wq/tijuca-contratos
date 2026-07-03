@@ -98,6 +98,8 @@ const defaultRecebimento = {
   unidade_nota: 'KG',
   peso_por_saca: '60',
   umidade: '',
+  umidade_01: '',
+  umidade_02: '',
   ticket_numero: '',
   liberado_por: '',
   observacao: '',
@@ -883,7 +885,8 @@ function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }
           <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
         )}
         <Input label="Peso convertido KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
-        <Input label="Umidade %" type="number" step="0.001" value={form.umidade} onChange={(value) => updateField('umidade', value)} />
+        <Input label="Umidade % 01" type="number" step="0.001" value={form.umidade_01} onChange={(value) => updateField('umidade_01', value)} />
+        <Input label="Umidade % 02" type="number" step="0.001" value={form.umidade_02} onChange={(value) => updateField('umidade_02', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
         <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
