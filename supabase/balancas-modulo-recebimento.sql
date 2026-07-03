@@ -150,6 +150,10 @@ create table if not exists public.recebimento_notas_complementares (
   data_emissao date,
   fornecedor_id uuid references public.fornecedores(id) on delete set null,
   fornecedor_nome text,
+  quantidade_nota numeric(14, 3),
+  unidade_nota text default 'KG',
+  peso_por_saca numeric(14, 3) default 60,
+  peso_nf numeric(14, 3),
   valor_unitario numeric(18, 6),
   valor_total numeric(18, 2) not null default 0 check (valor_total >= 0),
   xml_nome_arquivo text,
@@ -159,6 +163,12 @@ create table if not exists public.recebimento_notas_complementares (
   atualizado_em timestamptz not null default now(),
   constraint recebimento_notas_complementares_chave_unica unique (chave_nfe)
 );
+
+alter table public.recebimento_notas_complementares
+add column if not exists quantidade_nota numeric(14, 3),
+add column if not exists unidade_nota text default 'KG',
+add column if not exists peso_por_saca numeric(14, 3) default 60,
+add column if not exists peso_nf numeric(14, 3);
 
 create or replace function public.recebimento_set_updated_at()
 returns trigger

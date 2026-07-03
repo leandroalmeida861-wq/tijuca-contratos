@@ -698,6 +698,7 @@ function HumidityReadings({ row }) {
 }
 
 function reportQuantity(row) {
+  if ((row.complementos || []).length > 0 && pesoNotaAgregado(row) > 0) return formatWeightPt(pesoNotaAgregado(row));
   const quantity = row.quantidade_nota ?? row.peso_nf;
   return quantity === null || quantity === undefined || quantity === '' ? '-' : formatWeightPt(quantity);
 }
@@ -721,8 +722,24 @@ function complementosTotal(complementos = []) {
   return (complementos || []).reduce((sum, item) => sum + Number(item.valor_total || 0), 0);
 }
 
+function complementoPesoTotal(complementos = []) {
+  return (complementos || []).reduce((sum, item) => sum + Number(item.peso_nf || 0), 0);
+}
+
+function pesoNotaAgregado(row) {
+  return Number(row?.peso_nf || 0) + complementoPesoTotal(row?.complementos);
+}
+
+function diferencaAgregada(row) {
+  return Number(row?.peso_liquido || 0) - pesoNotaAgregado(row);
+}
+
 function valorTotalAgregado(row) {
   return Number(row?.valor_total || 0) + complementosTotal(row?.complementos);
+}
+
+function complementosNumeros(row) {
+  return (row?.complementos || []).map((item) => item.numero_nf).filter(Boolean).join(', ');
 }
 
 function complementoFornecedorNome(complemento) {
@@ -738,6 +755,10 @@ function normalizeComplementoPayload(form) {
     data_emissao: form.data_emissao || null,
     fornecedor_id: form.fornecedor_id || null,
     fornecedor_nome: form.fornecedor_id ? null : String(form.fornecedor_nome || '').trim() || null,
+    quantidade_nota: nullableLocaleNumber(form.quantidade_nota),
+    unidade_nota: form.unidade_nota || 'KG',
+    peso_por_saca: nullableLocaleNumber(form.peso_por_saca),
+    peso_nf: nullableLocaleNumber(form.peso_nf),
     valor_unitario: nullableLocaleNumber(form.valor_unitario),
     valor_total: nullableLocaleNumber(form.valor_total) ?? 0,
     xml_nome_arquivo: form.xml_nome_arquivo || null,
@@ -754,6 +775,10 @@ function emptyComplementoForm(recebimentoId = '') {
     data_emissao: todayIso(),
     fornecedor_id: '',
     fornecedor_nome: '',
+    quantidade_nota: '',
+    unidade_nota: 'KG',
+    peso_por_saca: '60',
+    peso_nf: '',
     valor_unitario: '',
     valor_total: '',
     xml_nome_arquivo: '',
@@ -770,6 +795,10 @@ function complementoToForm(complemento) {
     data_emissao: complemento.data_emissao || todayIso(),
     fornecedor_id: complemento.fornecedor_id || '',
     fornecedor_nome: complemento.fornecedor_nome || '',
+    quantidade_nota: complemento.quantidade_nota ?? complemento.peso_nf ?? '',
+    unidade_nota: complemento.unidade_nota || 'KG',
+    peso_por_saca: complemento.peso_por_saca ?? (isSacaUnit(complemento.unidade_nota) ? '60' : ''),
+    peso_nf: complemento.peso_nf ?? '',
     valor_unitario: formatMoneyPtCompact(complemento.valor_unitario, Math.max(numberDecimalPlaces(complemento.valor_unitario), 2)),
     valor_total: formatMoneyPt(complemento.valor_total, 2),
     xml_nome_arquivo: complemento.xml_nome_arquivo || '',
@@ -1036,7 +1065,19 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
   }, [recebimentoId]);
 
   function updateField(name, value) {
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => {
+      const next = { ...current, [name]: value };
+      if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca') {
+        if (isSacaUnit(next.unidade_nota) && !next.peso_por_saca) next.peso_por_saca = '60';
+        if (!isSacaUnit(next.unidade_nota)) next.peso_por_saca = '';
+        const convertedWeight = normalizarQuantidadeParaKg(next.quantidade_nota, next.unidade_nota, next.peso_por_saca || 60);
+        next.peso_nf = convertedWeight === null ? '' : String(convertedWeight);
+      }
+      if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca' || name === 'valor_unitario') {
+        next.valor_total = calculateValorTotalNotaDisplay(next);
+      }
+      return next;
+    });
   }
 
   function startNew() {
@@ -1064,6 +1105,9 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
       const matchedSupplier = findFornecedorFromNfe(parsed, fornecedores);
       const totalValue = parsed.valorTotalNota ?? xmlProduct.totalValue;
       const quantity = xmlProduct.quantity ?? parsed.pesoLiquidoNf;
+      const unit = normalizeNotaUnidade(xmlProduct.unit || xmlProduct.item?.unidade || 'KG');
+      const pesoPorSaca = isSacaUnit(unit) ? 60 : '';
+      const convertedWeight = normalizarQuantidadeParaKg(quantity, unit, pesoPorSaca || 60) ?? parsed.pesoLiquidoNf;
       const unitValue = xmlProduct.unitValue ?? calculateUnitValue(totalValue, quantity);
       setForm((current) => ({
         ...current,
@@ -1073,6 +1117,10 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
         data_emissao: parsed.dataEmissao || current.data_emissao,
         fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
         fornecedor_nome: matchedSupplier?.id ? '' : parsed.emitente?.nome || current.fornecedor_nome,
+        quantidade_nota: quantity ?? current.quantidade_nota,
+        unidade_nota: unit || current.unidade_nota || 'KG',
+        peso_por_saca: isSacaUnit(unit) ? String(pesoPorSaca || 60) : '',
+        peso_nf: convertedWeight ?? current.peso_nf,
         valor_unitario: formatMoneyPtCompact(unitValue, Math.max(numberDecimalPlaces(unitValue), 2)) || current.valor_unitario,
         valor_total: formatMoneyPt(totalValue, 2) || current.valor_total,
         xml_nome_arquivo: file.name,
@@ -1170,6 +1218,16 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
             <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={fornecedores} />
             <Input label="Fornecedor do XML" value={form.fornecedor_nome} onChange={(value) => updateField('fornecedor_nome', value)} />
             <Input label="Chave da NF-e complementar" value={form.chave_nfe} onChange={(value) => updateField('chave_nfe', value)} />
+            <Input label="Quantidade da NF complementar" type="number" step="0.001" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />
+            <Select label="Unidade da NF complementar" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
+              { id: 'KG', nome: 'KG' },
+              { id: 'SC', nome: 'SC / Saca' },
+              { id: 'TON', nome: 'TON / Tonelada' },
+            ]} />
+            {isSacaUnit(form.unidade_nota) && (
+              <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
+            )}
+            <Input label="Peso convertido KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
             <MoneyInput label="Valor unitario" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
             <MoneyInput label="Valor total da NF complementar" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
           </div>
@@ -1192,7 +1250,7 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
         <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="text-xs font-bold uppercase text-slate-500">
             <tr>
-              {['NF complementar', 'Serie', 'Emissao', 'Fornecedor', 'Valor unit.', 'Valor complemento', 'Chave NF-e', 'Observacao', 'Acoes'].map((head) => <th key={head} className="border-b px-3 py-2">{head}</th>)}
+              {['NF complementar', 'Serie', 'Emissao', 'Fornecedor', 'Peso', 'Valor unit.', 'Valor complemento', 'Chave NF-e', 'Observacao', 'Acoes'].map((head) => <th key={head} className="border-b px-3 py-2">{head}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -1202,6 +1260,7 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
                 <td className="px-3 py-2">{item.serie || '-'}</td>
                 <td className="px-3 py-2">{dateBr(item.data_emissao)}</td>
                 <td className="px-3 py-2">{complementoFornecedorNome(item)}</td>
+                <td className="px-3 py-2">{item.peso_nf ? kg(item.peso_nf) : '-'}</td>
                 <td className="px-3 py-2">{formatCurrencyCell(item.valor_unitario, true)}</td>
                 <td className="px-3 py-2 font-bold">{formatCurrencyCell(item.valor_total)}</td>
                 <td className="max-w-[160px] truncate px-3 py-2" title={item.chave_nfe || ''}>{item.chave_nfe || '-'}</td>
@@ -1251,8 +1310,9 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Peso bruto', kg(row.peso_bruto)],
     ['Tara', kg(row.tara)],
     ['Peso líquido', kg(row.peso_liquido)],
-    ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
-    ['Diferença', kg(row.diferenca_kg)],
+    ['Peso - Quantidade', pesoNotaAgregado(row) ? kg(pesoNotaAgregado(row)) : '-'],
+    ['Diferenca com complemento', kg(diferencaAgregada(row))],
+    ['Diferença original', kg(row.diferenca_kg)],
     ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
     ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
     ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
@@ -1703,14 +1763,14 @@ function exportLaboratoryReleasePdf(row) {
     ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
     ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
     ['Peso liquido', kg(row.peso_liquido)],
-    ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
+    ['Peso - Quantidade', pesoNotaAgregado(row) ? kg(pesoNotaAgregado(row)) : '-'],
   ]);
 
   y += 56;
   drawPdfRow(doc, margin, y, width, [
     ['Liberado por', row.liberado_por || '-'],
     ['Status', statusLabel(row.status)],
-    ['Diferenca', kg(row.diferenca_kg)],
+    ['Diferenca', kg(diferencaAgregada(row))],
     ['NF', row.nf_numero || '-'],
   ]);
 
@@ -1843,9 +1903,9 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
                 <td className="px-3 py-3">{produtoNome(row)}</td>
                 <td className="px-3 py-3">{placaVeiculo(row)}</td>
                 <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
-                <td className="px-3 py-3">{row.peso_nf ? kg(row.peso_nf) : '-'}</td>
+                <td className="px-3 py-3">{pesoNotaAgregado(row) ? kg(pesoNotaAgregado(row)) : '-'}</td>
                 <td className="px-3 py-3">
-                  <span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span>
+                  <span className={differenceClass(diferencaAgregada(row))}>{kg(diferencaAgregada(row))}</span>
                 </td>
                 <td className="px-3 py-3"><SmallInput value={edits[row.id]?.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => updateEdit(row.id, 'ticket_numero', value)} /></td>
                 <td className="px-3 py-3"><SmallInput type="number" value={edits[row.id]?.umidade ?? row.umidade ?? ''} onChange={(value) => updateEdit(row.id, 'umidade', value)} /></td>
@@ -2160,8 +2220,8 @@ function exportRecebimentosPdf(rows, filters = {}) {
 
   const totals = rows.reduce((acc, row) => {
     acc.liquido += Number(row.peso_liquido || 0);
-    acc.nota += Number(row.peso_nf || 0);
-    acc.diferenca += Number(row.diferenca_kg || 0);
+    acc.nota += pesoNotaAgregado(row);
+    acc.diferenca += diferencaAgregada(row);
     acc.valor += Number(row.valor_agregado_relatorio ?? row.valor_total ?? 0);
     return acc;
   }, { liquido: 0, nota: 0, diferenca: 0, valor: 0 });
@@ -2287,7 +2347,9 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showR
                 <div className="flex flex-col gap-1">
                   <span>{row.nf_numero || '-'}</span>
                   {(row.complementos || []).length > 0 && (
-                    <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold uppercase text-amber-700">Com complemento</span>
+                    <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold uppercase text-amber-700">
+                      Compl.: {complementosNumeros(row) || `${(row.complementos || []).length} nota(s)`}
+                    </span>
                   )}
                 </div>
               </td>
@@ -2298,9 +2360,16 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showR
               <td className="px-4 py-3">{kg(row.peso_bruto)}</td>
               <td className="px-4 py-3">{kg(row.tara)}</td>
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
-              <td className="px-4 py-3">{row.peso_nf ? kg(row.peso_nf) : '-'}</td>
               <td className="px-4 py-3">
-                <span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span>
+                <div className="flex flex-col gap-1">
+                  <span>{pesoNotaAgregado(row) ? kg(pesoNotaAgregado(row)) : '-'}</span>
+                  {complementoPesoTotal(row.complementos) > 0 && (
+                    <span className="text-[11px] font-bold text-amber-700">Principal {kg(row.peso_nf)} + compl. {kg(complementoPesoTotal(row.complementos))}</span>
+                  )}
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <span className={differenceClass(diferencaAgregada(row))}>{kg(diferencaAgregada(row))}</span>
               </td>
               <td className="px-4 py-3"><StatusBadge row={row} /></td>
               <td className="px-4 py-3">
@@ -3561,7 +3630,7 @@ function buildSupplierDifferences(rows) {
   rows.forEach((row) => {
     const key = fornecedorGroupKey(row);
     const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
-    current.kgNota += Number(row.peso_nf || 0);
+    current.kgNota += pesoNotaAgregado(row);
     current.kgRecebido += Number(row.peso_liquido || 0);
     current.diferencaKg = current.kgRecebido - current.kgNota;
     current.percentualDiferenca = current.kgNota ? (current.diferencaKg / current.kgNota) * 100 : 0;
@@ -3609,7 +3678,7 @@ function buildBestSuppliersRanking(rows) {
   rows.forEach((row) => {
     const key = fornecedorGroupKey(row);
     const kgRecebido = Number(row.peso_liquido || 0);
-    const kgNota = Number(row.peso_nf || 0);
+    const kgNota = pesoNotaAgregado(row);
     const current = map.get(key) || {
       name: fornecedorNome(row, 'Sem fornecedor'),
       cargas: 0,
