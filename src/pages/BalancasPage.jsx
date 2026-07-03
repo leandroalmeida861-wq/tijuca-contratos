@@ -677,6 +677,20 @@ function PendingScaleField({ label, value, strong }) {
   );
 }
 
+function HumidityReadings({ row }) {
+  const first = formatPercent(row.umidade_01);
+  const second = formatPercent(row.umidade_02);
+  const fallback = formatPercent(row.umidade);
+  if (!first && !second) return <span>{fallback || '-'}</span>;
+
+  return (
+    <div className="grid gap-1 text-xs font-extrabold text-slate-700">
+      {first && <span className="whitespace-nowrap">01: {first}</span>}
+      {second && <span className="whitespace-nowrap">02: {second}</span>}
+    </div>
+  );
+}
+
 function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }) {
   const [form, setForm] = useState(rowToForm(row));
   const [localOptions, setLocalOptions] = useState(options);
@@ -1187,7 +1201,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
                   <td className="px-3 py-3">{produtoNome(row)}</td>
                   <td className="px-3 py-3">{placaVeiculo(row)}</td>
                   <td className="px-3 py-3">{row.ticket_numero || '-'}</td>
-                  <td className="px-3 py-3">{row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'}</td>
+                  <td className="px-3 py-3"><HumidityReadings row={row} /></td>
                   <td className="px-3 py-3">{row.liberado_por || '-'}</td>
                   <td className="px-3 py-3"><StatusBadge row={row} /></td>
                   <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
@@ -2787,6 +2801,12 @@ function formatPlateDisplay(value) {
   if (!cleaned) return '-';
   if (cleaned.length === 7) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
   return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ') || '-';
+}
+
+function formatPercent(value) {
+  const number = nullableNumber(value);
+  if (number === null) return '';
+  return `${number.toFixed(2)}%`;
 }
 
 function sortRecebimentoRows(rows) {
