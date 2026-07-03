@@ -693,6 +693,26 @@ function HumidityReadings({ row }) {
   );
 }
 
+function reportQuantity(row) {
+  const quantity = row.quantidade_nota ?? row.peso_nf;
+  return quantity === null || quantity === undefined || quantity === '' ? '-' : formatWeightPt(quantity);
+}
+
+function formatCurrencyCell(value, compact = false) {
+  if (value === null || value === undefined || value === '') return '-';
+  const decimals = compact ? Math.max(numberDecimalPlaces(value), 2) : 2;
+  return `R$ ${compact ? formatMoneyPtCompact(value, decimals) : formatMoneyPt(value, decimals)}`;
+}
+
+function humidityText(row) {
+  const first = formatPercent(row.umidade_01);
+  const second = formatPercent(row.umidade_02);
+  if (first && second) return `01: ${first} | 02: ${second}`;
+  if (first) return `01: ${first}`;
+  if (second) return `02: ${second}`;
+  return formatPercent(row.umidade) || '-';
+}
+
 function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }) {
   const [form, setForm] = useState(rowToForm(row));
   const [localOptions, setLocalOptions] = useState(options);
@@ -1671,21 +1691,182 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
             <p className="mt-1 text-sm text-slate-500">{rows.length} registro(s) encontrados nos filtros atuais.</p>
           </div>
           {can('balancas', 'exportar') && (
-            <button type="button" onClick={() => exportRecebimentosCsv(rows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              <Download size={16} /> Exportar CSV
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => exportRecebimentosCsv(rows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                <Download size={16} /> Exportar CSV
+              </button>
+              <button type="button" onClick={() => exportRecebimentosPdf(rows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
+                <Download size={16} /> Baixar PDF
+              </button>
+            </div>
           )}
         </div>
       </div>
-      <RecebimentosTable rows={rows} can={() => false} />
+      <RelatorioRecebimentosTable rows={rows} />
     </div>
   );
 }
 
-function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete }) {
+function RelatorioRecebimentosTable({ rows }) {
+  const headers = ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Unid.', 'Valor unit.', 'Valor total', 'Umidade', 'Diferença', 'Status'];
+
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className="w-full min-w-[1180px] text-left text-sm">
+      <table className="w-full min-w-[1420px] text-left text-sm">
+        <thead className="text-xs font-bold uppercase text-slate-500">
+          <tr>{headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className={recebimentoRowClass(row)}>
+              <td className="px-4 py-3">{dateBr(row.data)}</td>
+              <td className="px-4 py-3 font-semibold">{row.nf_numero || '-'}</td>
+              <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
+              <td className="px-4 py-3">{fornecedorNome(row)}</td>
+              <td className="px-4 py-3">{produtoNome(row)}</td>
+              <td className="px-4 py-3"><PlateTag value={placaVeiculo(row)} /></td>
+              <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
+              <td className="px-4 py-3">{reportQuantity(row)}</td>
+              <td className="px-4 py-3">{row.unidade_nota || '-'}</td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.valor_unitario, true)}</td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.valor_total)}</td>
+              <td className="px-4 py-3"><HumidityReadings row={row} /></td>
+              <td className="px-4 py-3"><span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span></td>
+              <td className="px-4 py-3"><StatusBadge row={row} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!rows.length && <p className="p-6 text-center text-sm font-semibold text-slate-500">Nenhum recebimento encontrado.</p>}
+    </div>
+  );
+}
+
+function exportRecebimentosPdf(rows, filters = {}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 32;
+  const generatedAt = new Date().toLocaleString('pt-BR');
+  const period = filters.dataInicial || filters.dataFinal
+    ? `${filters.dataInicial ? dateBr(filters.dataInicial) : 'inicio'} a ${filters.dataFinal ? dateBr(filters.dataFinal) : 'fim'}`
+    : 'Todos os periodos';
+
+  const totals = rows.reduce((acc, row) => {
+    acc.liquido += Number(row.peso_liquido || 0);
+    acc.nota += Number(row.peso_nf || 0);
+    acc.diferenca += Number(row.diferenca_kg || 0);
+    acc.valor += Number(row.valor_total || 0);
+    return acc;
+  }, { liquido: 0, nota: 0, diferenca: 0, valor: 0 });
+
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, pageWidth, 58, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text('AgroFlow', margin, 36);
+  doc.setFontSize(13);
+  doc.text('Relatorio gerencial de recebimentos', 170, 25);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Periodo: ${period} | Gerado em: ${generatedAt}`, 170, 42);
+
+  doc.setTextColor(15, 23, 42);
+  let y = 82;
+  const summary = [
+    ['Registros', String(rows.length)],
+    ['KG liquido', kg(totals.liquido)],
+    ['KG nota', kg(totals.nota)],
+    ['Diferenca', kg(totals.diferenca)],
+    ['Valor total', `R$ ${formatMoneyPt(totals.valor, 2)}`],
+  ];
+  const cardWidth = (pageWidth - margin * 2 - 32) / 5;
+  summary.forEach(([label, value], index) => {
+    const x = margin + index * (cardWidth + 8);
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(x, y, cardWidth, 48, 5, 5, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text(label, x + 10, y + 16);
+    doc.setFontSize(12);
+    doc.text(String(value), x + 10, y + 35, { maxWidth: cardWidth - 20 });
+  });
+
+  y += 72;
+  const columns = [
+    ['Data', 54],
+    ['NF', 48],
+    ['Fornecedor', 112],
+    ['Produto', 78],
+    ['Placa', 55],
+    ['Qtd. NF', 58],
+    ['Valor unit.', 70],
+    ['Valor total', 72],
+    ['Umidade', 72],
+    ['Dif.', 58],
+    ['Status', 108],
+  ];
+
+  function drawHeader() {
+    doc.setFillColor(15, 23, 42);
+    doc.rect(margin, y, pageWidth - margin * 2, 24, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    let x = margin + 6;
+    columns.forEach(([label, width]) => {
+      doc.text(label, x, y + 15, { maxWidth: width - 6 });
+      x += width;
+    });
+    y += 24;
+    doc.setTextColor(15, 23, 42);
+  }
+
+  drawHeader();
+  rows.forEach((row, index) => {
+    if (y > 545) {
+      doc.addPage();
+      y = 42;
+      drawHeader();
+    }
+    doc.setFillColor(index % 2 ? 255 : 248, index % 2 ? 255 : 250, index % 2 ? 255 : 252);
+    doc.rect(margin, y, pageWidth - margin * 2, 30, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    const values = [
+      dateBr(row.data),
+      row.nf_numero || '-',
+      fornecedorNome(row),
+      produtoNome(row),
+      formatPlateDisplay(placaVeiculo(row)),
+      `${reportQuantity(row)} ${row.unidade_nota || ''}`.trim(),
+      formatCurrencyCell(row.valor_unitario, true),
+      formatCurrencyCell(row.valor_total),
+      humidityText(row),
+      kg(row.diferenca_kg),
+      recebimentoStatusLabel(row),
+    ];
+    let x = margin + 6;
+    values.forEach((value, valueIndex) => {
+      const width = columns[valueIndex][1];
+      doc.text(String(value || '-'), x, y + 12, { maxWidth: width - 6 });
+      x += width;
+    });
+    y += 30;
+  });
+
+  doc.save(`relatorio-recebimentos-${todayIso()}.pdf`);
+}
+
+function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showReportColumns = false }) {
+  const headers = showReportColumns
+    ? ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Unid.', 'Valor unit.', 'Valor total', 'Umidade', 'Diferença', 'Status']
+    : ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Diferença', 'Status', 'Ações'];
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
+      <table className={`w-full text-left text-sm ${showReportColumns ? 'min-w-[1420px]' : 'min-w-[1180px]'}`}>
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>
             {['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Diferença', 'Status', 'Ações'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
