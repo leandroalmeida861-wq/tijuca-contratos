@@ -1681,6 +1681,9 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
 }
 
 function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clearFilters, can }) {
+  const reportRows = sortReportRows(rows.filter((row) => !isLaboratorioPendenteBalanca(row)));
+  const ignoredRows = rows.length - reportRows.length;
+
   return (
     <div className="grid gap-4">
       <Filters options={options} filters={filters} setFilters={setFilters} onApply={applyFilters} onClear={clearFilters} showPortariaFilter />
@@ -1688,21 +1691,24 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Relatório de recebimentos</h2>
-            <p className="mt-1 text-sm text-slate-500">{rows.length} registro(s) encontrados nos filtros atuais.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {reportRows.length} recebimento(s) finalizado(s) nos filtros atuais, em ordem alfabetica.
+              {ignoredRows > 0 ? ` ${ignoredRows} pendente(s) de finalizar recebimento foram ocultados.` : ''}
+            </p>
           </div>
           {can('balancas', 'exportar') && (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => exportRecebimentosCsv(rows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={() => exportRecebimentosCsv(reportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                 <Download size={16} /> Exportar CSV
               </button>
-              <button type="button" onClick={() => exportRecebimentosPdf(rows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
+              <button type="button" onClick={() => exportRecebimentosPdf(reportRows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
                 <Download size={16} /> Baixar PDF
               </button>
             </div>
           )}
         </div>
       </div>
-      <RelatorioRecebimentosTable rows={rows} />
+      <RelatorioRecebimentosTable rows={reportRows} />
     </div>
   );
 }
@@ -3025,6 +3031,18 @@ function sortRecebimentoRows(rows) {
     const priorityDiff = recebimentoSortPriority(a) - recebimentoSortPriority(b);
     if (priorityDiff) return priorityDiff;
     return rowDateTimeValue(b) - rowDateTimeValue(a);
+  });
+}
+
+function sortReportRows(rows) {
+  return [...rows].sort((a, b) => {
+    const supplierDiff = normalizeName(fornecedorNome(a)).localeCompare(normalizeName(fornecedorNome(b)), 'pt-BR');
+    if (supplierDiff) return supplierDiff;
+    const productDiff = normalizeName(produtoNome(a)).localeCompare(normalizeName(produtoNome(b)), 'pt-BR');
+    if (productDiff) return productDiff;
+    const dateDiff = String(a.data || '').localeCompare(String(b.data || ''));
+    if (dateDiff) return dateDiff;
+    return String(a.nf_numero || '').localeCompare(String(b.nf_numero || ''), 'pt-BR', { numeric: true });
   });
 }
 
