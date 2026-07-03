@@ -916,7 +916,6 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Diferença %', row.diferenca_pct !== null && row.diferenca_pct !== undefined ? `${Number(row.diferenca_pct).toFixed(2)}%` : '-'],
     ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
     ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
-    ['Umidade média', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
     ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
@@ -1110,7 +1109,6 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           <Input label="Ticket" value={labForm.ticket_numero} onChange={(value) => updateLabForm('ticket_numero', value)} />
           <Input label="Umidade % 01" type="number" step="0.001" value={labForm.umidade_01} onChange={(value) => updateLabForm('umidade_01', value)} />
           <Input label="Umidade % 02" type="number" step="0.001" value={labForm.umidade_02} onChange={(value) => updateLabForm('umidade_02', value)} />
-          <Input label="Umidade média %" type="number" step="0.001" value={calculateHumidityAverageDisplay(labForm.umidade_01, labForm.umidade_02, labForm.umidade)} onChange={(value) => updateLabForm('umidade', value)} />
           <Input label="Liberado por" value={labForm.liberado_por} onChange={(value) => updateLabForm('liberado_por', value)} />
           <Select label="Resultado" value={labForm.status} onChange={(value) => updateLabForm('status', value)} options={[
             { id: 'aprovada', nome: 'Aprovado' },
@@ -1249,9 +1247,6 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
         </SmallField>
         <SmallField label="Umidade 02 (%)">
           <SmallInput type="number" value={edit.umidade_02 ?? row.umidade_02 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_02', value)} />
-        </SmallField>
-        <SmallField label="Umidade média (%)">
-          <SmallInput type="number" value={calculateHumidityAverageDisplay(edit.umidade_01 ?? row.umidade_01, edit.umidade_02 ?? row.umidade_02, edit.umidade ?? row.umidade)} onChange={(value) => onEdit(row.id, 'umidade', value)} />
         </SmallField>
         <SmallField label="Liberado por">
           <SmallInput value={edit.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => onEdit(row.id, 'liberado_por', value)} />
