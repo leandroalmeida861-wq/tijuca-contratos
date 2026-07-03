@@ -2789,7 +2789,7 @@ function calculateUnitValue(totalValue, quantity) {
 }
 
 function produtoNome(row, fallback = '-') {
-  return row.produto_nome_manual || row.produto?.nome || fallback;
+  return row.produto?.nome || row.produto_nome_manual || fallback;
 }
 
 function placaVeiculo(row, fallback = '-') {
