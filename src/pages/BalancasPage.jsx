@@ -1333,7 +1333,6 @@ function exportLaboratoryReleasePdf(row) {
     ['Ticket', row.ticket_numero || '-'],
     ['Umidade 01', row.umidade_01 ? `${Number(row.umidade_01).toFixed(2)}%` : '-'],
     ['Umidade 02', row.umidade_02 ? `${Number(row.umidade_02).toFixed(2)}%` : '-'],
-    ['Umidade média', row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'],
     ['Peso liquido', kg(row.peso_liquido)],
     ['Peso - Quantidade', row.peso_nf ? kg(row.peso_nf) : '-'],
   ]);
