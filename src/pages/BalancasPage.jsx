@@ -33,8 +33,10 @@ import {
   cancelRecebimento,
   createPortariaEntrada,
   createLookup,
+  createNotaComplementar,
   createRecebimento,
   deleteLookup,
+  deleteNotaComplementar,
   deletePortariaEntrada,
   deleteRecebimento,
   exportRecebimentosCsv,
@@ -47,6 +49,7 @@ import {
   rejectRecebimento,
   toUserError,
   updateLookup,
+  updateNotaComplementar,
   updatePortariaEntrada,
   updateRecebimento,
 } from '../services/balancasService.js';
@@ -652,6 +655,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
             row={editing}
             rows={rows}
             options={options}
+            can={can}
             onClose={() => setFormOpen(false)}
             onSaved={async () => {
               setFormOpen(false);
@@ -713,18 +717,85 @@ function humidityText(row) {
   return formatPercent(row.umidade) || '-';
 }
 
-function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }) {
+function complementosTotal(complementos = []) {
+  return (complementos || []).reduce((sum, item) => sum + Number(item.valor_total || 0), 0);
+}
+
+function valorTotalAgregado(row) {
+  return Number(row?.valor_total || 0) + complementosTotal(row?.complementos);
+}
+
+function complementoFornecedorNome(complemento) {
+  return complemento?.fornecedor?.nome || complemento?.fornecedor_nome || '-';
+}
+
+function normalizeComplementoPayload(form) {
+  return {
+    recebimento_id: form.recebimento_id,
+    numero_nf: String(form.numero_nf || '').trim(),
+    serie: String(form.serie || '').trim() || null,
+    chave_nfe: String(form.chave_nfe || '').trim() || null,
+    data_emissao: form.data_emissao || null,
+    fornecedor_id: form.fornecedor_id || null,
+    fornecedor_nome: form.fornecedor_id ? null : String(form.fornecedor_nome || '').trim() || null,
+    valor_unitario: nullableLocaleNumber(form.valor_unitario),
+    valor_total: nullableLocaleNumber(form.valor_total) ?? 0,
+    xml_nome_arquivo: form.xml_nome_arquivo || null,
+    observacao: String(form.observacao || '').trim() || null,
+  };
+}
+
+function emptyComplementoForm(recebimentoId = '') {
+  return {
+    recebimento_id: recebimentoId,
+    numero_nf: '',
+    serie: '',
+    chave_nfe: '',
+    data_emissao: todayIso(),
+    fornecedor_id: '',
+    fornecedor_nome: '',
+    valor_unitario: '',
+    valor_total: '',
+    xml_nome_arquivo: '',
+    observacao: '',
+  };
+}
+
+function complementoToForm(complemento) {
+  return {
+    recebimento_id: complemento.recebimento_id || '',
+    numero_nf: complemento.numero_nf || '',
+    serie: complemento.serie || '',
+    chave_nfe: complemento.chave_nfe || '',
+    data_emissao: complemento.data_emissao || todayIso(),
+    fornecedor_id: complemento.fornecedor_id || '',
+    fornecedor_nome: complemento.fornecedor_nome || '',
+    valor_unitario: formatMoneyPtCompact(complemento.valor_unitario, Math.max(numberDecimalPlaces(complemento.valor_unitario), 2)),
+    valor_total: formatMoneyPt(complemento.valor_total, 2),
+    xml_nome_arquivo: complemento.xml_nome_arquivo || '',
+    observacao: complemento.observacao || '',
+  };
+}
+
+function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setError }) {
   const [form, setForm] = useState(rowToForm(row));
   const [localOptions, setLocalOptions] = useState(options);
+  const [complementos, setComplementos] = useState(row?.complementos || []);
   const [xmlInfo, setXmlInfo] = useState('');
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const canImportXml = !row || isLaboratorioPendenteBalanca(row);
+  const canEditComplementos = !can || can('balancas', 'editar') || can('balancas', 'cadastrar');
 
   useEffect(() => {
     setLocalOptions(options);
   }, [options]);
+
+  useEffect(() => {
+    setForm(rowToForm(row));
+    setComplementos(row?.complementos || []);
+  }, [row]);
 
   function updateField(name, value) {
     setFieldErrors((current) => {
@@ -855,8 +926,16 @@ function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }
         setSaving(false);
         return;
       }
-      if (row?.id) await updateRecebimento(row.id, payload);
-      else await createRecebimento({ ...payload, status: 'pendente' });
+      let saved;
+      if (row?.id) saved = await updateRecebimento(row.id, payload);
+      else saved = await createRecebimento({ ...payload, status: 'pendente' });
+      const pendingComplementos = complementos.filter((item) => item.__local);
+      if (pendingComplementos.length) {
+        await Promise.all(pendingComplementos.map((item) => createNotaComplementar({
+          ...normalizeComplementoPayload({ ...item, recebimento_id: saved.id }),
+          recebimento_id: saved.id,
+        })));
+      }
       await onSaved();
     } catch (err) {
       setError(toUserError(err));
@@ -916,6 +995,16 @@ function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }
         <MoneyInput label="Valor total" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
       </div>
 
+      <NotasComplementaresSection
+        recebimentoId={row?.id || ''}
+        valorPrincipal={nullableLocaleNumber(form.valor_total) || 0}
+        complementos={complementos}
+        setComplementos={setComplementos}
+        fornecedores={localOptions.fornecedores}
+        canEdit={canEditComplementos}
+        setError={setError}
+      />
+
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         Observação
         <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
@@ -930,6 +1019,217 @@ function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }
         </button>
       </div>
     </form>
+  );
+}
+
+function NotasComplementaresSection({ recebimentoId, valorPrincipal, complementos, setComplementos, fornecedores, canEdit, setError }) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyComplementoForm(recebimentoId));
+  const [saving, setSaving] = useState(false);
+  const [info, setInfo] = useState('');
+  const totalComplementos = complementosTotal(complementos);
+  const totalAgregado = Number(valorPrincipal || 0) + totalComplementos;
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, recebimento_id: recebimentoId }));
+  }, [recebimentoId]);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function startNew() {
+    setEditingId(null);
+    setForm(emptyComplementoForm(recebimentoId));
+    setInfo('');
+    setOpen(true);
+  }
+
+  function startEdit(complemento) {
+    setEditingId(complemento.id);
+    setForm(complementoToForm(complemento));
+    setInfo('');
+    setOpen(true);
+  }
+
+  async function importComplementXml(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const parsed = parseNfeRecebimento(await file.text());
+      const xmlProduct = resolveNfeProduct(parsed, []);
+      const matchedSupplier = findFornecedorFromNfe(parsed, fornecedores);
+      const totalValue = parsed.valorTotalNota ?? xmlProduct.totalValue;
+      const quantity = xmlProduct.quantity ?? parsed.pesoLiquidoNf;
+      const unitValue = xmlProduct.unitValue ?? calculateUnitValue(totalValue, quantity);
+      setForm((current) => ({
+        ...current,
+        numero_nf: parsed.numero || current.numero_nf,
+        serie: parsed.serie || current.serie,
+        chave_nfe: parsed.chaveAcesso || current.chave_nfe,
+        data_emissao: parsed.dataEmissao || current.data_emissao,
+        fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
+        fornecedor_nome: matchedSupplier?.id ? '' : parsed.emitente?.nome || current.fornecedor_nome,
+        valor_unitario: formatMoneyPtCompact(unitValue, Math.max(numberDecimalPlaces(unitValue), 2)) || current.valor_unitario,
+        valor_total: formatMoneyPt(totalValue, 2) || current.valor_total,
+        xml_nome_arquivo: file.name,
+      }));
+      setInfo(`XML complementar importado: NF ${parsed.numero || '-'}${matchedSupplier ? ` | fornecedor: ${matchedSupplier.nome}` : ''}`);
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
+  async function saveComplemento() {
+    const payload = normalizeComplementoPayload(form);
+    if (!payload.numero_nf) {
+      setError('Informe o numero da NF complementar. Como corrigir: preencha o campo Numero da NF complementar.');
+      return;
+    }
+    if (payload.valor_total === null || payload.valor_total === undefined || payload.valor_total < 0) {
+      setError('Informe um valor total valido para a NF complementar.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (!recebimentoId) {
+        const localItem = {
+          ...payload,
+          id: editingId || `local-${Date.now()}`,
+          __local: true,
+          fornecedor: fornecedores.find((item) => item.id === payload.fornecedor_id) || null,
+        };
+        setComplementos((current) => editingId
+          ? current.map((item) => item.id === editingId ? localItem : item)
+          : [...current, localItem]);
+      } else if (editingId) {
+        const saved = await updateNotaComplementar(editingId, { ...payload, recebimento_id: recebimentoId });
+        setComplementos((current) => current.map((item) => item.id === editingId ? saved : item));
+      } else {
+        const saved = await createNotaComplementar({ ...payload, recebimento_id: recebimentoId });
+        setComplementos((current) => [...current, saved]);
+      }
+      setOpen(false);
+      setEditingId(null);
+      setForm(emptyComplementoForm(recebimentoId));
+      setInfo('');
+    } catch (err) {
+      setError(toUserError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeComplemento(complemento) {
+    if (!window.confirm(`Excluir a NF complementar ${complemento.numero_nf || '-'}?`)) return;
+    try {
+      if (!complemento.__local) await deleteNotaComplementar(complemento.id);
+      setComplementos((current) => current.filter((item) => item.id !== complemento.id));
+    } catch (err) {
+      setError(toUserError(err));
+    }
+  }
+
+  return (
+    <section className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-800">Notas Complementares</h3>
+          <p className="mt-1 text-sm text-slate-600">Vincule NFs de complemento sem alterar a NF principal, pesos, tara ou umidade.</p>
+        </div>
+        {canEdit && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={startNew} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700">
+              <Plus size={16} /> Adicionar nota complementar
+            </button>
+            <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <FileUp size={16} /> Importar XML da nota complementar
+              <input type="file" accept=".xml,text/xml,application/xml" onChange={(event) => { startNew(); importComplementXml(event); }} className="sr-only" />
+            </label>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryMiniCard label="Valor total principal" value={`R$ ${formatMoneyPt(valorPrincipal, 2)}`} />
+        <SummaryMiniCard label="Total complementos" value={`R$ ${formatMoneyPt(totalComplementos, 2)}`} />
+        <SummaryMiniCard label="Valor total agregado" value={`R$ ${formatMoneyPt(totalAgregado, 2)}`} strong />
+      </div>
+
+      {open && (
+        <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+          {info && <Alert tone="success" text={info} />}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Input label="Numero da NF complementar" value={form.numero_nf} onChange={(value) => updateField('numero_nf', value)} required />
+            <Input label="Serie" value={form.serie} onChange={(value) => updateField('serie', value)} />
+            <Input label="Data de emissao" type="date" value={form.data_emissao} onChange={(value) => updateField('data_emissao', value)} />
+            <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={fornecedores} />
+            <Input label="Fornecedor do XML" value={form.fornecedor_nome} onChange={(value) => updateField('fornecedor_nome', value)} />
+            <Input label="Chave da NF-e complementar" value={form.chave_nfe} onChange={(value) => updateField('chave_nfe', value)} />
+            <MoneyInput label="Valor unitario" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
+            <MoneyInput label="Valor total da NF complementar" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
+          </div>
+          <label className="grid gap-2 text-sm font-semibold text-slate-700">
+            Observacao
+            <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={2} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={saving} onClick={saveComplemento} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-60">
+              <Save size={16} /> {saving ? 'Salvando...' : 'Salvar complemento'}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <X size={16} /> Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="text-xs font-bold uppercase text-slate-500">
+            <tr>
+              {['NF complementar', 'Serie', 'Emissao', 'Fornecedor', 'Valor unit.', 'Valor complemento', 'Chave NF-e', 'Observacao', 'Acoes'].map((head) => <th key={head} className="border-b px-3 py-2">{head}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {complementos.map((item) => (
+              <tr key={item.id} className="border-b last:border-b-0">
+                <td className="px-3 py-2 font-bold">{item.numero_nf || '-'}</td>
+                <td className="px-3 py-2">{item.serie || '-'}</td>
+                <td className="px-3 py-2">{dateBr(item.data_emissao)}</td>
+                <td className="px-3 py-2">{complementoFornecedorNome(item)}</td>
+                <td className="px-3 py-2">{formatCurrencyCell(item.valor_unitario, true)}</td>
+                <td className="px-3 py-2 font-bold">{formatCurrencyCell(item.valor_total)}</td>
+                <td className="max-w-[160px] truncate px-3 py-2" title={item.chave_nfe || ''}>{item.chave_nfe || '-'}</td>
+                <td className="max-w-[180px] truncate px-3 py-2" title={item.observacao || ''}>{item.observacao || '-'}</td>
+                <td className="px-3 py-2">
+                  {canEdit && (
+                    <div className="flex gap-1">
+                      <button type="button" onClick={() => startEdit(item)} className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar complemento"><Edit size={15} /></button>
+                      <button type="button" onClick={() => removeComplemento(item)} className="grid h-8 w-8 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir complemento"><Trash2 size={15} /></button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!complementos.length && <p className="p-4 text-center text-sm font-semibold text-slate-500">Nenhuma nota complementar vinculada.</p>}
+      </div>
+    </section>
+  );
+}
+
+function SummaryMiniCard({ label, value, strong }) {
+  return (
+    <div className={`rounded-lg border p-3 ${strong ? 'border-tijuca-200 bg-tijuca-50' : 'border-slate-200 bg-white'}`}>
+      <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
+    </div>
   );
 }
 
@@ -959,7 +1259,9 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
     ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
-    ['Valor total', row.valor_total === null || row.valor_total === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_total, 2)}`],
+    ['Valor total principal', row.valor_total === null || row.valor_total === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_total, 2)}`],
+    ['Total complementos', `R$ ${formatMoneyPt(complementosTotal(row.complementos), 2)}`],
+    ['Valor total agregado', `R$ ${formatMoneyPt(valorTotalAgregado(row), 2)}`],
     ['Motivo reprovação', row.motivo_reprovacao || '-'],
     ['Motivo cancelamento', row.motivo_cancelamento || '-'],
     ['Observação', row.observacao || '-'],
@@ -985,6 +1287,32 @@ function RecebimentoViewModal({ row, onClose }) {
                 <p className="mt-1 break-words text-sm font-bold text-slate-900">{value}</p>
               </div>
             ))}
+          </div>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 p-3">
+              <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Notas complementares</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="text-xs font-bold uppercase text-slate-500">
+                  <tr>{['NF complementar', 'Serie', 'Emissao', 'Fornecedor', 'Valor', 'Chave', 'Observacao'].map((head) => <th key={head} className="border-b px-3 py-2">{head}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {(row.complementos || []).map((item) => (
+                    <tr key={item.id} className="border-b last:border-b-0">
+                      <td className="px-3 py-2 font-bold">{item.numero_nf || '-'}</td>
+                      <td className="px-3 py-2">{item.serie || '-'}</td>
+                      <td className="px-3 py-2">{dateBr(item.data_emissao)}</td>
+                      <td className="px-3 py-2">{complementoFornecedorNome(item)}</td>
+                      <td className="px-3 py-2 font-bold">{formatCurrencyCell(item.valor_total)}</td>
+                      <td className="max-w-[160px] truncate px-3 py-2" title={item.chave_nfe || ''}>{item.chave_nfe || '-'}</td>
+                      <td className="px-3 py-2">{item.observacao || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!(row.complementos || []).length && <p className="p-4 text-center text-sm font-semibold text-slate-500">Nenhuma nota complementar vinculada.</p>}
+            </div>
           </div>
         </div>
       </section>
@@ -1680,8 +2008,72 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
   );
 }
 
+function buildRecebimentoReportRows(rows, mode) {
+  if (mode === 'principal') {
+    return rows.map((row) => ({
+      ...row,
+      tipo_nota_relatorio: 'Principal',
+      nf_principal_relatorio: row.nf_numero || '-',
+      nf_complementar_relatorio: '-',
+      valor_principal_relatorio: Number(row.valor_total || 0),
+      valor_complemento_relatorio: 0,
+      total_complementos_relatorio: complementosTotal(row.complementos),
+      valor_agregado_relatorio: Number(row.valor_total || 0),
+      chave_complementar_relatorio: '-',
+      observacao_complementar_relatorio: '-',
+    }));
+  }
+
+  if (mode === 'detalhado') {
+    return rows.flatMap((row) => {
+      const principal = {
+        ...row,
+        id: `${row.id}-principal`,
+        tipo_nota_relatorio: 'Principal',
+        nf_principal_relatorio: row.nf_numero || '-',
+        nf_complementar_relatorio: '-',
+        valor_principal_relatorio: Number(row.valor_total || 0),
+        valor_complemento_relatorio: 0,
+        total_complementos_relatorio: complementosTotal(row.complementos),
+        valor_agregado_relatorio: valorTotalAgregado(row),
+        chave_complementar_relatorio: '-',
+        observacao_complementar_relatorio: '-',
+      };
+      const complementos = (row.complementos || []).map((item) => ({
+        ...row,
+        id: `${row.id}-comp-${item.id}`,
+        tipo_nota_relatorio: `Complemento da NF ${row.nf_numero || '-'}`,
+        nf_principal_relatorio: row.nf_numero || '-',
+        nf_complementar_relatorio: item.numero_nf || '-',
+        valor_principal_relatorio: Number(row.valor_total || 0),
+        valor_complemento_relatorio: Number(item.valor_total || 0),
+        total_complementos_relatorio: complementosTotal(row.complementos),
+        valor_agregado_relatorio: valorTotalAgregado(row),
+        chave_complementar_relatorio: item.chave_nfe || '-',
+        observacao_complementar_relatorio: item.observacao || '-',
+      }));
+      return [principal, ...complementos];
+    });
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    tipo_nota_relatorio: 'Principal + complementos',
+    nf_principal_relatorio: row.nf_numero || '-',
+    nf_complementar_relatorio: (row.complementos || []).map((item) => item.numero_nf).filter(Boolean).join(', ') || '-',
+    valor_principal_relatorio: Number(row.valor_total || 0),
+    valor_complemento_relatorio: complementosTotal(row.complementos),
+    total_complementos_relatorio: complementosTotal(row.complementos),
+    valor_agregado_relatorio: valorTotalAgregado(row),
+    chave_complementar_relatorio: (row.complementos || []).map((item) => item.chave_nfe).filter(Boolean).join(', ') || '-',
+    observacao_complementar_relatorio: (row.complementos || []).map((item) => item.observacao).filter(Boolean).join(' | ') || '-',
+  }));
+}
+
 function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clearFilters, can }) {
+  const [reportMode, setReportMode] = useState('consolidado');
   const reportRows = sortReportRows(rows.filter((row) => !isLaboratorioPendenteBalanca(row)));
+  const displayRows = buildRecebimentoReportRows(reportRows, reportMode);
   const ignoredRows = rows.length - reportRows.length;
 
   return (
@@ -1698,27 +2090,34 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
           </div>
           {can('balancas', 'exportar') && (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => exportRecebimentosCsv(reportRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={() => exportRecebimentosCsv(displayRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                 <Download size={16} /> Exportar CSV
               </button>
-              <button type="button" onClick={() => exportRecebimentosPdf(reportRows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
+              <button type="button" onClick={() => exportRecebimentosPdf(displayRows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
                 <Download size={16} /> Baixar PDF
               </button>
             </div>
           )}
         </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <Select label="Modelo do relatÃ³rio" value={reportMode} onChange={setReportMode} options={[
+            { id: 'principal', nome: 'Somente NF principal' },
+            { id: 'consolidado', nome: 'Principal + complementos consolidado' },
+            { id: 'detalhado', nome: 'Detalhado por nota fiscal' },
+          ]} />
+        </div>
       </div>
-      <RelatorioRecebimentosTable rows={reportRows} />
+      <RelatorioRecebimentosTable rows={displayRows} />
     </div>
   );
 }
 
 function RelatorioRecebimentosTable({ rows }) {
-  const headers = ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Unid.', 'Valor unit.', 'Valor total', 'Umidade', 'Diferença', 'Status'];
+  const headers = ['Data', 'Tipo da nota', 'NF principal', 'NF complementar', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Valor principal', 'Valor complemento', 'Total complementos', 'Total agregado', 'Chave complementar', 'Observação', 'Status'];
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className="w-full min-w-[1420px] text-left text-sm">
+      <table className="w-full min-w-[1720px] text-left text-sm">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>{headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}</tr>
         </thead>
@@ -1726,18 +2125,20 @@ function RelatorioRecebimentosTable({ rows }) {
           {rows.map((row) => (
             <tr key={row.id} className={recebimentoRowClass(row)}>
               <td className="px-4 py-3">{dateBr(row.data)}</td>
-              <td className="px-4 py-3 font-semibold">{row.nf_numero || '-'}</td>
-              <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
+              <td className="px-4 py-3 font-semibold">{row.tipo_nota_relatorio || 'Principal'}</td>
+              <td className="px-4 py-3 font-semibold">{row.nf_principal_relatorio || row.nf_numero || '-'}</td>
+              <td className="px-4 py-3 font-semibold">{row.nf_complementar_relatorio || '-'}</td>
               <td className="px-4 py-3">{fornecedorNome(row)}</td>
               <td className="px-4 py-3">{produtoNome(row)}</td>
               <td className="px-4 py-3"><PlateTag value={placaVeiculo(row)} /></td>
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
               <td className="px-4 py-3">{reportQuantity(row)}</td>
-              <td className="px-4 py-3">{row.unidade_nota || '-'}</td>
-              <td className="px-4 py-3">{formatCurrencyCell(row.valor_unitario, true)}</td>
-              <td className="px-4 py-3">{formatCurrencyCell(row.valor_total)}</td>
-              <td className="px-4 py-3"><HumidityReadings row={row} /></td>
-              <td className="px-4 py-3"><span className={differenceClass(row.diferenca_kg)}>{kg(row.diferenca_kg)}</span></td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.valor_principal_relatorio)}</td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.valor_complemento_relatorio)}</td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.total_complementos_relatorio)}</td>
+              <td className="px-4 py-3 font-bold">{formatCurrencyCell(row.valor_agregado_relatorio)}</td>
+              <td className="max-w-[180px] truncate px-4 py-3" title={row.chave_complementar_relatorio || ''}>{row.chave_complementar_relatorio || '-'}</td>
+              <td className="max-w-[200px] truncate px-4 py-3" title={row.observacao_complementar_relatorio || ''}>{row.observacao_complementar_relatorio || '-'}</td>
               <td className="px-4 py-3"><StatusBadge row={row} /></td>
             </tr>
           ))}
@@ -1761,7 +2162,7 @@ function exportRecebimentosPdf(rows, filters = {}) {
     acc.liquido += Number(row.peso_liquido || 0);
     acc.nota += Number(row.peso_nf || 0);
     acc.diferenca += Number(row.diferenca_kg || 0);
-    acc.valor += Number(row.valor_total || 0);
+    acc.valor += Number(row.valor_agregado_relatorio ?? row.valor_total ?? 0);
     return acc;
   }, { liquido: 0, nota: 0, diferenca: 0, valor: 0 });
 
@@ -1784,7 +2185,7 @@ function exportRecebimentosPdf(rows, filters = {}) {
     ['KG liquido', kg(totals.liquido)],
     ['KG nota', kg(totals.nota)],
     ['Diferenca', kg(totals.diferenca)],
-    ['Valor total', `R$ ${formatMoneyPt(totals.valor, 2)}`],
+    ['Valor agregado', `R$ ${formatMoneyPt(totals.valor, 2)}`],
   ];
   const cardWidth = (pageWidth - margin * 2 - 32) / 5;
   summary.forEach(([label, value], index) => {
@@ -1802,16 +2203,16 @@ function exportRecebimentosPdf(rows, filters = {}) {
   y += 72;
   const columns = [
     ['Data', 54],
-    ['NF', 48],
-    ['Fornecedor', 112],
-    ['Produto', 78],
-    ['Placa', 55],
-    ['Qtd. NF', 58],
-    ['Valor unit.', 70],
-    ['Valor total', 72],
-    ['Umidade', 72],
-    ['Dif.', 58],
-    ['Status', 108],
+    ['Tipo', 76],
+    ['NF princ.', 52],
+    ['NF comp.', 54],
+    ['Fornecedor', 100],
+    ['Produto', 70],
+    ['Valor princ.', 68],
+    ['Valor comp.', 68],
+    ['Total compl.', 68],
+    ['Agregado', 68],
+    ['Status', 92],
   ];
 
   function drawHeader() {
@@ -1842,15 +2243,15 @@ function exportRecebimentosPdf(rows, filters = {}) {
     doc.setFontSize(7);
     const values = [
       dateBr(row.data),
-      row.nf_numero || '-',
+      row.tipo_nota_relatorio || 'Principal',
+      row.nf_principal_relatorio || row.nf_numero || '-',
+      row.nf_complementar_relatorio || '-',
       fornecedorNome(row),
       produtoNome(row),
-      formatPlateDisplay(placaVeiculo(row)),
-      `${reportQuantity(row)} ${row.unidade_nota || ''}`.trim(),
-      formatCurrencyCell(row.valor_unitario, true),
-      formatCurrencyCell(row.valor_total),
-      humidityText(row),
-      kg(row.diferenca_kg),
+      formatCurrencyCell(row.valor_principal_relatorio),
+      formatCurrencyCell(row.valor_complemento_relatorio),
+      formatCurrencyCell(row.total_complementos_relatorio),
+      formatCurrencyCell(row.valor_agregado_relatorio),
       recebimentoStatusLabel(row),
     ];
     let x = margin + 6;
@@ -1882,7 +2283,14 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showR
           {rows.map((row) => (
             <tr key={row.id} className={recebimentoRowClass(row)}>
               <td className="px-4 py-3">{dateBr(row.data)}</td>
-              <td className="px-4 py-3 font-semibold">{row.nf_numero || '-'}</td>
+              <td className="px-4 py-3 font-semibold">
+                <div className="flex flex-col gap-1">
+                  <span>{row.nf_numero || '-'}</span>
+                  {(row.complementos || []).length > 0 && (
+                    <span className="inline-flex w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-extrabold uppercase text-amber-700">Com complemento</span>
+                  )}
+                </div>
+              </td>
               <td className="px-4 py-3">{row.balanca?.nome || '-'}</td>
               <td className="px-4 py-3">{fornecedorNome(row)}</td>
               <td className="px-4 py-3">{produtoNome(row)}</td>

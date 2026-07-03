@@ -8,7 +8,24 @@ const RECEBIMENTO_SELECT = `
   motorista:recebimento_motoristas(id,nome),
   transportadora:recebimento_transportadoras(id,nome),
   fornecedor:fornecedores(id,nome,cnpj),
-  produto:produtos(id,nome,unidade)
+  produto:produtos(id,nome,unidade),
+  complementos:recebimento_notas_complementares(
+    id,
+    recebimento_id,
+    numero_nf,
+    serie,
+    chave_nfe,
+    data_emissao,
+    fornecedor_id,
+    fornecedor_nome,
+    valor_unitario,
+    valor_total,
+    xml_nome_arquivo,
+    observacao,
+    criado_em,
+    atualizado_em,
+    fornecedor:fornecedores(id,nome,cnpj)
+  )
 `;
 
 const PORTARIA_SELECT = `
@@ -225,6 +242,32 @@ export async function deleteRecebimento(id) {
   if (error) throw error;
 }
 
+export async function createNotaComplementar(payload) {
+  const { data, error } = await supabase
+    .from('recebimento_notas_complementares')
+    .insert(cleanPayload(payload))
+    .select('*, fornecedor:fornecedores(id,nome,cnpj)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateNotaComplementar(id, payload) {
+  const { data, error } = await supabase
+    .from('recebimento_notas_complementares')
+    .update(cleanPayload(payload))
+    .eq('id', id)
+    .select('*, fornecedor:fornecedores(id,nome,cnpj)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteNotaComplementar(id) {
+  const { error } = await supabase.from('recebimento_notas_complementares').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade, umidade_01, umidade_02, liberado_por }) {
   return updateRecebimento(id, {
     status: 'aprovada',
@@ -285,6 +328,9 @@ export async function findOrCreateLookup(table, matchField, value, payload) {
 export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.csv') {
   const headers = [
     'Data',
+    'Tipo da nota',
+    'NF principal vinculada',
+    'Numero da NF complementar',
     'NF',
     'Balança',
     'Fornecedor',
@@ -297,7 +343,12 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'Quantidade NF',
     'Unidade NF',
     'Valor unitario',
-    'Valor total',
+    'Valor principal',
+    'Valor complemento',
+    'Total complementos',
+    'Valor total agregado',
+    'Chave da NF-e complementar',
+    'Observacao complemento',
     'Umidade 01',
     'Umidade 02',
     'Umidade media',
@@ -309,6 +360,9 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
   ];
   const body = rows.map((row) => [
     row.data,
+    row.tipo_nota_relatorio || 'Principal',
+    row.nf_principal_relatorio || row.nf_numero,
+    row.nf_complementar_relatorio || '',
     row.nf_numero,
     row.balanca?.nome,
     row.fornecedor?.nome || row.fornecedor_nome_manual,
@@ -321,7 +375,12 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     row.quantidade_nota,
     row.unidade_nota,
     row.valor_unitario,
-    row.valor_total,
+    row.valor_principal_relatorio ?? row.valor_total,
+    row.valor_complemento_relatorio ?? 0,
+    row.total_complementos_relatorio ?? 0,
+    row.valor_agregado_relatorio ?? row.valor_total,
+    row.chave_complementar_relatorio || '',
+    row.observacao_complementar_relatorio || '',
     row.umidade_01,
     row.umidade_02,
     row.umidade,
@@ -346,6 +405,9 @@ export function toUserError(error) {
   const lower = message.toLowerCase();
   if (lower.includes('row-level security') || lower.includes('permission')) {
     return 'Acesso negado. Como corrigir: confira se seu perfil tem permissão no menu Balanças.';
+  }
+  if (lower.includes('recebimento_notas_complementares_chave_unica') || (lower.includes('duplicate') && lower.includes('chave'))) {
+    return 'Chave da NF-e complementar duplicada. Como corrigir: confira se esta nota complementar ja foi vinculada a outro recebimento.';
   }
   if (lower.includes('duplicate') || lower.includes('unique')) {
     return 'Registro duplicado. Como corrigir: confira placa, chave da NF ou cadastro já existente antes de salvar novamente.';

@@ -141,12 +141,41 @@ create table if not exists public.recebimento_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.recebimento_notas_complementares (
+  id uuid primary key default gen_random_uuid(),
+  recebimento_id uuid not null references public.recebimentos(id) on delete cascade,
+  numero_nf text not null,
+  serie text,
+  chave_nfe text,
+  data_emissao date,
+  fornecedor_id uuid references public.fornecedores(id) on delete set null,
+  fornecedor_nome text,
+  valor_unitario numeric(18, 6),
+  valor_total numeric(18, 2) not null default 0 check (valor_total >= 0),
+  xml_nome_arquivo text,
+  observacao text,
+  criado_por uuid default auth.uid(),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint recebimento_notas_complementares_chave_unica unique (chave_nfe)
+);
+
 create or replace function public.recebimento_set_updated_at()
 returns trigger
 language plpgsql
 as $$
 begin
   new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.recebimento_complemento_set_atualizado_em()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.atualizado_em = now();
   return new;
 end;
 $$;
@@ -194,7 +223,38 @@ begin
     case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end,
     case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end
   );
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.recebimento_complemento_audit_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.recebimento_logs (user_id, recebimento_id, acao, dados_anteriores, dados_novos)
+  values (
+    auth.uid(),
+    case when tg_op = 'DELETE' then old.recebimento_id else new.recebimento_id end,
+    case tg_op
+      when 'INSERT' then 'cadastrar_nota_complementar'
+      when 'UPDATE' then 'editar_nota_complementar'
+      else 'excluir_nota_complementar'
+    end,
+    case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end,
+    case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end
+  );
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
 end;
 $$;
 
@@ -222,6 +282,11 @@ drop trigger if exists recebimentos_updated_at on public.recebimentos;
 create trigger recebimentos_updated_at
 before update on public.recebimentos
 for each row execute function public.recebimento_set_updated_at();
+
+drop trigger if exists recebimento_notas_complementares_updated_at on public.recebimento_notas_complementares;
+create trigger recebimento_notas_complementares_updated_at
+before update on public.recebimento_notas_complementares
+for each row execute function public.recebimento_complemento_set_atualizado_em();
 
 drop trigger if exists recebimentos_marcar_divergencia on public.recebimentos;
 create trigger recebimentos_marcar_divergencia
@@ -290,6 +355,11 @@ create trigger recebimentos_audit
 after insert or update or delete on public.recebimentos
 for each row execute function public.recebimento_audit_trigger();
 
+drop trigger if exists recebimento_notas_complementares_audit on public.recebimento_notas_complementares;
+create trigger recebimento_notas_complementares_audit
+after insert or update or delete on public.recebimento_notas_complementares
+for each row execute function public.recebimento_complemento_audit_trigger();
+
 create index if not exists recebimentos_data_idx on public.recebimentos(data desc);
 create index if not exists recebimentos_status_idx on public.recebimentos(status);
 create index if not exists recebimentos_balanca_idx on public.recebimentos(balanca_id);
@@ -305,6 +375,9 @@ where fornecedor_id is not null
   and nullif(regexp_replace(coalesce(nf_numero, ''), '\D', '', 'g'), '') is not null
   and coalesce(status, '') <> 'cancelada';
 create index if not exists recebimento_logs_recebimento_idx on public.recebimento_logs(recebimento_id);
+create index if not exists recebimento_notas_complementares_recebimento_idx on public.recebimento_notas_complementares(recebimento_id);
+create index if not exists recebimento_notas_complementares_fornecedor_idx on public.recebimento_notas_complementares(fornecedor_id);
+create index if not exists recebimento_notas_complementares_data_idx on public.recebimento_notas_complementares(data_emissao);
 
 alter table public.balancas enable row level security;
 alter table public.recebimento_veiculos enable row level security;
@@ -313,6 +386,7 @@ alter table public.recebimento_transportadoras enable row level security;
 alter table public.recebimento_laboratorios enable row level security;
 alter table public.recebimentos enable row level security;
 alter table public.recebimento_logs enable row level security;
+alter table public.recebimento_notas_complementares enable row level security;
 
 do $$
 declare
@@ -325,7 +399,8 @@ begin
     'recebimento_motoristas',
     'recebimento_transportadoras',
     'recebimento_laboratorios',
-    'recebimentos'
+    'recebimentos',
+    'recebimento_notas_complementares'
   ] loop
     for policy_item in
       select policyname from pg_policies
@@ -354,6 +429,25 @@ begin
     );
   end loop;
 end $$;
+
+drop policy if exists balancas_insert_recebimento_notas_complementares on public.recebimento_notas_complementares;
+create policy balancas_insert_recebimento_notas_complementares
+on public.recebimento_notas_complementares
+for insert to authenticated
+with check (public.agroflow_tem_permissao('balancas', 'cadastrar') or public.agroflow_tem_permissao('balancas', 'editar'));
+
+drop policy if exists balancas_update_recebimento_notas_complementares on public.recebimento_notas_complementares;
+create policy balancas_update_recebimento_notas_complementares
+on public.recebimento_notas_complementares
+for update to authenticated
+using (public.agroflow_tem_permissao('balancas', 'editar'))
+with check (public.agroflow_tem_permissao('balancas', 'editar'));
+
+drop policy if exists balancas_delete_recebimento_notas_complementares on public.recebimento_notas_complementares;
+create policy balancas_delete_recebimento_notas_complementares
+on public.recebimento_notas_complementares
+for delete to authenticated
+using (public.agroflow_tem_permissao('balancas', 'excluir'));
 
 drop policy if exists recebimento_logs_select on public.recebimento_logs;
 create policy recebimento_logs_select
