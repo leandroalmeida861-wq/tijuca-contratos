@@ -807,7 +807,10 @@ function RecebimentoForm({ row, rows = [], options, onClose, onSaved, setError }
     setFieldErrors({});
     setSaving(true);
     try {
-      const payload = normalizeRecebimentoPayload(form);
+      const payload = normalizeRecebimentoPayload({
+        ...form,
+        ...resolveManualProductFields(form.produto_nome_manual, localOptions.produtos),
+      });
       const localDuplicate = findDuplicateRecebimentoRows(rows, payload, row?.id, localOptions);
       if (localDuplicate) {
         const supplierName = localDuplicate.fornecedor?.nome || fornecedorNome(localDuplicate, 'este fornecedor');
@@ -1074,6 +1077,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         ...normalizeRecebimentoPayload({
           ...defaultRecebimento,
           ...labForm,
+          ...resolveManualProductFields(labForm.produto_nome_manual, options.produtos),
           peso_bruto: 0,
           tara: 0,
           peso_nf: '',
@@ -2703,6 +2707,29 @@ function findProdutoFromNfe(item, produtos = []) {
   const [best, second] = candidates;
   if (second && second.score === best.score) return null;
   return best.produto;
+}
+
+function findProductByManualName(name, produtos = []) {
+  const normalizedManualName = normalizeProductName(name);
+  if (!normalizedManualName) return null;
+  const candidates = (produtos || [])
+    .map((produto) => {
+      const normalizedProduct = normalizeProductName(produto.nome);
+      return { produto, score: productMatchScore(normalizedManualName, normalizedProduct) };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length) return null;
+  const [best, second] = candidates;
+  if (second && second.score === best.score) return null;
+  return best.produto;
+}
+
+function resolveManualProductFields(name, produtos = []) {
+  const product = findProductByManualName(name, produtos);
+  if (!product) return {};
+  return { produto_id: product.id, produto_nome_manual: '' };
 }
 
 function productMatchScore(normalizedXmlName, normalizedProduct) {
