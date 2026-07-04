@@ -2172,7 +2172,7 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
           )}
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          <Select label="Modelo do relatÃ³rio" value={reportMode} onChange={setReportMode} options={[
+          <Select label="Modelo do relatório" value={reportMode} onChange={setReportMode} options={[
             { id: 'principal', nome: 'Somente NF principal' },
             { id: 'consolidado', nome: 'Principal + complementos consolidado' },
             { id: 'detalhado', nome: 'Detalhado por nota fiscal' },
