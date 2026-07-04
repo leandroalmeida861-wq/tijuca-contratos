@@ -23,6 +23,8 @@ import {
   Cell,
   Pie,
   PieChart,
+  LabelList,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -2542,30 +2544,54 @@ function ProductsPieChart({ data }) {
 }
 
 function SupplierDifferenceChart({ data }) {
+  const [showAll, setShowAll] = useState(false);
   if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
 
+  const visibleData = showAll ? data : data.slice(0, 10);
+  const chartHeight = Math.max(320, visibleData.length * 42 + 70);
+
   return (
-    <div className="h-80 min-w-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 12, bottom: 62, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis
-            dataKey="name"
-            interval={0}
-            tick={{ fontSize: 11, fontWeight: 700 }}
-            angle={-32}
-            textAnchor="end"
-            height={74}
-          />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => compactKg(value)} width={54} />
-          <Tooltip content={<SupplierDifferenceTooltip />} />
-          <Bar dataKey="diferencaKg" radius={[6, 6, 0, 0]}>
-            {data.map((item) => (
-              <Cell key={item.name} fill={item.diferencaKg < 0 ? '#dc2626' : item.diferencaKg > 0 ? '#2563eb' : '#94a3b8'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="grid min-w-0 gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-extrabold text-slate-600">
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Sobra</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" /> Falta</span>
+        </div>
+        {data.length > 10 && (
+          <button type="button" onClick={() => setShowAll((current) => !current)} className="rounded-md border border-slate-300 px-3 py-1 font-bold text-slate-700 hover:bg-slate-50">
+            {showAll ? 'Ver top 10' : 'Ver todos'}
+          </button>
+        )}
+      </div>
+
+      <div className="min-w-0" style={{ height: chartHeight }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={visibleData} layout="vertical" margin={{ top: 8, right: 96, bottom: 8, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+            <XAxis
+              type="number"
+              tick={{ fontSize: 11, fontWeight: 700 }}
+              tickFormatter={(value) => formatDifferenceWeight(value)}
+              domain={([dataMin, dataMax]) => [Math.min(dataMin, 0), Math.max(dataMax, 0)]}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={190}
+              interval={0}
+              tick={<SupplierNameTick />}
+            />
+            <ReferenceLine x={0} stroke="#334155" strokeWidth={1.4} />
+            <Tooltip content={<SupplierDifferenceTooltip />} />
+            <Bar dataKey="diferencaKg" radius={[0, 6, 6, 0]}>
+              {visibleData.map((item) => (
+                <Cell key={item.name} fill={item.diferencaKg < 0 ? '#dc2626' : item.diferencaKg > 0 ? '#2563eb' : '#94a3b8'} />
+              ))}
+              <LabelList dataKey="diferencaKg" content={<SupplierDifferenceValueLabel />} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -2631,18 +2657,46 @@ function ProductPieTooltip({ active, payload }) {
   );
 }
 
+function SupplierNameTick({ x, y, payload }) {
+  const fullName = String(payload?.value || '-');
+  const labelText = fullName.length > 25 ? `${fullName.slice(0, 25)}...` : fullName;
+
+  return (
+    <g transform={`translate(${x - 184},${y})`}>
+      <title>{fullName}</title>
+      <text x={0} y={4} textAnchor="start" fill="#334155" fontSize={11} fontWeight={800}>
+        {labelText}
+      </text>
+    </g>
+  );
+}
+
+function SupplierDifferenceValueLabel({ x, y, width, height, value, payload }) {
+  const numeric = Number(value || 0);
+  const percent = Number(payload?.percentualDiferenca || 0);
+  const labelText = `${formatDifferenceWeight(numeric)} (${formatPercentPt(percent)})`;
+  const labelX = numeric >= 0 ? x + width + 8 : x - 8;
+  const textAnchor = numeric >= 0 ? 'start' : 'end';
+  const color = numeric < 0 ? '#dc2626' : numeric > 0 ? '#2563eb' : '#475569';
+
+  return (
+    <text x={labelX} y={y + height / 2 + 4} textAnchor={textAnchor} fill={color} fontSize={11} fontWeight={800}>
+      {labelText}
+    </text>
+  );
+}
+
 function SupplierDifferenceTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
       <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">KG da nota: {kg(item.kgNota)}</p>
-      <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
+      <p className="mt-1 font-semibold text-slate-600">Peso de origem: {kg(item.kgNota)}</p>
+      <p className="font-semibold text-slate-600">Peso de destino: {kg(item.kgRecebido)}</p>
       <p className={item.diferencaKg < 0 ? 'font-extrabold text-rose-700' : item.diferencaKg > 0 ? 'font-extrabold text-blue-700' : 'font-extrabold text-slate-600'}>
-        Diferença: {kg(item.diferencaKg)}
+        Diferença: {kg(item.diferencaKg)} ({formatPercentPt(item.percentualDiferenca)})
       </p>
-      <p className="font-semibold text-slate-600">Percentual: {item.percentualDiferenca.toFixed(2)}%</p>
     </div>
   );
 }
@@ -3659,14 +3713,14 @@ function buildSupplierDifferences(rows) {
     current.kgNota += pesoNotaAgregado(row);
     current.kgRecebido += Number(row.peso_liquido || 0);
     current.diferencaKg = current.kgRecebido - current.kgNota;
-    current.percentualDiferenca = current.kgNota ? (current.diferencaKg / current.kgNota) * 100 : 0;
+    // Percentual sobre o total entregue pelo fornecedor. TODO: se o dataset passar a trazer outro campo oficial de "total entregue", substituir kgRecebido aqui.
+    current.percentualDiferenca = current.kgRecebido ? (current.diferencaKg / current.kgRecebido) * 100 : 0;
     map.set(key, current);
   });
 
   return Array.from(map.values())
     .filter((item) => item.kgNota || item.kgRecebido || item.diferencaKg)
-    .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg))
-    .slice(0, 10);
+    .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg));
 }
 
 function buildSupplierMoisture(rows) {
@@ -3782,6 +3836,20 @@ function compactKg(value) {
   const numeric = Number(value || 0);
   if (Math.abs(numeric) >= 1000) return `${Math.round(numeric / 1000)}t`;
   return `${Math.round(numeric)}kg`;
+}
+
+function formatDifferenceWeight(value) {
+  const numeric = Number(value || 0);
+  const sign = numeric < 0 ? '-' : '';
+  const absolute = Math.abs(numeric);
+  if (absolute >= 1000) {
+    return `${sign}${(absolute / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}t`;
+  }
+  return `${sign}${Math.round(absolute).toLocaleString('pt-BR')} kg`;
+}
+
+function formatPercentPt(value) {
+  return `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
 
 function label(value) {
