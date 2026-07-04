@@ -2079,6 +2079,9 @@ function buildRecebimentoReportRows(rows, mode) {
       valor_complemento_relatorio: 0,
       total_complementos_relatorio: complementosTotal(row.complementos),
       valor_agregado_relatorio: Number(row.valor_total || 0),
+      valor_unitario_relatorio: row.valor_unitario,
+      umidade_relatorio: humidityText(row),
+      diferenca_relatorio: diferencaAgregada(row),
       chave_complementar_relatorio: '-',
       observacao_complementar_relatorio: '-',
     }));
@@ -2096,6 +2099,9 @@ function buildRecebimentoReportRows(rows, mode) {
         valor_complemento_relatorio: 0,
         total_complementos_relatorio: complementosTotal(row.complementos),
         valor_agregado_relatorio: valorTotalAgregado(row),
+        valor_unitario_relatorio: row.valor_unitario,
+        umidade_relatorio: humidityText(row),
+        diferenca_relatorio: diferencaAgregada(row),
         chave_complementar_relatorio: '-',
         observacao_complementar_relatorio: '-',
       };
@@ -2109,6 +2115,9 @@ function buildRecebimentoReportRows(rows, mode) {
         valor_complemento_relatorio: Number(item.valor_total || 0),
         total_complementos_relatorio: complementosTotal(row.complementos),
         valor_agregado_relatorio: valorTotalAgregado(row),
+        valor_unitario_relatorio: item.valor_unitario ?? row.valor_unitario,
+        umidade_relatorio: humidityText(row),
+        diferenca_relatorio: diferencaAgregada(row),
         chave_complementar_relatorio: item.chave_nfe || '-',
         observacao_complementar_relatorio: item.observacao || '-',
       }));
@@ -2125,6 +2134,9 @@ function buildRecebimentoReportRows(rows, mode) {
     valor_complemento_relatorio: complementosTotal(row.complementos),
     total_complementos_relatorio: complementosTotal(row.complementos),
     valor_agregado_relatorio: valorTotalAgregado(row),
+    valor_unitario_relatorio: row.valor_unitario,
+    umidade_relatorio: humidityText(row),
+    diferenca_relatorio: diferencaAgregada(row),
     chave_complementar_relatorio: (row.complementos || []).map((item) => item.chave_nfe).filter(Boolean).join(', ') || '-',
     observacao_complementar_relatorio: (row.complementos || []).map((item) => item.observacao).filter(Boolean).join(' | ') || '-',
   }));
@@ -2173,11 +2185,11 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
 }
 
 function RelatorioRecebimentosTable({ rows }) {
-  const headers = ['Data', 'Tipo da nota', 'NF principal', 'NF complementar', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Valor principal', 'Valor complemento', 'Total complementos', 'Total agregado', 'Chave complementar', 'Observação', 'Status'];
+  const headers = ['Data', 'Tipo da nota', 'NF principal', 'NF complementar', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Valor unit.', 'Valor principal', 'Valor complemento', 'Total agregado', 'Umidade', 'Diferença', 'Chave complementar', 'Observação'];
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className="w-full min-w-[1720px] text-left text-sm">
+      <table className="w-full min-w-[1820px] text-left text-sm">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>{headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}</tr>
         </thead>
@@ -2193,13 +2205,14 @@ function RelatorioRecebimentosTable({ rows }) {
               <td className="px-4 py-3"><PlateTag value={placaVeiculo(row)} /></td>
               <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
               <td className="px-4 py-3">{reportQuantity(row)}</td>
+              <td className="px-4 py-3">{formatCurrencyCell(row.valor_unitario_relatorio, true)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_principal_relatorio)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_complemento_relatorio)}</td>
-              <td className="px-4 py-3">{formatCurrencyCell(row.total_complementos_relatorio)}</td>
               <td className="px-4 py-3 font-bold">{formatCurrencyCell(row.valor_agregado_relatorio)}</td>
+              <td className="px-4 py-3">{row.umidade_relatorio || '-'}</td>
+              <td className="px-4 py-3"><span className={differenceClass(row.diferenca_relatorio)}>{kg(row.diferenca_relatorio)}</span></td>
               <td className="max-w-[180px] truncate px-4 py-3" title={row.chave_complementar_relatorio || ''}>{row.chave_complementar_relatorio || '-'}</td>
               <td className="max-w-[200px] truncate px-4 py-3" title={row.observacao_complementar_relatorio || ''}>{row.observacao_complementar_relatorio || '-'}</td>
-              <td className="px-4 py-3"><StatusBadge row={row} /></td>
             </tr>
           ))}
         </tbody>
@@ -2263,16 +2276,17 @@ function exportRecebimentosPdf(rows, filters = {}) {
   y += 72;
   const columns = [
     ['Data', 54],
-    ['Tipo', 76],
+    ['Tipo', 68],
     ['NF princ.', 52],
     ['NF comp.', 54],
-    ['Fornecedor', 100],
-    ['Produto', 70],
+    ['Fornecedor', 92],
+    ['Produto', 66],
+    ['Valor unit.', 62],
     ['Valor princ.', 68],
     ['Valor comp.', 68],
-    ['Total compl.', 68],
     ['Agregado', 68],
-    ['Status', 92],
+    ['Umidade', 62],
+    ['Dif.', 54],
   ];
 
   function drawHeader() {
@@ -2308,16 +2322,28 @@ function exportRecebimentosPdf(rows, filters = {}) {
       row.nf_complementar_relatorio || '-',
       fornecedorNome(row),
       produtoNome(row),
+      formatCurrencyCell(row.valor_unitario_relatorio, true),
       formatCurrencyCell(row.valor_principal_relatorio),
       formatCurrencyCell(row.valor_complemento_relatorio),
-      formatCurrencyCell(row.total_complementos_relatorio),
       formatCurrencyCell(row.valor_agregado_relatorio),
-      recebimentoStatusLabel(row),
+      row.umidade_relatorio || '-',
+      kg(row.diferenca_relatorio),
     ];
     let x = margin + 6;
     values.forEach((value, valueIndex) => {
       const width = columns[valueIndex][1];
+      if (columns[valueIndex][0] === 'Dif.') {
+        const diff = Number(row.diferenca_relatorio || 0);
+        if (diff > 0) doc.setTextColor(29, 78, 216);
+        else if (diff < 0) doc.setTextColor(190, 18, 60);
+        else doc.setTextColor(51, 65, 85);
+        doc.setFont('helvetica', 'bold');
+      }
       doc.text(String(value || '-'), x, y + 12, { maxWidth: width - 6 });
+      if (columns[valueIndex][0] === 'Dif.') {
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'normal');
+      }
       x += width;
     });
     y += 30;
