@@ -23,8 +23,11 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  Pie,
+  PieChart,
   ReferenceLine,
   ResponsiveContainer,
+  Sector,
   Tooltip,
   XAxis,
   YAxis,
@@ -64,6 +67,7 @@ const SCORE_WEIGHTS = {
   divergencia: 0.4,
   volume: 0.15,
 };
+const PRODUCT_DONUT_COLORS = ['#1e3a8a', '#2563eb', '#3b82f6', '#93c5fd'];
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -2509,42 +2513,65 @@ function BarList({ data, valueFormatter }) {
 }
 
 function ProductsPieChart({ data }) {
+  const [activeIndex, setActiveIndex] = useState(null);
+  const [showOthers, setShowOthers] = useState(false);
   if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
 
-  const maxKg = Math.max(...data.map((item) => item.kgTotal), 1);
+  const totalKg = data.reduce((sum, item) => sum + Number(item.kgTotal || 0), 0);
+  const others = data.find((item) => item.isOthers);
 
   return (
     <div className="grid gap-3">
-      {data.map((item) => {
-        const isOthers = item.isOthers;
-        const tooltip = isOthers
-          ? [
-            item.name,
-            `Total: ${kg(item.kgTotal)}`,
-            `Participação: ${formatPercentPt(item.percent)}`,
-            `Cargas: ${item.cargas}`,
-            '',
-            ...(item.items || []).map((child) => `${child.name}: ${kg(child.kgTotal)} (${child.cargas} carga(s))`),
-          ].join('\n')
-          : `${item.name}\nKG exato: ${kg(item.kgTotal)}\nParticipação: ${formatPercentPt(item.percent)}\nCargas: ${item.cargas}`;
-        return (
-          <div key={item.name} className="grid gap-1.5" title={tooltip}>
-            <div className="flex items-center justify-between gap-3 text-xs font-extrabold text-slate-700">
-              <span className="min-w-0 truncate">{item.name}</span>
-              <span className="shrink-0 text-slate-600">{formatWeightShort(item.kgTotal)} ({formatPercentPt(item.percent)})</span>
-            </div>
-            <div className="h-3 rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.max((item.kgTotal / maxKg) * 100, 3)}%`,
-                  backgroundColor: isOthers ? '#94a3b8' : '#2563eb',
-                }}
-              />
-            </div>
+      <div className="h-[360px] min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={{ top: 18, right: 92, bottom: 18, left: 92 }}>
+            <Pie
+              data={data}
+              dataKey="kgTotal"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              startAngle={90}
+              endAngle={-270}
+              innerRadius={74}
+              outerRadius={106}
+              activeIndex={activeIndex ?? undefined}
+              activeShape={ProductActiveSlice}
+              labelLine={false}
+              label={ProductDonutLabel}
+              onMouseEnter={(_, index) => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
+              onClick={(slice) => {
+                if (slice?.isOthers) setShowOthers((current) => !current);
+              }}
+            >
+              {data.map((item, index) => (
+                <Cell key={item.name} fill={item.isOthers ? '#94a3b8' : PRODUCT_DONUT_COLORS[index] || PRODUCT_DONUT_COLORS[PRODUCT_DONUT_COLORS.length - 1]} />
+              ))}
+            </Pie>
+            <Tooltip content={<ProductDonutTooltip />} />
+            <text x="50%" y="47%" textAnchor="middle" className="fill-slate-950 text-2xl font-extrabold">
+              {formatWeightTotal(totalKg)}
+            </text>
+            <text x="50%" y="54%" textAnchor="middle" className="fill-slate-500 text-xs font-bold">
+              volume total
+            </text>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {showOthers && others && (
+        <div className="rounded-lg bg-slate-50 p-3 text-xs font-semibold text-slate-600">
+          <p className="mb-2 font-extrabold text-slate-800">Composição de {others.name}</p>
+          <div className="grid gap-1 sm:grid-cols-2">
+            {(others.items || []).map((item) => (
+              <span key={item.name} className="truncate" title={item.name}>
+                {item.name}: {formatWeightShort(item.kgTotal)}
+              </span>
+            ))}
           </div>
-        );
-      })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2673,6 +2700,73 @@ function BestSuppliersChart({ data }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function ProductActiveSlice(props) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <Sector
+      cx={cx}
+      cy={cy}
+      innerRadius={innerRadius}
+      outerRadius={outerRadius + 3}
+      startAngle={startAngle}
+      endAngle={endAngle}
+      fill={fill}
+    />
+  );
+}
+
+function ProductDonutLabel(props) {
+  const { cx, cy, midAngle, outerRadius, percent, name, kgTotal } = props;
+  if (percent < 0.03) return null;
+
+  const RADIAN = Math.PI / 180;
+  const sin = Math.sin(-RADIAN * midAngle);
+  const cos = Math.cos(-RADIAN * midAngle);
+  const sx = cx + (outerRadius + 6) * cos;
+  const sy = cy + (outerRadius + 6) * sin;
+  const mx = cx + (outerRadius + 24) * cos;
+  const my = cy + (outerRadius + 24) * sin;
+  const ex = mx + (cos >= 0 ? 34 : -34);
+  const textAnchor = cos >= 0 ? 'start' : 'end';
+  const labelName = String(name || '').length > 18 ? `${String(name).slice(0, 18)}...` : name;
+
+  return (
+    <g>
+      <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} fill="none" stroke="#94a3b8" strokeWidth={1.2} />
+      <circle cx={sx} cy={sy} r={2} fill="#94a3b8" />
+      <text x={ex + (cos >= 0 ? 4 : -4)} y={my - 3} textAnchor={textAnchor} fill="#0f172a" fontSize={10} fontWeight={800}>
+        {labelName}
+      </text>
+      <text x={ex + (cos >= 0 ? 4 : -4)} y={my + 10} textAnchor={textAnchor} fill="#64748b" fontSize={10} fontWeight={700}>
+        {formatWeightShort(kgTotal)} ({formatPercentPt(percent * 100)})
+      </text>
+    </g>
+  );
+}
+
+function ProductDonutTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0].payload;
+  return (
+    <div className="max-w-72 rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
+      <p className="font-extrabold text-slate-900">{item.name}</p>
+      <p className="mt-1 font-semibold text-slate-600">KG exato: {kg(item.kgTotal)}</p>
+      <p className="font-semibold text-slate-600">Participação: {formatPercentPt(item.percent)}</p>
+      <p className="font-semibold text-slate-600">Cargas: {item.cargas}</p>
+      {item.isOthers && Boolean(item.items?.length) && (
+        <div className="mt-2 border-t border-slate-100 pt-2">
+          <p className="mb-1 font-extrabold text-slate-700">Composição</p>
+          <div className="grid max-h-36 gap-1 overflow-y-auto pr-1">
+            {item.items.map((child) => (
+              <p key={child.name} className="text-slate-600">{child.name}: {kg(child.kgTotal)}</p>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3859,8 +3953,8 @@ function buildProductsDistribution(rows) {
     .filter((item) => item.kgTotal > 0)
     .sort((a, b) => b.kgTotal - a.kgTotal);
 
-  const main = ranked.slice(0, 6);
-  const others = ranked.slice(6);
+  const main = ranked.slice(0, 4);
+  const others = ranked.slice(4);
   const othersTotal = others.reduce((sum, item) => sum + item.kgTotal, 0);
   const othersCargas = others.reduce((sum, item) => sum + item.cargas, 0);
   const data = othersTotal > 0
@@ -4021,6 +4115,14 @@ function formatWeightShort(value) {
   const numeric = Number(value || 0);
   if (Math.abs(numeric) >= 1000) {
     return `${(numeric / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}t`;
+  }
+  return `${Math.round(numeric).toLocaleString('pt-BR')} kg`;
+}
+
+function formatWeightTotal(value) {
+  const numeric = Number(value || 0);
+  if (Math.abs(numeric) >= 1000) {
+    return `${Math.round(numeric / 1000).toLocaleString('pt-BR')}t`;
   }
   return `${Math.round(numeric).toLocaleString('pt-BR')} kg`;
 }
