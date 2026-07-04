@@ -5,6 +5,7 @@ import {
   Eye,
   FileUp,
   FlaskConical,
+  Info,
   Plus,
   RotateCcw,
   Save,
@@ -21,8 +22,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Pie,
-  PieChart,
   LabelList,
   ReferenceLine,
   ResponsiveContainer,
@@ -60,6 +59,11 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { dateBr, kg } from '../lib/formatters.js';
 
 const UMIDADE_LIMITE = 14;
+const SCORE_WEIGHTS = {
+  aprovacao: 0.45,
+  divergencia: 0.4,
+  volume: 0.15,
+};
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -321,7 +325,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
               <SupplierMoistureChart data={supplierMoisture} />
             </ChartCard>
             <ChartCard title="Ranking de Melhores Fornecedores">
-              <BestSuppliersChart data={bestSuppliers} />
+              <BestSuppliersLeaderboard data={bestSuppliers} />
             </ChartCard>
           </section>
         </>
@@ -2507,40 +2511,40 @@ function BarList({ data, valueFormatter }) {
 function ProductsPieChart({ data }) {
   if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
 
+  const maxKg = Math.max(...data.map((item) => item.kgTotal), 1);
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
-      <div className="h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="kgTotal"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius={54}
-              outerRadius={96}
-              paddingAngle={2}
-            >
-              {data.map((item, index) => (
-                <Cell key={item.name} fill={item.color || chartColor(index)} />
-              ))}
-            </Pie>
-            <Tooltip content={<ProductPieTooltip />} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
-        {data.map((item, index) => (
-          <div key={item.name} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: item.color || chartColor(index) }} />
-              <span className="truncate">{item.name}</span>
-            </span>
-            <span className="shrink-0 text-slate-500">{item.percent.toFixed(1)}%</span>
+    <div className="grid gap-3">
+      {data.map((item) => {
+        const isOthers = item.isOthers;
+        const tooltip = isOthers
+          ? [
+            item.name,
+            `Total: ${kg(item.kgTotal)}`,
+            `Participação: ${formatPercentPt(item.percent)}`,
+            `Cargas: ${item.cargas}`,
+            '',
+            ...(item.items || []).map((child) => `${child.name}: ${kg(child.kgTotal)} (${child.cargas} carga(s))`),
+          ].join('\n')
+          : `${item.name}\nKG exato: ${kg(item.kgTotal)}\nParticipação: ${formatPercentPt(item.percent)}\nCargas: ${item.cargas}`;
+        return (
+          <div key={item.name} className="grid gap-1.5" title={tooltip}>
+            <div className="flex items-center justify-between gap-3 text-xs font-extrabold text-slate-700">
+              <span className="min-w-0 truncate">{item.name}</span>
+              <span className="shrink-0 text-slate-600">{formatWeightShort(item.kgTotal)} ({formatPercentPt(item.percent)})</span>
+            </div>
+            <div className="h-3 rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.max((item.kgTotal / maxKg) * 100, 3)}%`,
+                  backgroundColor: isOthers ? '#94a3b8' : '#2563eb',
+                }}
+              />
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -2673,16 +2677,107 @@ function BestSuppliersChart({ data }) {
   );
 }
 
-function ProductPieTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const item = payload[0].payload;
+function BestSuppliersLeaderboard({ data }) {
+  const [sort, setSort] = useState({ key: 'score', direction: 'desc' });
+  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados suficientes para gerar ranking.</p>;
+
+  const showApproval = data.some((item) => Math.round(item.taxaAprovacao) !== 100);
+  const sortedData = [...data].sort((a, b) => {
+    const direction = sort.direction === 'asc' ? 1 : -1;
+    const aValue = bestSupplierSortValue(a, sort.key);
+    const bValue = bestSupplierSortValue(b, sort.key);
+    if (typeof aValue === 'string' || typeof bValue === 'string') {
+      return String(aValue).localeCompare(String(bValue), 'pt-BR') * direction;
+    }
+    return (Number(aValue || 0) - Number(bValue || 0)) * direction;
+  });
+
+  function changeSort(key) {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc',
+    }));
+  }
+
+  const headers = [
+    { key: 'rank', label: '#', className: 'w-12' },
+    { key: 'name', label: 'Fornecedor', className: 'min-w-52' },
+    { key: 'score', label: 'Score', className: 'w-24 text-right' },
+    { key: 'volume', label: 'Volume', className: 'w-28 text-right' },
+    { key: 'divergencia', label: 'Divergência', className: 'w-28 text-right' },
+    ...(showApproval ? [{ key: 'aprovacao', label: 'Aprovação', className: 'w-28 text-right' }] : []),
+  ];
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
-      <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">Total: {kg(item.kgTotal)}</p>
-      <p className="font-semibold text-slate-600">Participação: {item.percent.toFixed(2)}%</p>
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+        <Info size={14} />
+        <span title={`Score = aprovação (${SCORE_WEIGHTS.aprovacao * 100}%) + baixa divergência (${SCORE_WEIGHTS.divergencia * 100}%) + volume (${SCORE_WEIGHTS.volume * 100}%).`}>
+          Fórmula do score
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-left text-xs">
+          <thead className="uppercase text-slate-500">
+            <tr>
+              {headers.map((head) => (
+                <th key={head.key} className={`border-b border-slate-200 px-3 py-2 font-extrabold ${head.className || ''}`}>
+                  <button type="button" onClick={() => changeSort(head.key)} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    {head.label}
+                    {sort.key === head.key && <span>{sort.direction === 'asc' ? '↑' : '↓'}</span>}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedData.map((item, index) => (
+              <tr key={item.name} className={index % 2 ? 'bg-slate-50/70' : 'bg-white'}>
+                <td className="px-3 py-2"><RankBadge rank={index + 1} /></td>
+                <td className="px-3 py-2">
+                  <span className="block max-w-64 truncate font-extrabold text-slate-800" title={item.name}>{item.name}</span>
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold text-white ${scoreBadgeClass(item.score)}`}>
+                    {item.score.toFixed(0)}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right font-bold text-slate-700">{formatWeightShort(item.kgRecebido)}</td>
+                <td className="px-3 py-2 text-right"><DivergenceBadge value={item.divergenciaPercentualAbs} /></td>
+                {showApproval && <td className="px-3 py-2 text-right font-bold text-slate-700">{formatPercentPt(item.taxaAprovacao)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {!showApproval && <p className="pt-1 text-[11px] font-bold text-emerald-700">Todos com 100% de aprovação.</p>}
     </div>
   );
+}
+
+function RankBadge({ rank }) {
+  const classes = {
+    1: 'bg-yellow-100 text-yellow-800 ring-yellow-300',
+    2: 'bg-slate-200 text-slate-800 ring-slate-300',
+    3: 'bg-orange-100 text-orange-800 ring-orange-300',
+  };
+  return (
+    <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-full px-2 text-[11px] font-extrabold ring-1 ${classes[rank] || 'bg-slate-100 text-slate-600 ring-slate-200'}`}>
+      {rank}
+    </span>
+  );
+}
+
+function DivergenceBadge({ value }) {
+  const numeric = Number(value || 0);
+  const className = numeric <= 0.1
+    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+    : numeric <= 0.25
+      ? 'bg-amber-50 text-amber-700 ring-amber-200'
+      : 'bg-rose-50 text-rose-700 ring-rose-200';
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1 ${className}`}>{formatPercentPt(numeric)}</span>;
 }
 
 function SupplierNameTick({ x, y, payload }) {
@@ -3754,21 +3849,27 @@ function buildProductsDistribution(rows) {
   const map = new Map();
   rows.forEach((row) => {
     const name = produtoNome(row, 'Sem produto');
-    map.set(name, (map.get(name) || 0) + Number(row.peso_liquido || 0));
+    const current = map.get(name) || { name, kgTotal: 0, cargas: 0 };
+    current.kgTotal += Number(row.peso_liquido || 0);
+    current.cargas += 1;
+    map.set(name, current);
   });
 
-  const ranked = Array.from(map, ([name, kgTotal]) => ({ name, kgTotal }))
+  const ranked = Array.from(map.values())
     .filter((item) => item.kgTotal > 0)
     .sort((a, b) => b.kgTotal - a.kgTotal);
 
-  const main = ranked.slice(0, 10);
-  const othersTotal = ranked.slice(10).reduce((sum, item) => sum + item.kgTotal, 0);
-  const data = othersTotal > 0 ? [...main, { name: 'Outros', kgTotal: othersTotal }] : main;
+  const main = ranked.slice(0, 6);
+  const others = ranked.slice(6);
+  const othersTotal = others.reduce((sum, item) => sum + item.kgTotal, 0);
+  const othersCargas = others.reduce((sum, item) => sum + item.cargas, 0);
+  const data = othersTotal > 0
+    ? [...main, { name: `Outros (${others.length} produtos)`, kgTotal: othersTotal, cargas: othersCargas, isOthers: true, items: others }]
+    : main;
 
-  return data.map((item, index) => ({
+  return data.map((item) => ({
     ...item,
     percent: total ? (item.kgTotal / total) * 100 : 0,
-    color: chartColor(index),
   }));
 }
 
@@ -3853,7 +3954,7 @@ function buildBestSuppliersRanking(rows) {
       const divergenciaPercentualAbs = item.kgNota ? (item.diferencaAbsKg / item.kgNota) * 100 : 0;
       const qualidadeDivergencia = Math.max(0, 100 - Math.min(divergenciaPercentualAbs * 4, 100));
       const volumeScore = Math.min((item.kgRecebido / maxKg) * 100, 100);
-      const score = (taxaAprovacao * 0.45) + (qualidadeDivergencia * 0.4) + (volumeScore * 0.15);
+      const score = (taxaAprovacao * SCORE_WEIGHTS.aprovacao) + (qualidadeDivergencia * SCORE_WEIGHTS.divergencia) + (volumeScore * SCORE_WEIGHTS.volume);
 
       return {
         ...item,
@@ -3916,6 +4017,14 @@ function formatDifferenceWeight(value) {
   return `${sign}${Math.round(absolute).toLocaleString('pt-BR')} kg`;
 }
 
+function formatWeightShort(value) {
+  const numeric = Number(value || 0);
+  if (Math.abs(numeric) >= 1000) {
+    return `${(numeric / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}t`;
+  }
+  return `${Math.round(numeric).toLocaleString('pt-BR')} kg`;
+}
+
 function formatPercentPt(value) {
   return `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 }
@@ -3931,6 +4040,25 @@ function humidityColor(value) {
   if (numeric <= UMIDADE_LIMITE) return '#16a34a';
   if (numeric <= UMIDADE_LIMITE + 0.5) return '#d97706';
   return '#dc2626';
+}
+
+function bestSupplierSortValue(item, key) {
+  const values = {
+    rank: item.score,
+    name: item.name,
+    score: item.score,
+    volume: item.kgRecebido,
+    divergencia: item.divergenciaPercentualAbs,
+    aprovacao: item.taxaAprovacao,
+  };
+  return values[key] ?? item.score;
+}
+
+function scoreBadgeClass(score) {
+  const numeric = Number(score || 0);
+  if (numeric >= 90) return 'bg-green-600';
+  if (numeric >= 80) return 'bg-blue-600';
+  return 'bg-amber-600';
 }
 
 function label(value) {
