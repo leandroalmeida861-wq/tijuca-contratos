@@ -68,7 +68,7 @@ const SCORE_WEIGHTS = {
   volume: 0.15,
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
-const PRODUCT_MILHO_COLOR = '#eab308';
+const PRODUCT_MILHO_COLOR = '#fde047';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
