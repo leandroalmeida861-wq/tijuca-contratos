@@ -59,6 +59,8 @@ import { parseNfeRecebimento } from '../lib/nfeRecebimento.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { dateBr, kg } from '../lib/formatters.js';
 
+const UMIDADE_LIMITE = 14;
+
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'portaria', label: 'Portaria' },
@@ -2599,21 +2601,47 @@ function SupplierDifferenceChart({ data }) {
 function SupplierMoistureChart({ data }) {
   if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem umidade registrada no período.</p>;
 
+  const chartHeight = Math.max(320, data.length * 42 + 70);
+  const maxHumidity = Math.max(UMIDADE_LIMITE + 1, ...data.map((item) => Number(item.umidadeMedia || 0)));
+
   return (
-    <div className="h-80 min-w-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 20, bottom: 8, left: 20 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(value) => `${Number(value).toFixed(1)}%`} />
-          <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11, fontWeight: 700 }} />
-          <Tooltip content={<SupplierMoistureTooltip />} />
-          <Bar dataKey="umidadeMedia" radius={[0, 6, 6, 0]}>
-            {data.map((item, index) => (
-              <Cell key={item.name} fill={item.umidadeMedia > 14 ? chartColor(index + 2) : chartColor(index)} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="grid min-w-0 gap-3">
+      <div className="flex flex-wrap items-center gap-4 text-xs font-extrabold text-slate-600">
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-green-600" /> Dentro do padrão</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-600" /> Atenção</span>
+        <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" /> Acima do limite</span>
+      </div>
+
+      <div className="min-w-0" style={{ height: chartHeight }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ top: 18, right: 78, bottom: 8, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+            <XAxis
+              type="number"
+              domain={[0, Math.ceil(maxHumidity)]}
+              tick={{ fontSize: 11, fontWeight: 700 }}
+              tickFormatter={(value) => `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={210}
+              interval={0}
+              tick={<SupplierHumidityNameTick />}
+            />
+            <ReferenceLine
+              x={UMIDADE_LIMITE}
+              stroke="#64748b"
+              strokeDasharray="4 4"
+              label={{ value: `Limite: ${UMIDADE_LIMITE}%`, position: 'top', fill: '#475569', fontSize: 11, fontWeight: 800 }}
+            />
+            <Tooltip content={<SupplierMoistureTooltip />} />
+            <Bar dataKey="umidadeMedia" shape={<SupplierMoistureLollipop />} barSize={26}>
+              <LabelList dataKey="umidadeMedia" content={<SupplierMoistureValueLabel />} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -2701,15 +2729,55 @@ function SupplierDifferenceTooltip({ active, payload }) {
   );
 }
 
+function SupplierHumidityNameTick({ x, y, payload }) {
+  const fullName = String(payload?.value || '-');
+  const labelText = fullName.length > 28 ? `${fullName.slice(0, 28)}...` : fullName;
+
+  return (
+    <g transform={`translate(${x - 204},${y})`}>
+      <title>{fullName}</title>
+      <text x={0} y={4} textAnchor="start" fill="#334155" fontSize={11} fontWeight={800}>
+        {labelText}
+      </text>
+    </g>
+  );
+}
+
+function SupplierMoistureLollipop({ x, y, width, height, payload }) {
+  const color = humidityColor(payload?.umidadeMedia);
+  const middleY = y + height / 2;
+  const pointX = x + width;
+
+  return (
+    <g>
+      <line x1={x} x2={pointX} y1={middleY} y2={middleY} stroke="#cbd5e1" strokeWidth={1.5} />
+      <circle cx={pointX} cy={middleY} r={7} fill={color} stroke="#ffffff" strokeWidth={2} />
+    </g>
+  );
+}
+
+function SupplierMoistureValueLabel({ x, y, width, height, value }) {
+  const numeric = Number(value || 0);
+  const color = humidityColor(numeric);
+  return (
+    <text x={x + width + 10} y={y + height / 2 + 4} textAnchor="start" fill={color} fontSize={11} fontWeight={800}>
+      {formatPercentPt(numeric)}
+    </text>
+  );
+}
+
 function SupplierMoistureTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const item = payload[0].payload;
+  const deviation = Number(item.umidadeMedia || 0) - UMIDADE_LIMITE;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
       <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">Umidade média: {item.umidadeMedia.toFixed(2)}%</p>
-      <p className="font-semibold text-slate-600">Registros com umidade: {item.registros}</p>
-      <p className="font-semibold text-slate-600">KG recebido: {kg(item.kgRecebido)}</p>
+      <p className="mt-1 font-semibold text-slate-600">Umidade média: {formatPercentPt(item.umidadeMedia)}</p>
+      <p className="font-semibold text-slate-600">Cargas/amostras: {item.registros}</p>
+      <p className={deviation > 0 ? 'font-extrabold text-rose-700' : 'font-extrabold text-emerald-700'}>
+        Desvio vs. limite: {formatPontosPercentuais(deviation)}
+      </p>
     </div>
   );
 }
@@ -3850,6 +3918,19 @@ function formatDifferenceWeight(value) {
 
 function formatPercentPt(value) {
   return `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+function formatPontosPercentuais(value) {
+  const numeric = Number(value || 0);
+  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : '';
+  return `${sign}${Math.abs(numeric).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} p.p.`;
+}
+
+function humidityColor(value) {
+  const numeric = Number(value || 0);
+  if (numeric <= UMIDADE_LIMITE) return '#16a34a';
+  if (numeric <= UMIDADE_LIMITE + 0.5) return '#d97706';
+  return '#dc2626';
 }
 
 function label(value) {
