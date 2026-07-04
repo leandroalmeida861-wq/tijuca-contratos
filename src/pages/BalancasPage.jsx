@@ -67,7 +67,7 @@ const SCORE_WEIGHTS = {
   divergencia: 0.4,
   volume: 0.15,
 };
-const PRODUCT_DONUT_COLORS = ['#1e3a8a', '#2563eb', '#3b82f6', '#93c5fd'];
+const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -2522,9 +2522,9 @@ function ProductsPieChart({ data }) {
 
   return (
     <div className="grid gap-3">
-      <div className="h-[360px] min-w-0">
+      <div className="h-[430px] min-w-0">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart margin={{ top: 18, right: 92, bottom: 18, left: 92 }}>
+          <PieChart margin={{ top: 18, right: 120, bottom: 18, left: 120 }}>
             <Pie
               data={data}
               dataKey="kgTotal"
@@ -2533,8 +2533,8 @@ function ProductsPieChart({ data }) {
               cy="50%"
               startAngle={90}
               endAngle={-270}
-              innerRadius={74}
-              outerRadius={106}
+              innerRadius={92}
+              outerRadius={132}
               activeIndex={activeIndex ?? undefined}
               activeShape={ProductActiveSlice}
               labelLine={false}
