@@ -68,6 +68,7 @@ const SCORE_WEIGHTS = {
   volume: 0.15,
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
+const PRODUCT_MILHO_COLOR = '#eab308';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -2522,9 +2523,9 @@ function ProductsPieChart({ data }) {
 
   return (
     <div className="grid gap-3">
-      <div className="h-[430px] min-w-0">
+      <div className="h-[500px] min-w-0">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart margin={{ top: 18, right: 120, bottom: 18, left: 120 }}>
+          <PieChart margin={{ top: 18, right: 150, bottom: 18, left: 150 }}>
             <Pie
               data={data}
               dataKey="kgTotal"
@@ -2533,8 +2534,8 @@ function ProductsPieChart({ data }) {
               cy="50%"
               startAngle={90}
               endAngle={-270}
-              innerRadius={92}
-              outerRadius={132}
+              innerRadius={110}
+              outerRadius={160}
               activeIndex={activeIndex ?? undefined}
               activeShape={ProductActiveSlice}
               labelLine={false}
@@ -2546,7 +2547,7 @@ function ProductsPieChart({ data }) {
               }}
             >
               {data.map((item, index) => (
-                <Cell key={item.name} fill={item.isOthers ? '#94a3b8' : PRODUCT_DONUT_COLORS[index] || PRODUCT_DONUT_COLORS[PRODUCT_DONUT_COLORS.length - 1]} />
+                <Cell key={item.name} fill={productDonutColor(item, index)} />
               ))}
             </Pie>
             <Tooltip content={<ProductDonutTooltip />} />
@@ -2769,6 +2770,12 @@ function ProductDonutTooltip({ active, payload }) {
       )}
     </div>
   );
+}
+
+function productDonutColor(item, index) {
+  if (item?.isOthers) return '#94a3b8';
+  if (normalizeName(item?.name).includes('MILHO')) return PRODUCT_MILHO_COLOR;
+  return PRODUCT_DONUT_COLORS[index] || PRODUCT_DONUT_COLORS[PRODUCT_DONUT_COLORS.length - 1];
 }
 
 function BestSuppliersLeaderboard({ data }) {
