@@ -68,7 +68,7 @@ const SCORE_WEIGHTS = {
   volume: 0.15,
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
-const PRODUCT_MILHO_COLOR = '#fde047';
+const PRODUCT_MILHO_COLOR = '#facc15';
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard' },
@@ -2774,7 +2774,7 @@ function ProductDonutTooltip({ active, payload }) {
 
 function productDonutColor(item, index) {
   if (item?.isOthers) return '#94a3b8';
-  if (normalizeName(item?.name).includes('MILHO')) return PRODUCT_MILHO_COLOR;
+  if (normalizeName(item?.name).includes('milho')) return PRODUCT_MILHO_COLOR;
   return PRODUCT_DONUT_COLORS[index] || PRODUCT_DONUT_COLORS[PRODUCT_DONUT_COLORS.length - 1];
 }
 
