@@ -29,7 +29,26 @@ create table if not exists public.portaria_entradas (
 );
 
 alter table public.portaria_entradas
-add column if not exists balanca_id uuid references public.balancas(id) on delete set null;
+add column if not exists data_entrada date default current_date,
+add column if not exists hora_entrada time default localtime,
+add column if not exists balanca_id uuid references public.balancas(id) on delete set null,
+add column if not exists placa text,
+add column if not exists veiculo_id uuid references public.recebimento_veiculos(id) on delete restrict,
+add column if not exists motorista_id uuid references public.recebimento_motoristas(id) on delete set null,
+add column if not exists fornecedor_id uuid references public.fornecedores(id) on delete restrict,
+add column if not exists cnpj_fornecedor text,
+add column if not exists produto_id uuid references public.produtos(id) on delete restrict,
+add column if not exists numero_nf text,
+add column if not exists serie_nf text,
+add column if not exists peso_nf_kg numeric(14, 3),
+add column if not exists transportadora_id uuid references public.recebimento_transportadoras(id) on delete set null,
+add column if not exists tipo_veiculo text,
+add column if not exists qtd_eixos integer,
+add column if not exists observacao text,
+add column if not exists status text default 'AGUARDANDO_LABORATORIO',
+add column if not exists created_by uuid default auth.uid(),
+add column if not exists created_at timestamptz default now(),
+add column if not exists updated_at timestamptz default now();
 
 alter table public.recebimentos
 add column if not exists portaria_id uuid references public.portaria_entradas(id) on delete set null;
@@ -85,3 +104,5 @@ create policy portaria_entradas_delete
 on public.portaria_entradas
 for delete to authenticated
 using (public.agroflow_tem_permissao('balancas', 'excluir'));
+
+grant select, insert, update, delete on public.portaria_entradas to authenticated;
