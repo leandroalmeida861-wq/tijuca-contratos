@@ -9,6 +9,20 @@ const RECEBIMENTO_SELECT = `
   transportadora:recebimento_transportadoras(id,nome),
   fornecedor:fornecedores(id,nome,cnpj),
   produto:produtos(id,nome,unidade),
+  itens:recebimento_itens(
+    id,
+    recebimento_id,
+    produto_id,
+    quantidade,
+    unidade,
+    valor_unitario,
+    desconto,
+    valor_total,
+    ordem,
+    created_at,
+    updated_at,
+    produto:produtos(id,nome,unidade)
+  ),
   complementos:recebimento_notas_complementares(
     id,
     recebimento_id,
@@ -216,29 +230,31 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
 }
 
 export async function createRecebimento(payload) {
-  const cleanedPayload = cleanPayload(payload);
+  const { itens, header } = prepareRecebimentoForSave(payload);
+  const cleanedPayload = cleanPayload(header);
   const { data, error } = await supabase.from('recebimentos').insert(cleanedPayload).select(RECEBIMENTO_SELECT).single();
   const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
   if (error && fallbackPayload) {
     const fallback = await supabase.from('recebimentos').insert(fallbackPayload).select(RECEBIMENTO_SELECT).single();
     if (fallback.error) throw fallback.error;
-    return fallback.data;
+    return saveRecebimentoItensAndReload(fallback.data.id, itens);
   }
   if (error) throw error;
-  return data;
+  return saveRecebimentoItensAndReload(data.id, itens);
 }
 
 export async function updateRecebimento(id, payload) {
-  const cleanedPayload = cleanPayload(payload);
+  const { itens, header } = prepareRecebimentoForSave(payload);
+  const cleanedPayload = cleanPayload(header);
   const { data, error } = await supabase.from('recebimentos').update(cleanedPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
   const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
   if (error && fallbackPayload) {
     const fallback = await supabase.from('recebimentos').update(fallbackPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
     if (fallback.error) throw fallback.error;
-    return fallback.data;
+    return saveRecebimentoItensAndReload(id, itens);
   }
   if (error) throw error;
-  return data;
+  return saveRecebimentoItensAndReload(id, itens);
 }
 
 export async function deleteRecebimento(id) {
@@ -431,6 +447,97 @@ function cleanPayload(payload) {
   );
 }
 
+function prepareRecebimentoForSave(payload = {}) {
+  const rawItems = Array.isArray(payload.itens) && payload.itens.length
+    ? payload.itens
+    : [legacyItemFromRecebimento(payload)];
+  const itens = normalizeRecebimentoItens(rawItems);
+  const totals = calcularTotaisRecebimento(itens);
+  const firstItem = itens[0] || {};
+  const header = { ...payload };
+  delete header.itens;
+
+  header.produto_id = firstItem.produto_id || header.produto_id || null;
+  header.quantidade_nota = firstItem.quantidade ?? header.quantidade_nota ?? null;
+  header.unidade_nota = firstItem.unidade || header.unidade_nota || 'KG';
+  header.valor_unitario = firstItem.valor_unitario ?? header.valor_unitario ?? null;
+  header.valor_total = totals.valorTotal;
+  header.subtotal = totals.subtotal;
+  header.desconto_total = totals.descontoTotal;
+
+  return { header, itens };
+}
+
+function legacyItemFromRecebimento(payload = {}) {
+  return {
+    produto_id: payload.produto_id,
+    quantidade: payload.quantidade_nota ?? payload.peso_nf ?? 0,
+    unidade: payload.unidade_nota || 'KG',
+    valor_unitario: payload.valor_unitario ?? 0,
+    desconto: 0,
+    valor_total: payload.valor_total,
+    ordem: 1,
+  };
+}
+
+function normalizeRecebimentoItens(items = []) {
+  return (items || []).map((item, index) => {
+    const quantidade = nonNegativeNumber(item.quantidade);
+    const valorUnitario = nonNegativeNumber(item.valor_unitario);
+    const subtotal = roundMoney(quantidade * valorUnitario);
+    const desconto = Math.min(nonNegativeNumber(item.desconto), subtotal);
+    const valorTotal = roundMoney(subtotal - desconto);
+    return {
+      id: item.id || undefined,
+      produto_id: item.produto_id || null,
+      quantidade,
+      unidade: item.unidade || 'KG',
+      valor_unitario: valorUnitario,
+      desconto,
+      valor_total: valorTotal,
+      ordem: Number(item.ordem || index + 1),
+    };
+  }).filter((item) => item.produto_id && item.quantidade >= 0);
+}
+
+function calcularTotaisRecebimento(itens = []) {
+  return (itens || []).reduce((acc, item) => {
+    const subtotalItem = roundMoney(nonNegativeNumber(item.quantidade) * nonNegativeNumber(item.valor_unitario));
+    const descontoItem = Math.min(nonNegativeNumber(item.desconto), subtotalItem);
+    acc.subtotal = roundMoney(acc.subtotal + subtotalItem);
+    acc.descontoTotal = roundMoney(acc.descontoTotal + descontoItem);
+    acc.valorTotal = roundMoney(acc.valorTotal + subtotalItem - descontoItem);
+    return acc;
+  }, { subtotal: 0, descontoTotal: 0, valorTotal: 0 });
+}
+
+async function saveRecebimentoItensAndReload(recebimentoId, itens = []) {
+  const normalizedItems = normalizeRecebimentoItens(itens).map((item, index) => ({
+    ...item,
+    recebimento_id: recebimentoId,
+    ordem: index + 1,
+  }));
+
+  const { error: deleteError } = await supabase.from('recebimento_itens').delete().eq('recebimento_id', recebimentoId);
+  if (deleteError && !isMissingRecebimentoItensTable(deleteError)) throw deleteError;
+
+  if (normalizedItems.length && !deleteError) {
+    const { error: insertError } = await supabase.from('recebimento_itens').insert(normalizedItems.map(cleanPayload));
+    if (insertError && !isMissingRecebimentoItensTable(insertError)) throw insertError;
+  }
+
+  return getRecebimento(recebimentoId);
+}
+
+function nonNegativeNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function roundMoney(value) {
+  return Number((Number(value || 0)).toFixed(2));
+}
+
 function isMissingColumn(error, column) {
   const message = String(error?.message || '').toLowerCase();
   return message.includes(column.toLowerCase()) && (
@@ -472,6 +579,15 @@ function stripMissingOptionalColumns(error, payload) {
 function isMissingPortariaTable(error) {
   const message = String(error?.message || '').toLowerCase();
   return message.includes('portaria_entradas') && (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('schema cache')
+  );
+}
+
+function isMissingRecebimentoItensTable(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('recebimento_itens') && (
     message.includes('does not exist')
     || message.includes('could not find')
     || message.includes('schema cache')

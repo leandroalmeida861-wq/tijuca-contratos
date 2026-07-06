@@ -121,6 +121,9 @@ const defaultRecebimento = {
   observacao: '',
   valor_unitario: '',
   valor_total: '',
+  subtotal: '',
+  desconto_total: '',
+  itens: [],
 };
 
 const defaultPortariaForm = {
@@ -858,16 +861,41 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
       if (name === 'fornecedor_id' && value) {
         next.fornecedor_nome_manual = '';
       }
-      if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca') {
-        if (isSacaUnit(next.unidade_nota) && !next.peso_por_saca) next.peso_por_saca = '60';
-        if (!isSacaUnit(next.unidade_nota)) next.peso_por_saca = '';
-        const convertedWeight = normalizarQuantidadeParaKg(next.quantidade_nota, next.unidade_nota, next.peso_por_saca || 60);
-        next.peso_nf = convertedWeight === null ? '' : String(convertedWeight);
-      }
-      if (name === 'peso_nf' || name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca' || name === 'valor_unitario') {
-        next.valor_total = calculateValorTotalNotaDisplay(next);
-      }
       return next;
+    });
+  }
+
+  function updateItem(index, field, value) {
+    setFieldErrors((current) => {
+      const key = `itens.${index}.${field}`;
+      if (!current[key]) return current;
+      const nextErrors = { ...current };
+      delete nextErrors[key];
+      return nextErrors;
+    });
+    setForm((current) => {
+      const itens = ensureRecebimentoItems(current).map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        const nextItem = { ...item, [field]: value };
+        if (field === 'produto_id' && value) nextItem.produto_nome_manual = '';
+        return withItemTotal(nextItem);
+      });
+      return syncRecebimentoTotals({ ...current, itens });
+    });
+  }
+
+  function addItem() {
+    setForm((current) => syncRecebimentoTotals({
+      ...current,
+      itens: [...ensureRecebimentoItems(current), createRecebimentoItemForm()],
+    }));
+  }
+
+  function removeItem(index) {
+    setForm((current) => {
+      const itens = ensureRecebimentoItems(current);
+      if (itens.length <= 1) return current;
+      return syncRecebimentoTotals({ ...current, itens: itens.filter((_, itemIndex) => itemIndex !== index) });
     });
   }
 
@@ -878,21 +906,15 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
 
     try {
       const parsed = parseNfeRecebimento(await file.text());
-      const xmlProduct = resolveNfeProduct(parsed, localOptions.produtos);
       const matchedSupplier = findFornecedorFromNfe(parsed, localOptions.fornecedores);
-      const matchedProduct = xmlProduct.product;
       const carrier = findTransportadoraFromNfe(parsed, localOptions.transportadoras);
       const vehicle = findVeiculoFromNfe(parsed, localOptions.veiculos);
-      const xmlQuantity = xmlProduct.quantity;
-      const xmlUnit = normalizeNotaUnidade(xmlProduct.unit || xmlProduct.item?.unidade || 'KG');
-      const xmlPesoPorSaca = isSacaUnit(xmlUnit) ? 60 : '';
-      const xmlPesoNotaKg = normalizarQuantidadeParaKg(xmlQuantity, xmlUnit, xmlPesoPorSaca || 60) ?? parsed.pesoLiquidoNf;
-      const xmlTotal = xmlProduct.totalValue ?? parsed.valorTotalNota;
-      const xmlUnitValue = xmlProduct.unitValue ?? calculateUnitValue(xmlTotal, xmlQuantity);
-      const xmlUnitDecimals = xmlProduct.unitDecimalPlaces ?? numberDecimalPlaces(xmlUnitValue);
+      const importedItems = buildItemsFromNfe(parsed, localOptions.produtos);
+      const unmatchedItems = importedItems.filter((item) => !item.produto_id);
+      const totalPesoNf = sumItemsConvertedWeight(importedItems) || parsed.pesoLiquidoNf;
 
       setForm((current) => {
-        const next = {
+        const next = syncRecebimentoTotals({
           ...current,
           nf_numero: parsed.numero || current.nf_numero,
           nf_chave_acesso: parsed.chaveAcesso || current.nf_chave_acesso,
@@ -901,23 +923,17 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
           veiculo_id: vehicle?.id || current.veiculo_id,
           fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
-          produto_id: matchedProduct?.id || '',
-          produto_nome_manual: matchedProduct?.id ? '' : '',
-          quantidade_nota: xmlQuantity ?? current.quantidade_nota,
-          unidade_nota: xmlUnit || current.unidade_nota || 'KG',
-          peso_por_saca: isSacaUnit(xmlUnit) ? String(xmlPesoPorSaca || 60) : current.peso_por_saca,
-          peso_nf: xmlPesoNotaKg ?? current.peso_nf,
-          valor_unitario: formatMoneyPtCompact(xmlUnitValue, displayDecimalPlaces(xmlUnitDecimals, 2)) || current.valor_unitario,
-          valor_total: formatMoneyPt(xmlTotal, 2) || current.valor_total,
-        };
-        if (!next.valor_total) next.valor_total = calculateValorTotalNotaDisplay(next) || current.valor_total;
+          peso_nf: totalPesoNf ?? current.peso_nf,
+          itens: importedItems.length ? importedItems : current.itens,
+        });
         return next;
       });
       setXmlInfo([
         `XML importado: NF ${parsed.numero || '-'}`,
         matchedSupplier ? `Fornecedor vinculado pelo CNPJ: ${matchedSupplier.nome}` : 'Fornecedor do XML nao encontrado pelo CNPJ. Selecione o fornecedor cadastrado antes de salvar.',
-        matchedProduct ? `Produto vinculado: ${matchedProduct.nome}` : `Produto do XML nao encontrado com seguranca no cadastro (${xmlProduct.item?.nome || 'sem descricao'}). Selecione o produto antes de salvar.`,
-        conversionMessage(xmlQuantity, xmlUnit, xmlPesoNotaKg, xmlPesoPorSaca),
+        `${importedItems.length || 0} item(ns) importado(s) da NF-e.`,
+        unmatchedItems.length ? `${unmatchedItems.length} item(ns) sem produto vinculado. Selecione o produto cadastrado antes de salvar.` : 'Todos os itens foram vinculados ao cadastro de produtos.',
+        `Peso convertido dos itens: ${formatWeightPt(totalPesoNf)} KG`,
         carrier ? `Transportadora vinculada: ${carrier.nome}` : 'Transportadora do XML nao foi cadastrada automaticamente.',
         vehicle ? `Veiculo vinculado pela placa: ${vehicle.placa}` : 'Veiculo do XML nao foi cadastrado automaticamente.',
       ].join(' | '));
@@ -928,7 +944,8 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
 
   async function submit(event) {
     event.preventDefault();
-    const validation = validateRecebimentoForm(form);
+    const syncedForm = syncRecebimentoTotals(form);
+    const validation = validateRecebimentoForm(syncedForm);
     if (validation.message) {
       setFieldErrors(validation.fields);
       setFormError(validation.message);
@@ -941,8 +958,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
     setSaving(true);
     try {
       const payload = normalizeRecebimentoPayload({
-        ...form,
-        ...resolveManualProductFields(form.produto_nome_manual, localOptions.produtos),
+        ...syncedForm,
       });
       const localDuplicate = findDuplicateRecebimentoRows(rows, payload, row?.id, localOptions);
       if (localDuplicate) {
@@ -1010,7 +1026,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         <Select label="Laboratório" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={localOptions.laboratorios} />
         <Input label="Numero da NF" value={form.nf_numero} onChange={(value) => updateField('nf_numero', value)} error={fieldErrors.nf_numero} />
         <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={localOptions.fornecedores} error={fieldErrors.fornecedor_id} />
-        <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={localOptions.produtos} fallbackValue={form.produto_nome_manual} error={fieldErrors.produto_id} />
+        {false && <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={localOptions.produtos} fallbackValue={form.produto_nome_manual} error={fieldErrors.produto_id} />}
         <SearchableSelect label="Veiculo" value={form.veiculo_id} onChange={(value) => updateField('veiculo_id', value)} options={localOptions.veiculos} labelKey="placa" fallbackValue={form.veiculo_placa_manual} error={fieldErrors.veiculo_id} />
         <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={localOptions.motoristas} />
         <SearchableSelect label="Transportadora" value={form.transportadora_id} onChange={(value) => updateField('transportadora_id', value)} options={localOptions.transportadoras} />
@@ -1019,13 +1035,13 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         <Input label="Chave da NF-e" value={form.nf_chave_acesso} onChange={(value) => updateField('nf_chave_acesso', value)} />
         <Input label="Peso bruto KG" type="number" step="0.001" value={form.peso_bruto} onChange={(value) => updateField('peso_bruto', value)} required error={fieldErrors.peso_bruto} />
         <Input label="Tara KG" type="number" step="0.001" value={form.tara} onChange={(value) => updateField('tara', value)} required error={fieldErrors.tara} />
-        <Input label="Quantidade da nota" type="number" step="0.001" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />
-        <Select label="Unidade da nota" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
+        {false && <Input label="Quantidade da nota" type="number" step="0.001" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />}
+        {false && <Select label="Unidade da nota" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
           { id: 'KG', nome: 'KG' },
           { id: 'SC', nome: 'SC / Saca' },
           { id: 'TON', nome: 'TON / Tonelada' },
-        ]} />
-        {isSacaUnit(form.unidade_nota) && (
+        ]} />}
+        {false && isSacaUnit(form.unidade_nota) && (
           <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
         )}
         <Input label="Peso convertido KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
@@ -1033,13 +1049,24 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         <Input label="Umidade % 02" type="number" step="0.001" value={form.umidade_02} onChange={(value) => updateField('umidade_02', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
         <Input label="Liberado por" value={form.liberado_por} onChange={(value) => updateField('liberado_por', value)} />
-        <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />
-        <MoneyInput label="Valor total" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />
+        {false && <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={form.valor_unitario} onChange={(value) => updateField('valor_unitario', value)} />}
+        {false && <MoneyInput label="Valor total" value={form.valor_total} onChange={(value) => updateField('valor_total', value)} />}
       </div>
+
+      <RecebimentoItensEditor
+        itens={ensureRecebimentoItems(form)}
+        produtos={localOptions.produtos}
+        fieldErrors={fieldErrors}
+        onItemChange={updateItem}
+        onAdd={addItem}
+        onRemove={removeItem}
+      />
+
+      <RecebimentoTotais itens={ensureRecebimentoItems(form)} />
 
       <NotasComplementaresSection
         recebimentoId={row?.id || ''}
-        valorPrincipal={nullableLocaleNumber(form.valor_total) || 0}
+        valorPrincipal={calcularTotaisRecebimento(ensureRecebimentoItems(form)).valorTotal || 0}
         complementos={complementos}
         setComplementos={setComplementos}
         fornecedores={localOptions.fornecedores}
@@ -1061,6 +1088,79 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         </button>
       </div>
     </form>
+  );
+}
+
+function RecebimentoItensEditor({ itens, produtos, fieldErrors, onItemChange, onAdd, onRemove }) {
+  return (
+    <section className="grid gap-3 rounded-lg border border-slate-200 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">Produtos da nota</h3>
+          <p className="text-xs font-semibold text-slate-500">Adicione um ou mais produtos vinculados ao mesmo recebimento.</p>
+        </div>
+        <button type="button" onClick={onAdd} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700">
+          <Plus size={16} /> Adicionar produto
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-[980px] w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Produto</th>
+              <th className="px-3 py-2">Qtd.</th>
+              <th className="px-3 py-2">Unidade</th>
+              <th className="px-3 py-2">Valor unitário</th>
+              <th className="px-3 py-2">Desconto</th>
+              <th className="px-3 py-2">Total</th>
+              <th className="px-3 py-2 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(itens || []).map((item, index) => (
+              <tr key={item.local_id || item.id || index} className="border-b last:border-0">
+                <td className="px-3 py-2">
+                  <SearchableSelect label={`Produto ${index + 1}`} value={item.produto_id} onChange={(value) => onItemChange(index, 'produto_id', value)} options={produtos} fallbackValue={item.produto_nome_manual} error={fieldErrors[`itens.${index}.produto_id`]} />
+                </td>
+                <td className="px-3 py-2">
+                  <Input label="Quantidade" type="number" step="0.001" value={item.quantidade} onChange={(value) => onItemChange(index, 'quantidade', value)} error={fieldErrors[`itens.${index}.quantidade`]} />
+                </td>
+                <td className="px-3 py-2">
+                  <Select label="Unidade" value={item.unidade || 'KG'} onChange={(value) => onItemChange(index, 'unidade', value)} options={[
+                    { id: 'KG', nome: 'KG' },
+                    { id: 'SC', nome: 'SC / Saca' },
+                    { id: 'TON', nome: 'TON / Tonelada' },
+                  ]} />
+                </td>
+                <td className="px-3 py-2">
+                  <MoneyInput label="Valor unitário" placeholder="Ex: 57,00" value={item.valor_unitario} onChange={(value) => onItemChange(index, 'valor_unitario', value)} error={fieldErrors[`itens.${index}.valor_unitario`]} />
+                </td>
+                <td className="px-3 py-2">
+                  <MoneyInput label="Desconto" value={item.desconto} onChange={(value) => onItemChange(index, 'desconto', value)} error={fieldErrors[`itens.${index}.desconto`]} />
+                </td>
+                <td className="px-3 py-2 font-extrabold text-slate-950">R$ {formatMoneyPt(itemTotalValue(item), 2)}</td>
+                <td className="px-3 py-2 text-right">
+                  <button type="button" onClick={() => onRemove(index)} disabled={(itens || []).length <= 1} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40" title="Remover produto">
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RecebimentoTotais({ itens }) {
+  const totals = calcularTotaisRecebimento(itens);
+  return (
+    <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 md:grid-cols-3">
+      <span>Subtotal: R$ {formatMoneyPt(totals.subtotal, 2)}</span>
+      <span>Desconto total: R$ {formatMoneyPt(totals.descontoTotal, 2)}</span>
+      <span className="text-slate-950">Valor total da nota: R$ {formatMoneyPt(totals.valorTotal, 2)}</span>
+    </div>
   );
 }
 
@@ -2102,22 +2202,35 @@ function buildRecebimentoReportRows(rows, mode) {
 
   if (mode === 'detalhado') {
     return rows.flatMap((row) => {
-      const principal = {
+      const itens = Array.isArray(row.itens) && row.itens.length ? row.itens : [{
+        id: 'legacy',
+        produto_id: row.produto_id,
+        produto: row.produto,
+        quantidade: row.quantidade_nota ?? row.peso_nf,
+        unidade: row.unidade_nota,
+        valor_unitario: row.valor_unitario,
+        valor_total: row.valor_total,
+      }];
+      const principais = itens.map((item, index) => ({
         ...row,
-        id: `${row.id}-principal`,
+        id: `${row.id}-principal-${item.id || index}`,
+        produto_id: item.produto_id || row.produto_id,
+        produto: item.produto || row.produto,
+        quantidade_nota: item.quantidade ?? row.quantidade_nota,
+        unidade_nota: item.unidade || row.unidade_nota,
         tipo_nota_relatorio: 'Principal',
         nf_principal_relatorio: row.nf_numero || '-',
         nf_complementar_relatorio: '-',
-        valor_principal_relatorio: Number(row.valor_total || 0),
+        valor_principal_relatorio: Number(item.valor_total ?? row.valor_total ?? 0),
         valor_complemento_relatorio: 0,
         total_complementos_relatorio: complementosTotal(row.complementos),
         valor_agregado_relatorio: valorTotalAgregado(row),
-        valor_unitario_relatorio: row.valor_unitario,
+        valor_unitario_relatorio: item.valor_unitario ?? row.valor_unitario,
         umidade_relatorio: humidityText(row),
         diferenca_relatorio: diferencaAgregada(row),
         chave_complementar_relatorio: '-',
         observacao_complementar_relatorio: '-',
-      };
+      }));
       const complementos = (row.complementos || []).map((item) => ({
         ...row,
         id: `${row.id}-comp-${item.id}`,
@@ -2134,7 +2247,7 @@ function buildRecebimentoReportRows(rows, mode) {
         chave_complementar_relatorio: item.chave_nfe || '-',
         observacao_complementar_relatorio: item.observacao || '-',
       }));
-      return [principal, ...complementos];
+      return [...principais, ...complementos];
     });
   }
 
@@ -3167,10 +3280,36 @@ function validateRecebimentoForm(form) {
   requireField('balanca_id', 'Balanca');
   requireField('nf_numero', 'Numero da NF');
   requireField('fornecedor_id', 'Fornecedor cadastrado', Boolean(form.fornecedor_id));
-  requireField('produto_id', 'Produto', Boolean(form.produto_id || form.produto_nome_manual));
   requireField('veiculo_id', 'Veiculo', Boolean(form.veiculo_id || form.veiculo_placa_manual));
   requireField('peso_bruto', 'Peso bruto KG', form.peso_bruto !== '' && form.peso_bruto !== null && form.peso_bruto !== undefined);
   requireField('tara', 'Tara KG', form.tara !== '' && form.tara !== null && form.tara !== undefined);
+
+  const itens = ensureRecebimentoItems(form);
+  if (!itens.length) {
+    fields.itens = 'Informe pelo menos um produto';
+    missing.push('Produtos da nota');
+  }
+
+  itens.forEach((item, index) => {
+    const subtotal = itemSubtotalValue(item);
+    const desconto = nullableLocaleNumber(item.desconto) ?? 0;
+    if (!item.produto_id && !item.produto_nome_manual) {
+      fields[`itens.${index}.produto_id`] = 'Produto obrigatorio';
+      missing.push(`Produto ${index + 1}`);
+    }
+    if ((nullableLocaleNumber(item.quantidade) ?? -1) < 0) {
+      fields[`itens.${index}.quantidade`] = 'Quantidade invalida';
+      missing.push(`Quantidade do produto ${index + 1}`);
+    }
+    if ((nullableLocaleNumber(item.valor_unitario) ?? -1) < 0) {
+      fields[`itens.${index}.valor_unitario`] = 'Valor invalido';
+      missing.push(`Valor unitario do produto ${index + 1}`);
+    }
+    if (desconto < 0 || desconto > subtotal) {
+      fields[`itens.${index}.desconto`] = 'Desconto invalido';
+      missing.push(`Desconto do produto ${index + 1}`);
+    }
+  });
 
   if (!missing.length) return { fields: {}, message: '' };
 
@@ -3250,14 +3389,45 @@ function validatePortariaForm(form, rows, editingId) {
 }
 
 function rowToForm(row) {
-  if (!row) return { ...defaultRecebimento };
+  if (!row) return syncRecebimentoTotals({ ...defaultRecebimento, itens: [createRecebimentoItemForm()] });
   const form = Object.fromEntries(Object.keys(defaultRecebimento).map((key) => [key, row[key] ?? '']));
+  form.itens = recebimentoItensToForm(row);
   form.quantidade_nota = row.quantidade_nota ?? row.peso_nf ?? '';
   form.unidade_nota = row.unidade_nota || 'KG';
   form.peso_por_saca = row.peso_por_saca ?? (isSacaUnit(form.unidade_nota) ? '60' : '');
   form.valor_unitario = formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2));
   form.valor_total = formatMoneyPt(row.valor_total, 2);
-  return form;
+  form.subtotal = formatMoneyPt(row.subtotal, 2);
+  form.desconto_total = formatMoneyPt(row.desconto_total, 2);
+  return syncRecebimentoTotals(form);
+}
+
+function recebimentoItensToForm(row = {}) {
+  if (Array.isArray(row.itens) && row.itens.length) {
+    return row.itens
+      .slice()
+      .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+      .map((item) => createRecebimentoItemForm({
+        id: item.id,
+        produto_id: item.produto_id || '',
+        produto_nome_manual: '',
+        quantidade: item.quantidade ?? '',
+        unidade: item.unidade || item.produto?.unidade || 'KG',
+        valor_unitario: formatMoneyPtCompact(item.valor_unitario, Math.max(numberDecimalPlaces(item.valor_unitario), 2)),
+        desconto: formatMoneyPt(item.desconto || 0, 2),
+        valor_total: formatMoneyPt(item.valor_total, 2),
+      }));
+  }
+
+  return [createRecebimentoItemForm({
+    produto_id: row.produto_id || '',
+    produto_nome_manual: row.produto_nome_manual || '',
+    quantidade: row.quantidade_nota ?? row.peso_nf ?? '',
+    unidade: row.unidade_nota || 'KG',
+    valor_unitario: formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2)),
+    desconto: '0,00',
+    valor_total: formatMoneyPt(row.valor_total, 2),
+  })];
 }
 
 function portariaRowToForm(row) {
@@ -3305,22 +3475,49 @@ function rowToLaboratorioForm(row) {
 }
 
 function normalizeRecebimentoPayload(form) {
+  const synced = syncRecebimentoTotals(form);
+  const itens = normalizeRecebimentoItemsForPayload(synced.itens);
+  const totals = calcularTotaisRecebimento(synced.itens);
+  const first = itens[0] || {};
   return {
-    ...form,
-    qtd_eixos: nullableNumber(form.qtd_eixos),
-    peso_bruto: Number(form.peso_bruto || 0),
-    tara: Number(form.tara || 0),
-    peso_nf: nullableNumber(form.peso_nf),
-    quantidade_nota: nullableNumber(form.quantidade_nota),
-    unidade_nota: form.unidade_nota || 'KG',
-    peso_por_saca: nullableNumber(form.peso_por_saca),
-    umidade_01: nullableNumber(form.umidade_01),
-    umidade_02: nullableNumber(form.umidade_02),
-    umidade: resolveHumidityValue(form),
-    valor_unitario: nullableLocaleNumber(form.valor_unitario),
-    valor_total: nullableLocaleNumber(form.valor_total),
-    fornecedor_nome_manual: form.fornecedor_id ? null : form.fornecedor_nome_manual,
+    ...synced,
+    qtd_eixos: nullableNumber(synced.qtd_eixos),
+    peso_bruto: Number(synced.peso_bruto || 0),
+    tara: Number(synced.tara || 0),
+    peso_nf: nullableNumber(synced.peso_nf),
+    quantidade_nota: first.quantidade ?? null,
+    unidade_nota: first.unidade || 'KG',
+    peso_por_saca: nullableNumber(synced.peso_por_saca),
+    produto_id: first.produto_id || null,
+    umidade_01: nullableNumber(synced.umidade_01),
+    umidade_02: nullableNumber(synced.umidade_02),
+    umidade: resolveHumidityValue(synced),
+    valor_unitario: first.valor_unitario ?? null,
+    subtotal: totals.subtotal,
+    desconto_total: totals.descontoTotal,
+    valor_total: totals.valorTotal,
+    itens,
+    fornecedor_nome_manual: synced.fornecedor_id ? null : synced.fornecedor_nome_manual,
   };
+}
+
+function normalizeRecebimentoItemsForPayload(itens = []) {
+  return (itens || []).map((item, index) => {
+    const quantidade = Math.max(nullableLocaleNumber(item.quantidade) ?? 0, 0);
+    const valorUnitario = Math.max(nullableLocaleNumber(item.valor_unitario) ?? 0, 0);
+    const subtotal = Number((quantidade * valorUnitario).toFixed(2));
+    const desconto = Math.min(Math.max(nullableLocaleNumber(item.desconto) ?? 0, 0), subtotal);
+    return {
+      id: item.id || undefined,
+      produto_id: item.produto_id || null,
+      quantidade,
+      unidade: item.unidade || 'KG',
+      valor_unitario: valorUnitario,
+      desconto,
+      valor_total: Number((subtotal - desconto).toFixed(2)),
+      ordem: index + 1,
+    };
+  }).filter((item) => item.produto_id);
 }
 
 function normalizePortariaPayload(form) {
@@ -3482,6 +3679,105 @@ function calculateValorTotalNotaDisplay(form) {
   const unitario = nullableLocaleNumber(form.valor_unitario);
   if (quantity === null || unitario === null) return '';
   return formatMoneyPt(quantity * unitario, 2);
+}
+
+function createRecebimentoItemForm(overrides = {}) {
+  return withItemTotal({
+    local_id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    produto_id: '',
+    produto_nome_manual: '',
+    quantidade: '',
+    unidade: 'KG',
+    valor_unitario: '',
+    desconto: '',
+    valor_total: '',
+    ...overrides,
+  });
+}
+
+function ensureRecebimentoItems(form = {}) {
+  return Array.isArray(form.itens) && form.itens.length ? form.itens : [createRecebimentoItemForm({
+    produto_id: form.produto_id || '',
+    produto_nome_manual: form.produto_nome_manual || '',
+    quantidade: form.quantidade_nota ?? form.peso_nf ?? '',
+    unidade: form.unidade_nota || 'KG',
+    valor_unitario: form.valor_unitario || '',
+    desconto: '0,00',
+    valor_total: form.valor_total || '',
+  })];
+}
+
+function withItemTotal(item = {}) {
+  const total = itemTotalValue(item);
+  return { ...item, valor_total: formatMoneyPt(total, 2) };
+}
+
+function itemSubtotalValue(item = {}) {
+  const quantity = nullableLocaleNumber(item.quantidade) ?? 0;
+  const unitValue = nullableLocaleNumber(item.valor_unitario) ?? 0;
+  return Number((Math.max(quantity, 0) * Math.max(unitValue, 0)).toFixed(2));
+}
+
+function itemTotalValue(item = {}) {
+  const subtotal = itemSubtotalValue(item);
+  const discount = Math.min(nullableLocaleNumber(item.desconto) ?? 0, subtotal);
+  return Number(Math.max(subtotal - discount, 0).toFixed(2));
+}
+
+function calcularTotaisRecebimento(itens = []) {
+  return (itens || []).reduce((acc, item) => {
+    const subtotal = itemSubtotalValue(item);
+    const desconto = Math.min(nullableLocaleNumber(item.desconto) ?? 0, subtotal);
+    acc.subtotal = Number((acc.subtotal + subtotal).toFixed(2));
+    acc.descontoTotal = Number((acc.descontoTotal + desconto).toFixed(2));
+    acc.valorTotal = Number((acc.valorTotal + subtotal - desconto).toFixed(2));
+    return acc;
+  }, { subtotal: 0, descontoTotal: 0, valorTotal: 0 });
+}
+
+function syncRecebimentoTotals(form = {}) {
+  const itens = ensureRecebimentoItems(form).map(withItemTotal);
+  const totals = calcularTotaisRecebimento(itens);
+  const first = itens[0] || {};
+  const totalPesoNf = sumItemsConvertedWeight(itens);
+  return {
+    ...form,
+    itens,
+    produto_id: first.produto_id || '',
+    produto_nome_manual: first.produto_nome_manual || '',
+    quantidade_nota: first.quantidade ?? '',
+    unidade_nota: first.unidade || 'KG',
+    valor_unitario: first.valor_unitario || '',
+    peso_nf: totalPesoNf === null ? form.peso_nf : String(totalPesoNf),
+    subtotal: formatMoneyPt(totals.subtotal, 2),
+    desconto_total: formatMoneyPt(totals.descontoTotal, 2),
+    valor_total: formatMoneyPt(totals.valorTotal, 2),
+  };
+}
+
+function sumItemsConvertedWeight(itens = []) {
+  if (!itens?.length) return null;
+  const total = itens.reduce((sum, item) => {
+    const converted = normalizarQuantidadeParaKg(item.quantidade, item.unidade, item.peso_por_saca || 60);
+    return sum + Number(converted || 0);
+  }, 0);
+  return Number(total.toFixed(3));
+}
+
+function buildItemsFromNfe(parsed, produtos = []) {
+  return (parsed?.itens || []).map((item) => {
+    const product = findProdutoFromNfe(item, produtos);
+    const unit = normalizeNotaUnidade(item.unidade || 'KG');
+    const unitValue = item.valorUnitario ?? calculateUnitValue(item.valorTotal, item.quantidade);
+    return createRecebimentoItemForm({
+      produto_id: product?.id || '',
+      produto_nome_manual: product?.id ? '' : item.nome || '',
+      quantidade: item.quantidade ?? '',
+      unidade: unit,
+      valor_unitario: formatMoneyPtCompact(unitValue, displayDecimalPlaces(item.valorUnitarioDecimais, 2)),
+      desconto: formatMoneyPt(item.desconto || 0, 2),
+    });
+  });
 }
 
 function normalizarQuantidadeParaKg(quantidade, unidade, pesoPorSaca = 60) {
@@ -3834,6 +4130,14 @@ function calculateUnitValue(totalValue, quantity) {
 }
 
 function produtoNome(row, fallback = '-') {
+  if (Array.isArray(row.itens) && row.itens.length) {
+    const names = row.itens
+      .slice()
+      .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+      .map((item) => item.produto?.nome)
+      .filter(Boolean);
+    if (names.length) return names.join(', ');
+  }
   return row.produto?.nome || row.produto_nome_manual || fallback;
 }
 

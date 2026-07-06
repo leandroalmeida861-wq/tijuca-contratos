@@ -25,6 +25,7 @@ export function parseNfeRecebimento(xml) {
     const prod = section(det, 'prod') || det;
     const valorUnitarioRaw = tagText(prod, 'vUnCom');
     const valorTotalRaw = tagText(prod, 'vProd');
+    const descontoRaw = tagText(prod, 'vDesc');
     return {
       codigo: tagText(prod, 'cProd'),
       nome: tagText(prod, 'xProd') || '(sem descrição)',
@@ -34,6 +35,7 @@ export function parseNfeRecebimento(xml) {
       valorUnitarioDecimais: decimalPlaces(valorUnitarioRaw),
       valorTotal: numberValue(valorTotalRaw),
       valorTotalDecimais: decimalPlaces(valorTotalRaw),
+      desconto: numberValue(descontoRaw) || 0,
     };
   });
 
