@@ -10,6 +10,9 @@ export function parseNfeRecebimento(xml) {
     throw new NfeParseError('Arquivo inválido. Como corrigir: selecione o XML original da NF-e, não o PDF/DANFE.');
   }
 
+  const domResult = parseNfeRecebimentoDom(xml);
+  if (domResult) return domResult;
+
   const infId = xml.match(/<infNFe\b[^>]*\bId\s*=\s*"([^"]+)"/i);
   const chaveAcesso = infId ? onlyDigits(infId[1]).slice(-44) || null : null;
   const ide = section(xml, 'ide') || '';
@@ -63,6 +66,86 @@ export function parseNfeRecebimento(xml) {
     pesoBrutoNf: numberValue(tagText(vol, 'pesoB')),
     valorTotalNota: numberValue(tagText(icmsTot, 'vNF')),
   };
+}
+
+function parseNfeRecebimentoDom(xmlText) {
+  if (typeof DOMParser === 'undefined') return null;
+
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (findFirst(doc, 'parsererror')) {
+    throw new NfeParseError('XML inválido. Como corrigir: selecione o arquivo XML original da NF-e.');
+  }
+
+  const infNfe = findFirst(doc, 'infNFe');
+  if (!infNfe) return null;
+
+  const ide = findFirst(infNfe, 'ide');
+  const emit = findFirst(infNfe, 'emit');
+  const transp = findFirst(infNfe, 'transp');
+  const transporta = findFirst(transp, 'transporta');
+  const veicTransp = findFirst(transp, 'veicTransp');
+  const vol = findFirst(transp, 'vol');
+  const icmsTot = findFirst(infNfe, 'ICMSTot');
+  const chaveAcesso = onlyDigits(infNfe.getAttribute('Id')).slice(-44) || null;
+
+  const itens = findAll(infNfe, 'det').map((det) => {
+    const prod = findFirst(det, 'prod') || det;
+    const valorUnitarioRaw = textFrom(prod, 'vUnCom');
+    const valorTotalRaw = textFrom(prod, 'vProd');
+    const descontoRaw = textFrom(prod, 'vDesc');
+    return {
+      codigo: textFrom(prod, 'cProd'),
+      nome: textFrom(prod, 'xProd') || '(sem descrição)',
+      unidade: textFrom(prod, 'uCom'),
+      quantidade: numberValue(textFrom(prod, 'qCom')),
+      valorUnitario: numberValue(valorUnitarioRaw),
+      valorUnitarioDecimais: decimalPlaces(valorUnitarioRaw),
+      valorTotal: numberValue(valorTotalRaw),
+      valorTotalDecimais: decimalPlaces(valorTotalRaw),
+      desconto: numberValue(descontoRaw) || 0,
+    };
+  });
+
+  const pesoLiquidoXml = numberValue(textFrom(vol, 'pesoL'));
+  const pesoLiquidoItens = itens
+    .filter((item) => String(item.unidade || '').toUpperCase().startsWith('KG'))
+    .reduce((sum, item) => sum + Number(item.quantidade || 0), 0);
+
+  return {
+    chaveAcesso,
+    numero: textFrom(ide, 'nNF'),
+    serie: textFrom(ide, 'serie'),
+    dataEmissao: (textFrom(ide, 'dhEmi') || textFrom(ide, 'dEmi') || '').slice(0, 10) || null,
+    emitente: {
+      nome: textFrom(emit, 'xNome'),
+      documento: textFrom(emit, 'CNPJ') || textFrom(emit, 'CPF'),
+    },
+    transportadora: {
+      nome: textFrom(transporta, 'xNome'),
+      cnpj: textFrom(transporta, 'CNPJ') || textFrom(transporta, 'CPF'),
+    },
+    placaVeiculo: textFrom(veicTransp, 'placa'),
+    itens,
+    pesoLiquidoNf: pesoLiquidoXml ?? (pesoLiquidoItens > 0 ? pesoLiquidoItens : null),
+    pesoBrutoNf: numberValue(textFrom(vol, 'pesoB')),
+    valorTotalNota: numberValue(textFrom(icmsTot, 'vNF')),
+  };
+}
+
+function findFirst(root, localName) {
+  if (!root) return null;
+  return findAll(root, localName)[0] || null;
+}
+
+function findAll(root, localName) {
+  if (!root) return [];
+  return Array.from(root.getElementsByTagName('*')).filter((node) => node.localName === localName);
+}
+
+function textFrom(root, localName) {
+  const node = findFirst(root, localName);
+  const value = decodeXml(node?.textContent || '');
+  return value || null;
 }
 
 function section(xml, tag) {
