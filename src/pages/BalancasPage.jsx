@@ -472,7 +472,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
             <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={options.motoristas} />
             <SearchableSelect label="Transportadora" value={form.transportadora_id} onChange={(value) => updateField('transportadora_id', value)} options={options.transportadoras} />
             <SearchableSelect label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={options.fornecedores} error={fieldErrors.fornecedor_id} />
-            <Input label="CNPJ do fornecedor" value={formatDocument(form.cnpj_fornecedor)} onChange={() => {}} readOnly error={fieldErrors.cnpj_fornecedor} />
+            <Input label="CNPJ / CPF do fornecedor" value={formatDocument(form.cnpj_fornecedor)} onChange={() => {}} readOnly error={fieldErrors.cnpj_fornecedor} />
             <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={options.produtos} error={fieldErrors.produto_id} />
             <Input label="Número da NF" value={form.numero_nf} onChange={(value) => updateField('numero_nf', onlyDigits(value))} error={fieldErrors.numero_nf} />
             <Input label="Série da NF" value={form.serie_nf} onChange={(value) => updateField('serie_nf', value.slice(0, 10).toUpperCase())} error={fieldErrors.serie_nf} />
@@ -549,7 +549,7 @@ function PortariaViewModal({ row, options, onClose }) {
     ['Motorista', row.motorista?.nome || '-'],
     ['Transportadora', row.transportadora?.nome || '-'],
     ['Fornecedor', row.fornecedor?.nome || '-'],
-    ['CNPJ', formatDocument(row.cnpj_fornecedor)],
+    ['CNPJ / CPF', formatDocument(row.cnpj_fornecedor)],
     ['Produto', row.produto?.nome || '-'],
     ['NF/Série', `${row.numero_nf || '-'}/${row.serie_nf || '-'}`],
     ['Peso - Quantidade', kg(row.peso_nf_kg)],
@@ -3217,7 +3217,7 @@ function validatePortariaForm(form, rows, editingId) {
   requireField('placa', 'Placa do veiculo', isValidPlate(form.placa));
   requireField('veiculo_id', 'Veiculo cadastrado');
   requireField('fornecedor_id', 'Fornecedor');
-  requireField('cnpj_fornecedor', 'CNPJ do fornecedor', isValidCnpj(form.cnpj_fornecedor));
+  requireField('cnpj_fornecedor', 'CNPJ/CPF do fornecedor', isValidCpfOrCnpj(form.cnpj_fornecedor));
   requireField('produto_id', 'Produto');
   requireField('numero_nf', 'Numero da NF', Boolean(onlyDigits(form.numero_nf)));
   requireField('serie_nf', 'Serie da NF');
@@ -3439,6 +3439,13 @@ function isValidCnpj(value) {
   const first = calc(cnpj.slice(0, 12));
   const second = calc(cnpj.slice(0, 12) + first);
   return cnpj.endsWith(`${first}${second}`);
+}
+
+function isValidCpfOrCnpj(value) {
+  const digits = onlyDigits(value);
+  if (digits.length === 11 && !/^(\d)\1+$/.test(digits)) return true;
+  if (digits.length === 14) return isValidCnpj(digits);
+  return false;
 }
 
 function formatDocument(value) {
