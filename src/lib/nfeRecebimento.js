@@ -29,6 +29,8 @@ export function parseNfeRecebimento(xml) {
     const valorUnitarioRaw = tagText(prod, 'vUnCom');
     const valorTotalRaw = tagText(prod, 'vProd');
     const descontoRaw = tagText(prod, 'vDesc');
+    const icmsDesoneradoRaw = tagText(det, 'vICMSDeson');
+    const descontoTotal = somaValoresNfe(descontoRaw, icmsDesoneradoRaw);
     return {
       codigo: tagText(prod, 'cProd'),
       nome: tagText(prod, 'xProd') || '(sem descrição)',
@@ -38,7 +40,9 @@ export function parseNfeRecebimento(xml) {
       valorUnitarioDecimais: decimalPlaces(valorUnitarioRaw),
       valorTotal: numberValue(valorTotalRaw),
       valorTotalDecimais: decimalPlaces(valorTotalRaw),
-      desconto: numberValue(descontoRaw) || 0,
+      desconto: descontoTotal,
+      descontoProduto: numberValue(descontoRaw) || 0,
+      icmsDesonerado: numberValue(icmsDesoneradoRaw) || 0,
     };
   });
 
@@ -93,6 +97,8 @@ function parseNfeRecebimentoDom(xmlText) {
     const valorUnitarioRaw = textFrom(prod, 'vUnCom');
     const valorTotalRaw = textFrom(prod, 'vProd');
     const descontoRaw = textFrom(prod, 'vDesc');
+    const icmsDesoneradoRaw = textFrom(det, 'vICMSDeson');
+    const descontoTotal = somaValoresNfe(descontoRaw, icmsDesoneradoRaw);
     return {
       codigo: textFrom(prod, 'cProd'),
       nome: textFrom(prod, 'xProd') || '(sem descrição)',
@@ -102,7 +108,9 @@ function parseNfeRecebimentoDom(xmlText) {
       valorUnitarioDecimais: decimalPlaces(valorUnitarioRaw),
       valorTotal: numberValue(valorTotalRaw),
       valorTotalDecimais: decimalPlaces(valorTotalRaw),
-      desconto: numberValue(descontoRaw) || 0,
+      desconto: descontoTotal,
+      descontoProduto: numberValue(descontoRaw) || 0,
+      icmsDesonerado: numberValue(icmsDesoneradoRaw) || 0,
     };
   });
 
@@ -186,6 +194,10 @@ function numberValue(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(String(value).replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function somaValoresNfe(...values) {
+  return Number(values.reduce((sum, value) => sum + Number(numberValue(value) || 0), 0).toFixed(2));
 }
 
 function decimalPlaces(value) {
