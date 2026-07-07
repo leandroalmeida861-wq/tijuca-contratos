@@ -2674,16 +2674,27 @@ function BarList({ data, valueFormatter }) {
 function ProductsPieChart({ data }) {
   const [activeIndex, setActiveIndex] = useState(null);
   const [showOthers, setShowOthers] = useState(false);
+  const [containerRef, containerWidth] = useElementWidth();
   if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
 
   const totalKg = data.reduce((sum, item) => sum + Number(item.kgTotal || 0), 0);
   const others = data.find((item) => item.isOthers);
+  const isMobile = containerWidth > 0 && containerWidth < 520;
+  const isTablet = containerWidth >= 520 && containerWidth < 760;
+  const chartHeight = isMobile ? 380 : isTablet ? 440 : 500;
+  const outerRadius = isMobile ? 116 : isTablet ? 138 : 160;
+  const innerRadius = isMobile ? 76 : isTablet ? 94 : 110;
+  const chartMargin = isMobile
+    ? { top: 18, right: 16, bottom: 18, left: 16 }
+    : isTablet
+      ? { top: 18, right: 92, bottom: 18, left: 92 }
+      : { top: 18, right: 150, bottom: 18, left: 150 };
 
   return (
-    <div className="grid gap-3">
-      <div className="h-[500px] min-w-0">
+    <div ref={containerRef} className="grid gap-3">
+      <div className="min-w-0" style={{ height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart margin={{ top: 18, right: 150, bottom: 18, left: 150 }}>
+          <PieChart margin={chartMargin}>
             <Pie
               data={data}
               dataKey="kgTotal"
@@ -2692,12 +2703,12 @@ function ProductsPieChart({ data }) {
               cy="50%"
               startAngle={90}
               endAngle={-270}
-              innerRadius={110}
-              outerRadius={160}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
               activeIndex={activeIndex ?? undefined}
               activeShape={ProductActiveSlice}
               labelLine={false}
-              label={ProductDonutLabel}
+              label={(props) => <ProductDonutLabel {...props} compact={isMobile} />}
               onMouseEnter={(_, index) => setActiveIndex(index)}
               onMouseLeave={() => setActiveIndex(null)}
               onClick={(slice) => {
@@ -2709,7 +2720,7 @@ function ProductsPieChart({ data }) {
               ))}
             </Pie>
             <Tooltip content={<ProductDonutTooltip />} />
-            <text x="50%" y="47%" textAnchor="middle" className="fill-slate-950 text-2xl font-extrabold">
+            <text x="50%" y="47%" textAnchor="middle" className="fill-slate-950 text-xl font-extrabold sm:text-2xl">
               {formatWeightTotal(totalKg)}
             </text>
             <text x="50%" y="54%" textAnchor="middle" className="fill-slate-500 text-xs font-bold">
@@ -2717,6 +2728,24 @@ function ProductsPieChart({ data }) {
             </text>
           </PieChart>
         </ResponsiveContainer>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        {data.map((item, index) => (
+          <button
+            key={item.name}
+            type="button"
+            onClick={() => item.isOthers && setShowOthers((current) => !current)}
+            className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-left text-xs font-bold text-slate-700"
+            title={item.name}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: productDonutColor(item, index) }} />
+              <span className="truncate">{item.name}</span>
+            </span>
+            <span className="shrink-0 text-slate-950">{formatWeightShort(item.kgTotal)} · {formatPercentPt(item.percent)}</span>
+          </button>
+        ))}
       </div>
 
       {showOthers && others && (
@@ -2878,29 +2907,48 @@ function ProductActiveSlice(props) {
   );
 }
 
+function useElementWidth() {
+  const ref = useRef(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    if (!ref.current || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(entry?.contentRect?.width || 0);
+    });
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return [ref, width];
+}
+
 function ProductDonutLabel(props) {
-  const { cx, cy, midAngle, outerRadius, percent, name, kgTotal } = props;
+  const { cx, cy, midAngle, outerRadius, percent, name, kgTotal, compact } = props;
   if (percent < 0.03) return null;
+  if (compact && percent < 0.08) return null;
 
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
   const sx = cx + (outerRadius + 6) * cos;
   const sy = cy + (outerRadius + 6) * sin;
-  const mx = cx + (outerRadius + 24) * cos;
-  const my = cy + (outerRadius + 24) * sin;
-  const ex = mx + (cos >= 0 ? 34 : -34);
+  const mx = cx + (outerRadius + (compact ? 14 : 24)) * cos;
+  const my = cy + (outerRadius + (compact ? 14 : 24)) * sin;
+  const ex = mx + (cos >= 0 ? (compact ? 12 : 34) : (compact ? -12 : -34));
   const textAnchor = cos >= 0 ? 'start' : 'end';
-  const labelName = String(name || '').length > 18 ? `${String(name).slice(0, 18)}...` : name;
+  const labelLimit = compact ? 10 : 18;
+  const labelName = String(name || '').length > labelLimit ? `${String(name).slice(0, labelLimit)}...` : name;
+  const fontSize = compact ? 9 : 10;
 
   return (
     <g>
       <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} fill="none" stroke="#94a3b8" strokeWidth={1.2} />
       <circle cx={sx} cy={sy} r={2} fill="#94a3b8" />
-      <text x={ex + (cos >= 0 ? 4 : -4)} y={my - 3} textAnchor={textAnchor} fill="#0f172a" fontSize={10} fontWeight={800}>
+      <text x={ex + (cos >= 0 ? 4 : -4)} y={my - 3} textAnchor={textAnchor} fill="#0f172a" fontSize={fontSize} fontWeight={800}>
         {labelName}
       </text>
-      <text x={ex + (cos >= 0 ? 4 : -4)} y={my + 10} textAnchor={textAnchor} fill="#64748b" fontSize={10} fontWeight={700}>
+      <text x={ex + (cos >= 0 ? 4 : -4)} y={my + 10} textAnchor={textAnchor} fill="#64748b" fontSize={fontSize} fontWeight={700}>
         {formatWeightShort(kgTotal)} ({formatPercentPt(percent * 100)})
       </text>
     </g>
