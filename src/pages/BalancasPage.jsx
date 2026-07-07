@@ -4098,6 +4098,7 @@ function normalizeProductName(value) {
 function dashboardProductGroupName(value) {
   const normalized = normalizeProductName(value);
   if (!normalized) return 'Sem produto';
+  if (normalized.includes('farelo')) return String(value || 'Sem produto').trim().toUpperCase();
   if (normalized.includes('milho')) return 'MILHO';
   if (normalized.includes('soja')) return 'SOJA';
   if (normalized.includes('milheto')) return 'MILHETO';
