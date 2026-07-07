@@ -321,10 +321,10 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
-            <ChartCard title="Distribuição de Produtos por KG">
+            <ChartCard title="Distribuição por Produtos">
               <ProductsPieChart data={productsDistribution} />
             </ChartCard>
-            <ChartCard title="Ranking de Diferença em KG por Fornecedor">
+            <ChartCard title="DIFERENÇA PESO DA BALANÇA X NOTA">
               <SupplierDifferenceChart data={supplierDifferences} />
             </ChartCard>
           </section>
@@ -4095,6 +4095,16 @@ function normalizeProductName(value) {
     .trim();
 }
 
+function dashboardProductGroupName(value) {
+  const normalized = normalizeProductName(value);
+  if (!normalized) return 'Sem produto';
+  if (normalized.includes('milho')) return 'MILHO';
+  if (normalized.includes('soja')) return 'SOJA';
+  if (normalized.includes('milheto')) return 'MILHETO';
+  if (normalized.includes('sorgo')) return 'SORGO';
+  return String(value || 'Sem produto').trim().toUpperCase();
+}
+
 function productTokens(value) {
   return normalizeProductName(value).split(/\s+/).filter(Boolean);
 }
@@ -4379,14 +4389,20 @@ function buildProductsDistribution(rows) {
 
   const map = new Map();
   rows.forEach((row) => {
-    const name = produtoNome(row, 'Sem produto');
-    const current = map.get(name) || { name, kgTotal: 0, cargas: 0 };
+    const originalName = produtoNome(row, 'Sem produto');
+    const name = dashboardProductGroupName(originalName);
+    const current = map.get(name) || { name, kgTotal: 0, cargas: 0, items: new Map() };
     current.kgTotal += Number(row.peso_liquido || 0);
     current.cargas += 1;
+    const detail = current.items.get(originalName) || { name: originalName, kgTotal: 0, cargas: 0 };
+    detail.kgTotal += Number(row.peso_liquido || 0);
+    detail.cargas += 1;
+    current.items.set(originalName, detail);
     map.set(name, current);
   });
 
   const ranked = Array.from(map.values())
+    .map((item) => ({ ...item, items: Array.from(item.items.values()).sort((a, b) => b.kgTotal - a.kgTotal) }))
     .filter((item) => item.kgTotal > 0)
     .sort((a, b) => b.kgTotal - a.kgTotal);
 
@@ -4609,3 +4625,4 @@ function formatGeneric(value) {
   if (value === false) return 'Inativo';
   return value ?? '-';
 }
+
