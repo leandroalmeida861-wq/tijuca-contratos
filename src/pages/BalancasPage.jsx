@@ -793,8 +793,8 @@ function normalizeComplementoPayload(form) {
     data_emissao: form.data_emissao || null,
     fornecedor_id: form.fornecedor_id || null,
     fornecedor_nome: form.fornecedor_id ? null : String(form.fornecedor_nome || '').trim() || null,
-    quantidade_nota: nullableLocaleNumber(form.quantidade_nota),
-    unidade_nota: form.unidade_nota || 'KG',
+    quantidade_nota: parseQuantityByUnit(form.quantidade_nota, form.unidade_nota),
+    unidade_nota: normalizeNotaUnidade(form.unidade_nota || 'KG'),
     peso_por_saca: nullableLocaleNumber(form.peso_por_saca),
     peso_nf: nullableLocaleNumber(form.peso_nf),
     valor_unitario: nullableLocaleNumber(form.valor_unitario),
@@ -900,6 +900,12 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         if (itemIndex !== index) return item;
         const nextItem = { ...item, [field]: value };
         if (field === 'produto_id' && value) nextItem.produto_nome_manual = '';
+        if (field === 'quantidade') {
+          nextItem.quantidade = formatQuantityInputByUnit(value, item.unidade || 'KG');
+        }
+        if (field === 'unidade') {
+          nextItem.quantidade = formatQuantityInputByUnit(item.quantidade, value || 'KG');
+        }
         return withItemTotal(nextItem);
       });
       return syncRecebimentoTotals({ ...current, itens });
@@ -1145,7 +1151,7 @@ function RecebimentoItensEditor({ itens, produtos, fieldErrors, onItemChange, on
                   <SearchableSelect label={`Produto ${index + 1}`} value={item.produto_id} onChange={(value) => onItemChange(index, 'produto_id', value)} options={produtos} fallbackValue={item.produto_nome_manual} error={fieldErrors[`itens.${index}.produto_id`]} />
                 </td>
                 <td className="px-3 py-2">
-                  <Input label="Quantidade" type="number" step="0.001" value={item.quantidade} onChange={(value) => onItemChange(index, 'quantidade', value)} error={fieldErrors[`itens.${index}.quantidade`]} />
+                  <Input label="Quantidade" value={item.quantidade} onChange={(value) => onItemChange(index, 'quantidade', value)} error={fieldErrors[`itens.${index}.quantidade`]} />
                 </td>
                 <td className="px-3 py-2">
                   <Select label="Unidade" value={item.unidade || 'KG'} onChange={(value) => onItemChange(index, 'unidade', value)} options={[
@@ -1202,10 +1208,17 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
   function updateField(name, value) {
     setForm((current) => {
       const next = { ...current, [name]: value };
+      if (name === 'quantidade_nota') {
+        next.quantidade_nota = formatQuantityInputByUnit(value, current.unidade_nota || 'KG');
+      }
+      if (name === 'unidade_nota') {
+        next.quantidade_nota = formatQuantityInputByUnit(current.quantidade_nota, value || 'KG');
+      }
       if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca') {
         if (isSacaUnit(next.unidade_nota) && !next.peso_por_saca) next.peso_por_saca = '60';
         if (!isSacaUnit(next.unidade_nota)) next.peso_por_saca = '';
-        const convertedWeight = normalizarQuantidadeParaKg(next.quantidade_nota, next.unidade_nota, next.peso_por_saca || 60);
+        const quantity = parseQuantityByUnit(next.quantidade_nota, next.unidade_nota);
+        const convertedWeight = normalizarQuantidadeParaKg(quantity, next.unidade_nota, next.peso_por_saca || 60);
         next.peso_nf = convertedWeight === null ? '' : String(convertedWeight);
       }
       if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca' || name === 'valor_unitario') {
@@ -1353,7 +1366,7 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
             <Select label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={fornecedores} />
             <Input label="Fornecedor do XML" value={form.fornecedor_nome} onChange={(value) => updateField('fornecedor_nome', value)} />
             <Input label="Chave da NF-e complementar" value={form.chave_nfe} onChange={(value) => updateField('chave_nfe', value)} />
-            <Input label="Quantidade da NF complementar" type="number" step="0.001" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />
+            <Input label="Quantidade da NF complementar" value={form.quantidade_nota} onChange={(value) => updateField('quantidade_nota', value)} />
             <Select label="Unidade da NF complementar" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
               { id: 'KG', nome: 'KG' },
               { id: 'SC', nome: 'SC / Saca' },
@@ -3319,7 +3332,7 @@ function validateRecebimentoForm(form) {
       fields[`itens.${index}.produto_id`] = 'Produto obrigatorio';
       missing.push(`Produto ${index + 1}`);
     }
-    if ((nullableLocaleNumber(item.quantidade) ?? -1) < 0) {
+    if ((parseQuantityByUnit(item.quantidade, item.unidade) ?? -1) < 0) {
       fields[`itens.${index}.quantidade`] = 'Quantidade invalida';
       missing.push(`Quantidade do produto ${index + 1}`);
     }
@@ -3526,7 +3539,7 @@ function normalizeRecebimentoPayload(form) {
 
 function normalizeRecebimentoItemsForPayload(itens = []) {
   return (itens || []).map((item, index) => {
-    const quantidade = Math.max(nullableLocaleNumber(item.quantidade) ?? 0, 0);
+    const quantidade = Math.max(parseQuantityByUnit(item.quantidade, item.unidade) ?? 0, 0);
     const valorUnitario = Math.max(nullableLocaleNumber(item.valor_unitario) ?? 0, 0);
     const subtotal = Number((quantidade * valorUnitario).toFixed(2));
     const desconto = Math.min(Math.max(nullableLocaleNumber(item.desconto) ?? 0, 0), subtotal);
@@ -3636,6 +3649,10 @@ function sanitizeWeightInput(value) {
 }
 
 function formatPortariaWeightInput(value, unidade = 'KG') {
+  return formatQuantityInputByUnit(value, unidade);
+}
+
+function formatQuantityInputByUnit(value, unidade = 'KG') {
   const unit = normalizeNotaUnidade(unidade);
   if (unit === 'KG') {
     const digits = onlyDigits(value);
@@ -3652,6 +3669,10 @@ function formatPortariaWeightInput(value, unidade = 'KG') {
 }
 
 function parsePortariaQuantity(value, unidade = 'KG') {
+  return parseQuantityByUnit(value, unidade);
+}
+
+function parseQuantityByUnit(value, unidade = 'KG') {
   if (value === '' || value === null || value === undefined) return null;
   if (normalizeNotaUnidade(unidade) === 'KG') {
     const digits = onlyDigits(value);
@@ -3733,7 +3754,7 @@ function calculateValorTotalDisplay(pesoNf, valorUnitario) {
 }
 
 function calculateValorTotalNotaDisplay(form) {
-  const quantity = nullableLocaleNumber(form.quantidade_nota) ?? nullableLocaleNumber(form.peso_nf);
+  const quantity = parseQuantityByUnit(form.quantidade_nota, form.unidade_nota) ?? nullableLocaleNumber(form.peso_nf);
   const unitario = nullableLocaleNumber(form.valor_unitario);
   if (quantity === null || unitario === null) return '';
   return formatMoneyPt(quantity * unitario, 2);
@@ -3771,7 +3792,7 @@ function withItemTotal(item = {}) {
 }
 
 function itemSubtotalValue(item = {}) {
-  const quantity = nullableLocaleNumber(item.quantidade) ?? 0;
+  const quantity = parseQuantityByUnit(item.quantidade, item.unidade) ?? 0;
   const unitValue = nullableLocaleNumber(item.valor_unitario) ?? 0;
   return Number((Math.max(quantity, 0) * Math.max(unitValue, 0)).toFixed(2));
 }
@@ -3816,7 +3837,8 @@ function syncRecebimentoTotals(form = {}) {
 function sumItemsConvertedWeight(itens = []) {
   if (!itens?.length) return null;
   const total = itens.reduce((sum, item) => {
-    const converted = normalizarQuantidadeParaKg(item.quantidade, item.unidade, item.peso_por_saca || 60);
+    const quantity = parseQuantityByUnit(item.quantidade, item.unidade);
+    const converted = normalizarQuantidadeParaKg(quantity, item.unidade, item.peso_por_saca || 60);
     return sum + Number(converted || 0);
   }, 0);
   return Number(total.toFixed(3));
