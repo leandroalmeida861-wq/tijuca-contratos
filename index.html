@@ -3,9 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Sistema de gestão de contratos AgroFlow" />
+    <meta name="description" content="Sistema de gestao do agronegocio AgroFlow" />
     <meta name="version" content="2.1" />
-    <title>AgroFlow | Gestão de Contratos</title>
+    <title>AgroFlow | Gestao Inteligente do Agronegocio</title>
+    <script>
+      (function () {
+        var recoveryKey = 'agroflow_boot_recovery_at';
+        var maxAge = 60000;
+
+        function canRecover() {
+          var lastRecovery = Number(sessionStorage.getItem(recoveryKey) || 0);
+          return Date.now() - lastRecovery > maxAge;
+        }
+
+        function recover() {
+          if (!canRecover()) return;
+          sessionStorage.setItem(recoveryKey, String(Date.now()));
+          var url = new URL(window.location.href);
+          url.searchParams.set('atualizar', String(Date.now()));
+          window.location.replace(url.toString());
+        }
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event && event.target;
+            var isAssetError =
+              target &&
+              (target.tagName === 'SCRIPT' || target.tagName === 'LINK') &&
+              String(target.src || target.href || '').includes('/assets/');
+            var isChunkError = /ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+              String(event.message || ''),
+            );
+            if (isAssetError || isChunkError) recover();
+          },
+          true,
+        );
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = String((event && event.reason && (event.reason.message || event.reason)) || '');
+          if (/ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(reason)) {
+            recover();
+          }
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
