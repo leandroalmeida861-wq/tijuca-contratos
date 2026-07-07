@@ -1,10 +1,11 @@
 import { Check, Clock3, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { MENU_DEFINITIONS, PERMISSION_ACTIONS } from '../lib/permissions.js';
+import { EDITABLE_ROLE_OPTIONS, MENU_DEFINITIONS, PERMISSION_ACTIONS, ROLE_OPTIONS } from '../lib/permissions.js';
 import { supabase } from '../lib/supabase.js';
 
 const ADMIN_EMAIL = 'leandroalmeida861@gmail.com';
+const EDITABLE_ROLE_VALUES = EDITABLE_ROLE_OPTIONS.map((role) => role.value);
 
 export default function AdminAccessPage() {
   const { profile } = useAuth();
@@ -26,7 +27,7 @@ export default function AdminAccessPage() {
 
     const [profileResult, permissionResult, requestResponse] = await Promise.all([
       supabase.from('profiles').select('*').order('nome'),
-      supabase.from('permissoes_menu').select('*').in('perfil', ['gestor', 'operador']).order('menu'),
+      supabase.from('permissoes_menu').select('*').in('perfil', EDITABLE_ROLE_VALUES).order('menu'),
       fetch('/api/admin/solicitacoes', {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
@@ -36,7 +37,7 @@ export default function AdminAccessPage() {
     const requestPayload = await requestResponse.json().catch(() => ({}));
     if (!requestResponse.ok) throw new Error(requestPayload.error || 'Nao foi possivel carregar os pedidos pendentes.');
     setProfiles(profileResult.data || []);
-    setPermissionRows(permissionResult.data || []);
+    setPermissionRows(ensurePermissionRows(permissionResult.data || []));
     setPendingRequests(requestPayload.requests || []);
     setRequestRoles((current) => Object.fromEntries(
       (requestPayload.requests || []).map((item) => [item.id, current[item.id] || 'operador']),
@@ -210,9 +211,9 @@ export default function AdminAccessPage() {
                       onChange={(event) => setRequestRoles((current) => ({ ...current, [row.id]: event.target.value }))}
                       className="h-9 rounded-md border border-slate-300 px-2"
                     >
-                      <option value="admin">Admin</option>
-                      <option value="gestor">Gestor</option>
-                      <option value="operador">Operador</option>
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
                     </select>
                   </td>
                   <td className="p-3 text-center">
@@ -262,9 +263,9 @@ export default function AdminAccessPage() {
                       onChange={(event) => updateProfile(row, { perfil: event.target.value })}
                       className="h-9 rounded-md border border-slate-300 px-2"
                     >
-                      <option value="admin">Admin</option>
-                      <option value="gestor">Gestor</option>
-                      <option value="operador">Operador</option>
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
                     </select>
                   </td>
                   <td>
@@ -303,8 +304,9 @@ export default function AdminAccessPage() {
           <div className="flex items-center gap-2"><ShieldCheck size={18} /><h2 className="font-extrabold">Permissões por menu</h2></div>
           <div className="flex items-center gap-2">
             <select value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)} className="h-10 rounded-md border border-slate-300 px-3">
-              <option value="gestor">Gestor</option>
-              <option value="operador">Operador</option>
+              {EDITABLE_ROLE_OPTIONS.map((role) => (
+                <option key={role.value} value={role.value}>{role.label}</option>
+              ))}
             </select>
             <button onClick={savePermissions} className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white">
               <Save size={16} /> Salvar
@@ -344,4 +346,33 @@ function formatRequestDate(value) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function ensurePermissionRows(rows = []) {
+  const map = new Map(rows.map((row) => [`${row.perfil}:${row.menu}`, row]));
+  EDITABLE_ROLE_VALUES.forEach((perfil) => {
+    MENU_DEFINITIONS
+      .filter((menu) => !['usuarios', 'auditoria'].includes(menu.key))
+      .forEach((menu) => {
+        const key = `${perfil}:${menu.key}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            perfil,
+            menu: menu.key,
+            visualizar: false,
+            cadastrar: false,
+            editar: false,
+            excluir: false,
+            cancelar: false,
+            aprovar: false,
+            exportar: false,
+          });
+        }
+      });
+  });
+  return Array.from(map.values()).sort((a, b) => {
+    const roleDiff = EDITABLE_ROLE_VALUES.indexOf(a.perfil) - EDITABLE_ROLE_VALUES.indexOf(b.perfil);
+    if (roleDiff !== 0) return roleDiff;
+    return String(a.menu).localeCompare(String(b.menu), 'pt-BR');
+  });
 }

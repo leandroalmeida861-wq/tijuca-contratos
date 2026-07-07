@@ -10,9 +10,25 @@ export const MENU_DEFINITIONS = [
   { key: 'financeiro', label: 'Rel. Financeiro', path: '/rel-financeiro' },
   { key: 'backup', label: 'Backup', path: '/backup' },
   { key: 'balancas', label: 'Balanças', path: '/balancas' },
+  { key: 'balancas_portaria', label: 'Balanças - Portaria', path: '/balancas?tab=portaria' },
+  { key: 'balancas_laboratorio', label: 'Balanças - Aprovação Laboratório', path: '/balancas?tab=laboratorio' },
+  { key: 'balancas_recebimentos', label: 'Balanças - Recebimentos', path: '/balancas?tab=recebimentos' },
+  { key: 'balancas_relatorios', label: 'Balanças - Relatórios', path: '/balancas?tab=relatorios' },
   { key: 'usuarios', label: 'Usuários e permissões', path: '/admin/acessos' },
   { key: 'auditoria', label: 'Auditoria', path: '/admin/auditoria' },
 ];
+
+export const ROLE_OPTIONS = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'gestor', label: 'Gestor' },
+  { value: 'operador', label: 'Operador' },
+  { value: 'visualizador', label: 'Visualizador' },
+  { value: 'operador_laboratorio', label: 'Operador Laboratório' },
+  { value: 'operador_balanca', label: 'Operador Balança' },
+  { value: 'operador_portaria', label: 'Operador Portaria' },
+];
+
+export const EDITABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter((role) => role.value !== 'admin');
 
 export const PERMISSION_ACTIONS = [
   'visualizar',

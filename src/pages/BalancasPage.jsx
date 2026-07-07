@@ -71,12 +71,16 @@ const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
 
 const tabs = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'portaria', label: 'Portaria' },
-  { key: 'laboratorio', label: 'Aprovação Laboratório' },
-  { key: 'recebimentos', label: 'Recebimentos' },
-  { key: 'relatorios', label: 'Relatórios' },
+  { key: 'dashboard', label: 'Dashboard', menu: 'balancas' },
+  { key: 'portaria', label: 'Portaria', menu: 'balancas_portaria' },
+  { key: 'laboratorio', label: 'Aprovacao Laboratorio', menu: 'balancas_laboratorio' },
+  { key: 'recebimentos', label: 'Recebimentos', menu: 'balancas_recebimentos' },
+  { key: 'relatorios', label: 'Relatorios', menu: 'balancas_relatorios' },
 ];
+
+const BALANCAS_SUB_PERMISSION_MENUS = tabs
+  .filter((tab) => tab.menu !== 'balancas')
+  .map((tab) => tab.menu);
 
 const tabKeys = new Set([...tabs.map((tab) => tab.key), 'cadastros']);
 
@@ -165,7 +169,7 @@ const defaultLaboratorioForm = {
 };
 
 export default function BalancasPage() {
-  const { can } = useAuth();
+  const { can, permissions } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const cadastroParam = searchParams.get('cadastro');
@@ -177,6 +181,8 @@ export default function BalancasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const canTab = (tabKey, action = 'visualizar') => canBalancasTab(can, permissions, tabKey, action);
+  const visibleTabs = tabs.filter((tab) => canTab(tab.key, 'visualizar'));
 
   async function load(customFilters = filters) {
     setLoading(true);
@@ -201,12 +207,23 @@ export default function BalancasPage() {
   }, []);
 
   useEffect(() => {
-    if (tabKeys.has(tabParam)) {
+    if (tabKeys.has(tabParam) && (tabParam === 'cadastros' || canTab(tabParam, 'visualizar'))) {
       setActiveTab(tabParam);
     }
-  }, [tabParam]);
+  }, [tabParam, permissions]);
+
+  useEffect(() => {
+    if (activeTab === 'cadastros') return;
+    if (canTab(activeTab, 'visualizar')) return;
+    const fallback = visibleTabs[0]?.key;
+    if (fallback) {
+      setActiveTab(fallback);
+      setSearchParams(fallback === 'dashboard' ? {} : { tab: fallback });
+    }
+  }, [activeTab, permissions]);
 
   function selectTab(tabKey) {
+    if (!canTab(tabKey, 'visualizar')) return;
     setActiveTab(tabKey);
     if (tabKey !== 'relatorios' && filters.origemPortaria) {
       const nextFilters = { ...filters, origemPortaria: '' };
@@ -244,7 +261,7 @@ export default function BalancasPage() {
       </header>
 
       <div className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-panel">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
@@ -263,13 +280,35 @@ export default function BalancasPage() {
       {error && <Alert tone="error" text={error} />}
 
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
-      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={can} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={can} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={can} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
-      {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={can} />}
+      {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={scopedBalancasCan(can, permissions, 'relatorios')} />}
     </div>
   );
+}
+
+function hasBalancasSubPermissions(permissions = {}) {
+  return BALANCAS_SUB_PERMISSION_MENUS.some((menu) => permissions?.[menu]);
+}
+
+function balancasTabMenu(tabKey) {
+  return tabs.find((tab) => tab.key === tabKey)?.menu || 'balancas';
+}
+
+function canBalancasTab(can, permissions, tabKey, action = 'visualizar') {
+  const menu = balancasTabMenu(tabKey);
+  if (menu === 'balancas') return can('balancas', action);
+  if (hasBalancasSubPermissions(permissions)) return can(menu, action);
+  return can('balancas', action);
+}
+
+function scopedBalancasCan(can, permissions, tabKey) {
+  return (menu, action = 'visualizar') => {
+    if (menu !== 'balancas') return can(menu, action);
+    return canBalancasTab(can, permissions, tabKey, action);
+  };
 }
 
 function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {

@@ -9,7 +9,16 @@ import {
   sendJson,
 } from '../_supabaseAdmin.js';
 
-const ALLOWED_ROLES = new Set(['admin', 'gestor', 'operador']);
+const ROLE_LABELS = {
+  admin: 'Admin',
+  gestor: 'Gestor',
+  operador: 'Operador',
+  visualizador: 'Visualizador',
+  operador_laboratorio: 'Operador Laboratorio',
+  operador_balanca: 'Operador Balanca',
+  operador_portaria: 'Operador Portaria',
+};
+const ALLOWED_ROLES = new Set(Object.keys(ROLE_LABELS));
 
 export default async function handler(request, response) {
   if (!['GET', 'PATCH'].includes(request.method)) {
@@ -41,7 +50,7 @@ export default async function handler(request, response) {
       return sendJson(response, 400, { error: 'Pedido ou acao invalida.' });
     }
     if (action === 'aprovar' && !ALLOWED_ROLES.has(perfil)) {
-      return sendJson(response, 400, { error: 'Perfil invalido. Escolha Admin, Gestor ou Operador.' });
+      return sendJson(response, 400, { error: 'Perfil invalido. Escolha um perfil autorizado pelo AgroFlow.' });
     }
 
     const { data: accessRequest, error: requestError } = await supabaseAdmin
@@ -222,5 +231,5 @@ function safeAdminError(error) {
 }
 
 function roleLabel(role) {
-  return { admin: 'Admin', gestor: 'Gestor', operador: 'Operador' }[role] || role;
+  return ROLE_LABELS[role] || role;
 }
