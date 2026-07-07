@@ -3525,7 +3525,7 @@ function normalizeRecebimentoItemsForPayload(itens = []) {
       valor_total: Number((subtotal - desconto).toFixed(2)),
       ordem: index + 1,
     };
-  }).filter((item) => item.produto_id);
+  }).filter((item) => item.quantidade >= 0);
 }
 
 function normalizePortariaPayload(form) {

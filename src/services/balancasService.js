@@ -497,7 +497,7 @@ function normalizeRecebimentoItens(items = []) {
       valor_total: valorTotal,
       ordem: Number(item.ordem || index + 1),
     };
-  }).filter((item) => item.produto_id && item.quantidade >= 0);
+  }).filter((item) => item.quantidade >= 0);
 }
 
 function calcularTotaisRecebimento(itens = []) {
