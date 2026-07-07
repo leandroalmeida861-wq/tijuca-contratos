@@ -378,6 +378,12 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
 
     setForm((current) => {
       const next = { ...current, [name]: value };
+      if (name === 'peso_nf_kg') {
+        next.peso_nf_kg = formatPortariaWeightInput(value, current.unidade_nota || 'KG');
+      }
+      if (name === 'unidade_nota') {
+        next.peso_nf_kg = formatPortariaWeightInput(current.peso_nf_kg, value || 'KG');
+      }
       if (name === 'placa') applyVehicleByPlate(next, value, options);
       if (name === 'fornecedor_id') applySupplier(next, value, options);
       return next;
@@ -3376,7 +3382,7 @@ function validatePortariaForm(form, rows, editingId) {
   requireField('produto_id', 'Produto');
   requireField('numero_nf', 'Numero da NF', Boolean(onlyDigits(form.numero_nf)));
   requireField('serie_nf', 'Serie da NF');
-  requireField('peso_nf_kg', 'Peso - Quantidade', nullableLocaleNumber(form.peso_nf_kg) !== null && nullableLocaleNumber(form.peso_nf_kg) > 0);
+  requireField('peso_nf_kg', 'Peso - Quantidade', parsePortariaQuantity(form.peso_nf_kg, form.unidade_nota) !== null && parsePortariaQuantity(form.peso_nf_kg, form.unidade_nota) > 0);
 
   if (form.placa && !form.veiculo_id) {
     fields.placa = 'Veiculo nao cadastrado';
@@ -3549,7 +3555,7 @@ function normalizePortariaPayload(form) {
     produto_id: form.produto_id,
     numero_nf: onlyDigits(form.numero_nf),
     serie_nf: String(form.serie_nf || '').trim().toUpperCase(),
-    peso_nf_kg: nullableLocaleNumber(form.peso_nf_kg),
+    peso_nf_kg: parsePortariaQuantity(form.peso_nf_kg, form.unidade_nota),
     unidade_nota: normalizeNotaUnidade(form.unidade_nota || 'KG'),
     transportadora_id: form.transportadora_id || null,
     tipo_veiculo: form.tipo_veiculo || null,
@@ -3627,6 +3633,33 @@ function nullableLocaleNumber(value) {
 
 function sanitizeWeightInput(value) {
   return String(value || '').replace(/[^\d,.]/g, '');
+}
+
+function formatPortariaWeightInput(value, unidade = 'KG') {
+  const unit = normalizeNotaUnidade(unidade);
+  if (unit === 'KG') {
+    const digits = onlyDigits(value);
+    if (!digits) return '';
+    return Number(digits).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+  }
+
+  const clean = sanitizeWeightInput(value).replace(/\./g, ',');
+  const [integer = '', ...decimalParts] = clean.split(',');
+  const integerDigits = integer.replace(/\D/g, '');
+  const decimalDigits = decimalParts.join('').replace(/\D/g, '');
+  if (!integerDigits && !decimalDigits) return '';
+  return decimalParts.length ? `${integerDigits || '0'},${decimalDigits}` : integerDigits;
+}
+
+function parsePortariaQuantity(value, unidade = 'KG') {
+  if (value === '' || value === null || value === undefined) return null;
+  if (normalizeNotaUnidade(unidade) === 'KG') {
+    const digits = onlyDigits(value);
+    if (!digits) return null;
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return nullableLocaleNumber(value);
 }
 
 function formatWeightPt(value) {
