@@ -738,6 +738,14 @@ function complementosTotal(complementos = []) {
   return (complementos || []).reduce((sum, item) => sum + Number(item.valor_total || 0), 0);
 }
 
+function valorPrincipalRecebimento(row) {
+  const itens = Array.isArray(row?.itens) ? row.itens : [];
+  if (itens.length) {
+    return Number(itens.reduce((sum, item) => sum + Number(item.valor_total || 0), 0).toFixed(2));
+  }
+  return Number(row?.valor_total || 0);
+}
+
 function complementoPesoTotal(complementos = []) {
   return (complementos || []).reduce((sum, item) => sum + Number(item.peso_nf || 0), 0);
 }
@@ -751,7 +759,7 @@ function diferencaAgregada(row) {
 }
 
 function valorTotalAgregado(row) {
-  return Number(row?.valor_total || 0) + complementosTotal(row?.complementos);
+  return Number((valorPrincipalRecebimento(row) + complementosTotal(row?.complementos)).toFixed(2));
 }
 
 function complementosNumeros(row) {
@@ -1432,7 +1440,7 @@ function RecebimentoViewModal({ row, onClose }) {
     ['Ticket', row.ticket_numero || '-'],
     ['Liberado por', row.liberado_por || '-'],
     ['Valor unitário', row.valor_unitario === null || row.valor_unitario === undefined ? '-' : `R$ ${formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2))}`],
-    ['Valor total principal', row.valor_total === null || row.valor_total === undefined ? '-' : `R$ ${formatMoneyPt(row.valor_total, 2)}`],
+    ['Valor total principal', `R$ ${formatMoneyPt(valorPrincipalRecebimento(row), 2)}`],
     ['Total complementos', `R$ ${formatMoneyPt(complementosTotal(row.complementos), 2)}`],
     ['Valor total agregado', `R$ ${formatMoneyPt(valorTotalAgregado(row), 2)}`],
     ['Motivo reprovação', row.motivo_reprovacao || '-'],
@@ -2188,10 +2196,10 @@ function buildRecebimentoReportRows(rows, mode) {
       tipo_nota_relatorio: 'Principal',
       nf_principal_relatorio: row.nf_numero || '-',
       nf_complementar_relatorio: '-',
-      valor_principal_relatorio: Number(row.valor_total || 0),
+      valor_principal_relatorio: valorPrincipalRecebimento(row),
       valor_complemento_relatorio: 0,
       total_complementos_relatorio: complementosTotal(row.complementos),
-      valor_agregado_relatorio: Number(row.valor_total || 0),
+      valor_agregado_relatorio: valorPrincipalRecebimento(row),
       valor_unitario_relatorio: row.valor_unitario,
       umidade_relatorio: humidityText(row),
       diferenca_relatorio: diferencaAgregada(row),
@@ -2221,7 +2229,7 @@ function buildRecebimentoReportRows(rows, mode) {
         tipo_nota_relatorio: 'Principal',
         nf_principal_relatorio: row.nf_numero || '-',
         nf_complementar_relatorio: '-',
-        valor_principal_relatorio: Number(item.valor_total ?? row.valor_total ?? 0),
+        valor_principal_relatorio: Number(item.valor_total ?? valorPrincipalRecebimento(row) ?? 0),
         valor_complemento_relatorio: 0,
         total_complementos_relatorio: complementosTotal(row.complementos),
         valor_agregado_relatorio: valorTotalAgregado(row),
@@ -2237,7 +2245,7 @@ function buildRecebimentoReportRows(rows, mode) {
         tipo_nota_relatorio: `Complemento da NF ${row.nf_numero || '-'}`,
         nf_principal_relatorio: row.nf_numero || '-',
         nf_complementar_relatorio: item.numero_nf || '-',
-        valor_principal_relatorio: Number(row.valor_total || 0),
+        valor_principal_relatorio: valorPrincipalRecebimento(row),
         valor_complemento_relatorio: Number(item.valor_total || 0),
         total_complementos_relatorio: complementosTotal(row.complementos),
         valor_agregado_relatorio: valorTotalAgregado(row),
@@ -2256,7 +2264,7 @@ function buildRecebimentoReportRows(rows, mode) {
     tipo_nota_relatorio: 'Principal + complementos',
     nf_principal_relatorio: row.nf_numero || '-',
     nf_complementar_relatorio: (row.complementos || []).map((item) => item.numero_nf).filter(Boolean).join(', ') || '-',
-    valor_principal_relatorio: Number(row.valor_total || 0),
+    valor_principal_relatorio: valorPrincipalRecebimento(row),
     valor_complemento_relatorio: complementosTotal(row.complementos),
     total_complementos_relatorio: complementosTotal(row.complementos),
     valor_agregado_relatorio: valorTotalAgregado(row),
