@@ -161,22 +161,47 @@ export async function listPortariaEntradas() {
 }
 
 export async function createPortariaEntrada(payload) {
+  const cleanedPayload = cleanPayload(payload);
   const { data, error } = await supabase
     .from('portaria_entradas')
-    .insert(cleanPayload(payload))
+    .insert(cleanedPayload)
     .select(PORTARIA_SELECT)
     .single();
+  if (error && isMissingColumn(error, 'unidade_nota')) {
+    const fallbackPayload = { ...cleanedPayload };
+    delete fallbackPayload.unidade_nota;
+    const fallback = await supabase
+      .from('portaria_entradas')
+      .insert(fallbackPayload)
+      .select(PORTARIA_SELECT)
+      .single();
+    if (fallback.error) throw fallback.error;
+    return fallback.data;
+  }
   if (error) throw error;
   return data;
 }
 
 export async function updatePortariaEntrada(id, payload) {
+  const cleanedPayload = cleanPayload(payload);
   const { data, error } = await supabase
     .from('portaria_entradas')
-    .update(cleanPayload(payload))
+    .update(cleanedPayload)
     .eq('id', id)
     .select(PORTARIA_SELECT)
     .single();
+  if (error && isMissingColumn(error, 'unidade_nota')) {
+    const fallbackPayload = { ...cleanedPayload };
+    delete fallbackPayload.unidade_nota;
+    const fallback = await supabase
+      .from('portaria_entradas')
+      .update(fallbackPayload)
+      .eq('id', id)
+      .select(PORTARIA_SELECT)
+      .single();
+    if (fallback.error) throw fallback.error;
+    return fallback.data;
+  }
   if (error) throw error;
   return data;
 }

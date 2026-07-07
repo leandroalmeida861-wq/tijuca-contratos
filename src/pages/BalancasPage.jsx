@@ -139,6 +139,7 @@ const defaultPortariaForm = {
   numero_nf: '',
   serie_nf: '',
   peso_nf_kg: '',
+  unidade_nota: 'KG',
   transportadora_id: '',
   tipo_veiculo: '',
   qtd_eixos: '',
@@ -436,7 +437,9 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
         tipo_veiculo: row.tipo_veiculo,
         qtd_eixos: row.qtd_eixos,
         nf_numero: row.numero_nf,
-        peso_nf: row.peso_nf_kg,
+        quantidade_nota: row.peso_nf_kg,
+        unidade_nota: row.unidade_nota || 'KG',
+        peso_nf: normalizarQuantidadeParaKg(row.peso_nf_kg, row.unidade_nota || 'KG', 60) ?? row.peso_nf_kg,
         peso_bruto: 0,
         tara: 0,
         status: 'pendente',
@@ -480,6 +483,11 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
             <Input label="Número da NF" value={form.numero_nf} onChange={(value) => updateField('numero_nf', onlyDigits(value))} error={fieldErrors.numero_nf} />
             <Input label="Série da NF" value={form.serie_nf} onChange={(value) => updateField('serie_nf', value.slice(0, 10).toUpperCase())} error={fieldErrors.serie_nf} />
             <Input label="Peso - Quantidade" value={form.peso_nf_kg} onChange={(value) => updateField('peso_nf_kg', sanitizeWeightInput(value))} error={fieldErrors.peso_nf_kg} />
+            <Select label="Unidade" value={form.unidade_nota || 'KG'} onChange={(value) => updateField('unidade_nota', value)} options={[
+              { id: 'KG', nome: 'KG' },
+              { id: 'SC', nome: 'SC / Saca' },
+              { id: 'TON', nome: 'TON / Tonelada' },
+            ]} error={fieldErrors.unidade_nota} />
             <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
             <Input label="Quantidade de eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
           </div>
@@ -520,7 +528,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
                 <td className="px-3 py-3">{row.fornecedor?.nome || '-'}</td>
                 <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
                 <td className="px-3 py-3">{row.numero_nf}/{row.serie_nf}</td>
-                <td className="px-3 py-3">{kg(row.peso_nf_kg)}</td>
+                <td className="px-3 py-3">{formatPortariaQuantidade(row)}</td>
                 <td className="px-3 py-3"><PortariaStatus status={row.status} /></td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-2">
@@ -555,7 +563,7 @@ function PortariaViewModal({ row, options, onClose }) {
     ['CNPJ / CPF', formatDocument(row.cnpj_fornecedor)],
     ['Produto', row.produto?.nome || '-'],
     ['NF/Série', `${row.numero_nf || '-'}/${row.serie_nf || '-'}`],
-    ['Peso - Quantidade', kg(row.peso_nf_kg)],
+    ['Peso - Quantidade', formatPortariaQuantidade(row)],
     ['Status', row.status || '-'],
     ['Observação', row.observacao || '-'],
   ];
@@ -3454,6 +3462,7 @@ function portariaRowToForm(row) {
     numero_nf: row.numero_nf || '',
     serie_nf: row.serie_nf || '',
     peso_nf_kg: formatWeightPt(row.peso_nf_kg),
+    unidade_nota: row.unidade_nota || 'KG',
     transportadora_id: row.transportadora_id || '',
     tipo_veiculo: row.tipo_veiculo || row.veiculo?.tipo_veiculo || '',
     qtd_eixos: row.qtd_eixos ?? row.veiculo?.qtd_eixos ?? '',
@@ -3541,6 +3550,7 @@ function normalizePortariaPayload(form) {
     numero_nf: onlyDigits(form.numero_nf),
     serie_nf: String(form.serie_nf || '').trim().toUpperCase(),
     peso_nf_kg: nullableLocaleNumber(form.peso_nf_kg),
+    unidade_nota: normalizeNotaUnidade(form.unidade_nota || 'KG'),
     transportadora_id: form.transportadora_id || null,
     tipo_veiculo: form.tipo_veiculo || null,
     qtd_eixos: nullableNumber(form.qtd_eixos),
@@ -3624,6 +3634,13 @@ function formatWeightPt(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '';
   return numeric.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+function formatPortariaQuantidade(row) {
+  const value = formatWeightPt(row?.peso_nf_kg);
+  if (!value) return '-';
+  const unit = normalizeNotaUnidade(row?.unidade_nota || 'KG');
+  return `${value} ${unit}`;
 }
 
 function isValidPlate(value) {
