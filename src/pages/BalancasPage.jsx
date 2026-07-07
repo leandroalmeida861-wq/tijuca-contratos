@@ -819,6 +819,7 @@ function emptyComplementoForm(recebimentoId = '') {
     peso_nf: '',
     valor_unitario: '',
     valor_total: '',
+    valor_total_manual: false,
     xml_nome_arquivo: '',
     observacao: '',
   };
@@ -839,6 +840,7 @@ function complementoToForm(complemento) {
     peso_nf: complemento.peso_nf ?? '',
     valor_unitario: formatMoneyPtCompact(complemento.valor_unitario, Math.max(numberDecimalPlaces(complemento.valor_unitario), 2)),
     valor_total: formatMoneyPt(complemento.valor_total, 2),
+    valor_total_manual: true,
     xml_nome_arquivo: complemento.xml_nome_arquivo || '',
     observacao: complemento.observacao || '',
   };
@@ -900,6 +902,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         if (itemIndex !== index) return item;
         const nextItem = { ...item, [field]: value };
         if (field === 'produto_id' && value) nextItem.produto_nome_manual = '';
+        if (field === 'valor_total') nextItem.valor_total_manual = true;
         if (field === 'quantidade') {
           nextItem.quantidade = formatQuantityInputByUnit(value, item.unidade || 'KG');
         }
@@ -1166,7 +1169,9 @@ function RecebimentoItensEditor({ itens, produtos, fieldErrors, onItemChange, on
                 <td className="px-3 py-2">
                   <MoneyInput label="Desconto" value={item.desconto} onChange={(value) => onItemChange(index, 'desconto', value)} error={fieldErrors[`itens.${index}.desconto`]} />
                 </td>
-                <td className="px-3 py-2 font-extrabold text-slate-950">R$ {formatMoneyPt(itemTotalValue(item), 2)}</td>
+                <td className="px-3 py-2">
+                  <MoneyInput label="Total" value={item.valor_total} onChange={(value) => onItemChange(index, 'valor_total', value)} error={fieldErrors[`itens.${index}.valor_total`]} />
+                </td>
                 <td className="px-3 py-2 text-right">
                   <button type="button" onClick={() => onRemove(index)} disabled={(itens || []).length <= 1} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40" title="Remover produto">
                     <Trash2 size={16} />
@@ -1208,6 +1213,10 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
   function updateField(name, value) {
     setForm((current) => {
       const next = { ...current, [name]: value };
+      if (name === 'valor_total') {
+        next.valor_total_manual = true;
+        return next;
+      }
       if (name === 'quantidade_nota') {
         next.quantidade_nota = formatQuantityInputByUnit(value, current.unidade_nota || 'KG');
       }
@@ -1222,7 +1231,7 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
         next.peso_nf = convertedWeight === null ? '' : String(convertedWeight);
       }
       if (name === 'quantidade_nota' || name === 'unidade_nota' || name === 'peso_por_saca' || name === 'valor_unitario') {
-        next.valor_total = calculateValorTotalNotaDisplay(next);
+        if (!current.valor_total_manual) next.valor_total = calculateValorTotalNotaDisplay(next);
       }
       return next;
     });
@@ -1271,6 +1280,7 @@ function NotasComplementaresSection({ recebimentoId, valorPrincipal, complemento
         peso_nf: convertedWeight ?? current.peso_nf,
         valor_unitario: formatMoneyPtCompact(unitValue, Math.max(numberDecimalPlaces(unitValue), 2)) || current.valor_unitario,
         valor_total: formatMoneyPt(totalValue, 2) || current.valor_total,
+        valor_total_manual: false,
         xml_nome_arquivo: file.name,
       }));
       setInfo(`XML complementar importado: NF ${parsed.numero || '-'}${matchedSupplier ? ` | fornecedor: ${matchedSupplier.nome}` : ''}`);
@@ -3340,6 +3350,10 @@ function validateRecebimentoForm(form) {
       fields[`itens.${index}.valor_unitario`] = 'Valor invalido';
       missing.push(`Valor unitario do produto ${index + 1}`);
     }
+    if ((nullableLocaleNumber(item.valor_total) ?? 0) < 0) {
+      fields[`itens.${index}.valor_total`] = 'Total invalido';
+      missing.push(`Valor total do produto ${index + 1}`);
+    }
     if (desconto < 0 || desconto > subtotal) {
       fields[`itens.${index}.desconto`] = 'Desconto invalido';
       missing.push(`Desconto do produto ${index + 1}`);
@@ -3451,6 +3465,7 @@ function recebimentoItensToForm(row = {}) {
         valor_unitario: formatMoneyPtCompact(item.valor_unitario, Math.max(numberDecimalPlaces(item.valor_unitario), 2)),
         desconto: formatMoneyPt(item.desconto || 0, 2),
         valor_total: formatMoneyPt(item.valor_total, 2),
+        valor_total_manual: isManualStoredItemTotal(item),
       }));
   }
 
@@ -3462,6 +3477,13 @@ function recebimentoItensToForm(row = {}) {
     valor_unitario: formatMoneyPtCompact(row.valor_unitario, Math.max(numberDecimalPlaces(row.valor_unitario), 2)),
     desconto: '0,00',
     valor_total: formatMoneyPt(row.valor_total, 2),
+    valor_total_manual: isManualStoredItemTotal({
+      quantidade: row.quantidade_nota ?? row.peso_nf ?? '',
+      unidade: row.unidade_nota || 'KG',
+      valor_unitario: row.valor_unitario,
+      desconto: 0,
+      valor_total: row.valor_total,
+    }),
   })];
 }
 
@@ -3550,7 +3572,7 @@ function normalizeRecebimentoItemsForPayload(itens = []) {
       unidade: item.unidade || 'KG',
       valor_unitario: valorUnitario,
       desconto,
-      valor_total: Number((subtotal - desconto).toFixed(2)),
+      valor_total: itemTotalValue({ ...item, quantidade, valor_unitario: valorUnitario, desconto }),
       ordem: index + 1,
     };
   }).filter((item) => item.quantidade >= 0);
@@ -3770,6 +3792,7 @@ function createRecebimentoItemForm(overrides = {}) {
     valor_unitario: '',
     desconto: '',
     valor_total: '',
+    valor_total_manual: false,
     ...overrides,
   });
 }
@@ -3783,12 +3806,14 @@ function ensureRecebimentoItems(form = {}) {
     valor_unitario: form.valor_unitario || '',
     desconto: '0,00',
     valor_total: form.valor_total || '',
+    valor_total_manual: true,
   })];
 }
 
 function withItemTotal(item = {}) {
-  const total = itemTotalValue(item);
-  return { ...item, valor_total: formatMoneyPt(total, 2) };
+  if (item.valor_total_manual) return item;
+  const total = itemCalculatedTotalValue(item);
+  return { ...item, valor_total: formatMoneyPt(total, 2), valor_total_manual: false };
 }
 
 function itemSubtotalValue(item = {}) {
@@ -3798,9 +3823,23 @@ function itemSubtotalValue(item = {}) {
 }
 
 function itemTotalValue(item = {}) {
+  if (item.valor_total_manual) {
+    const manualTotal = nullableLocaleNumber(item.valor_total);
+    if (manualTotal !== null) return Number(Math.max(manualTotal, 0).toFixed(2));
+  }
+  return itemCalculatedTotalValue(item);
+}
+
+function itemCalculatedTotalValue(item = {}) {
   const subtotal = itemSubtotalValue(item);
   const discount = Math.min(nullableLocaleNumber(item.desconto) ?? 0, subtotal);
   return Number(Math.max(subtotal - discount, 0).toFixed(2));
+}
+
+function isManualStoredItemTotal(item = {}) {
+  const storedTotal = nullableLocaleNumber(item.valor_total);
+  if (storedTotal === null) return false;
+  return Math.abs(storedTotal - itemCalculatedTotalValue(item)) > 0.01;
 }
 
 function calcularTotaisRecebimento(itens = []) {
