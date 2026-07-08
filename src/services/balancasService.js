@@ -282,6 +282,17 @@ export async function updateRecebimento(id, payload) {
   return saveRecebimentoItensAndReload(id, itens);
 }
 
+async function updateRecebimentoFields(id, payload) {
+  const { data, error } = await supabase
+    .from('recebimentos')
+    .update(cleanPayload(payload))
+    .eq('id', id)
+    .select(RECEBIMENTO_SELECT)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteRecebimento(id) {
   const { error: itensError } = await supabase.from('recebimento_itens').delete().eq('recebimento_id', id);
   if (itensError && !isMissingRecebimentoItensTable(itensError)) throw itensError;
@@ -320,7 +331,7 @@ export async function deleteNotaComplementar(id) {
 }
 
 export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade, umidade_01, umidade_02, liberado_por }) {
-  return updateRecebimento(id, {
+  return updateRecebimentoFields(id, {
     status: 'aprovada',
     nf_numero,
     ticket_numero,
@@ -334,7 +345,7 @@ export async function approveRecebimento(id, { nf_numero, ticket_numero, umidade
 }
 
 export async function rejectRecebimento(id, { motivo_reprovacao, nf_numero, ticket_numero, umidade, umidade_01, umidade_02, liberado_por }) {
-  return updateRecebimento(id, {
+  return updateRecebimentoFields(id, {
     status: 'reprovada',
     motivo_reprovacao,
     nf_numero,
@@ -347,7 +358,7 @@ export async function rejectRecebimento(id, { motivo_reprovacao, nf_numero, tick
 }
 
 export async function cancelRecebimento(id, motivo_cancelamento) {
-  return updateRecebimento(id, { status: 'cancelada', motivo_cancelamento });
+  return updateRecebimentoFields(id, { status: 'cancelada', motivo_cancelamento });
 }
 
 export async function createLookup(table, payload) {
