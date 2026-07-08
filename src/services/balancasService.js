@@ -511,7 +511,8 @@ function normalizeRecebimentoItens(items = []) {
     const valorUnitario = nonNegativeNumber(item.valor_unitario);
     const subtotal = roundMoney(quantidade * valorUnitario);
     const desconto = Math.min(nonNegativeNumber(item.desconto), subtotal);
-    const valorTotal = roundMoney(subtotal - desconto);
+    const hasManualTotal = item.valor_total !== null && item.valor_total !== undefined && item.valor_total !== '';
+    const valorTotal = hasManualTotal ? nonNegativeNumber(item.valor_total) : roundMoney(subtotal - desconto);
     return {
       id: item.id || undefined,
       produto_id: item.produto_id || null,
@@ -529,9 +530,11 @@ function calcularTotaisRecebimento(itens = []) {
   return (itens || []).reduce((acc, item) => {
     const subtotalItem = roundMoney(nonNegativeNumber(item.quantidade) * nonNegativeNumber(item.valor_unitario));
     const descontoItem = Math.min(nonNegativeNumber(item.desconto), subtotalItem);
+    const hasManualTotal = item.valor_total !== null && item.valor_total !== undefined && item.valor_total !== '';
+    const valorTotalItem = hasManualTotal ? nonNegativeNumber(item.valor_total) : roundMoney(subtotalItem - descontoItem);
     acc.subtotal = roundMoney(acc.subtotal + subtotalItem);
     acc.descontoTotal = roundMoney(acc.descontoTotal + descontoItem);
-    acc.valorTotal = roundMoney(acc.valorTotal + subtotalItem - descontoItem);
+    acc.valorTotal = roundMoney(acc.valorTotal + valorTotalItem);
     return acc;
   }, { subtotal: 0, descontoTotal: 0, valorTotal: 0 });
 }

@@ -3652,6 +3652,7 @@ function normalizeRecebimentoItemsForPayload(itens = []) {
     const valorUnitario = Math.max(nullableLocaleNumber(item.valor_unitario) ?? 0, 0);
     const subtotal = Number((quantidade * valorUnitario).toFixed(2));
     const desconto = Math.min(Math.max(nullableLocaleNumber(item.desconto) ?? 0, 0), subtotal);
+    const manualTotal = nullableLocaleNumber(item.valor_total);
     return {
       id: item.id || undefined,
       produto_id: item.produto_id || null,
@@ -3659,7 +3660,9 @@ function normalizeRecebimentoItemsForPayload(itens = []) {
       unidade: item.unidade || 'KG',
       valor_unitario: valorUnitario,
       desconto,
-      valor_total: itemTotalValue({ ...item, quantidade, valor_unitario: valorUnitario, desconto }),
+      valor_total: manualTotal === null
+        ? itemCalculatedTotalValue({ ...item, quantidade, valor_unitario: valorUnitario, desconto })
+        : Number(Math.max(manualTotal, 0).toFixed(2)),
       ordem: index + 1,
     };
   }).filter((item) => item.quantidade >= 0);
@@ -3935,7 +3938,7 @@ function calcularTotaisRecebimento(itens = []) {
     const desconto = Math.min(nullableLocaleNumber(item.desconto) ?? 0, subtotal);
     acc.subtotal = Number((acc.subtotal + subtotal).toFixed(2));
     acc.descontoTotal = Number((acc.descontoTotal + desconto).toFixed(2));
-    acc.valorTotal = Number((acc.valorTotal + subtotal - desconto).toFixed(2));
+    acc.valorTotal = Number((acc.valorTotal + itemTotalValue(item)).toFixed(2));
     return acc;
   }, { subtotal: 0, descontoTotal: 0, valorTotal: 0 });
 }
@@ -4185,12 +4188,20 @@ function normalizeProductName(value) {
 function dashboardProductGroupName(value) {
   const normalized = normalizeProductName(value);
   if (!normalized) return 'Sem produto';
-  if (normalized.includes('farelo')) return String(value || 'Sem produto').trim().toUpperCase();
-  if (normalized.includes('milho')) return 'MILHO';
+  if (normalized.includes('milho')) return 'MILHO EM GRAOS';
   if (normalized.includes('soja')) return 'SOJA';
   if (normalized.includes('milheto')) return 'MILHETO';
   if (normalized.includes('sorgo')) return 'SORGO';
   return String(value || 'Sem produto').trim().toUpperCase();
+}
+
+function dashboardProductPriority(name) {
+  const normalized = normalizeProductName(name);
+  if (normalized.includes('milho')) return 0;
+  if (normalized.includes('sorgo')) return 1;
+  if (normalized.includes('soja')) return 2;
+  if (normalized.includes('milheto')) return 3;
+  return 10;
 }
 
 function productTokens(value) {
@@ -4492,7 +4503,11 @@ function buildProductsDistribution(rows) {
   const ranked = Array.from(map.values())
     .map((item) => ({ ...item, items: Array.from(item.items.values()).sort((a, b) => b.kgTotal - a.kgTotal) }))
     .filter((item) => item.kgTotal > 0)
-    .sort((a, b) => b.kgTotal - a.kgTotal);
+    .sort((a, b) => {
+      const priorityDiff = dashboardProductPriority(a.name) - dashboardProductPriority(b.name);
+      if (priorityDiff !== 0) return priorityDiff;
+      return b.kgTotal - a.kgTotal;
+    });
 
   const main = ranked.slice(0, 4);
   const others = ranked.slice(4);
