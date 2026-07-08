@@ -219,7 +219,7 @@ export async function getRecebimento(id) {
 
 export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf_numero, excludeId } = {}) {
   const fornecedorId = fornecedor_id || '';
-  const nfDigits = onlyDigits(nf_numero);
+  const nfDigits = normalizeNfNumber(nf_numero);
   if (!fornecedorId || !nfDigits) return null;
 
   const { data: selectedSupplier, error: supplierError } = await supabase
@@ -243,7 +243,7 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
   const selectedSupplierName = normalize(selectedSupplier?.nome);
 
   return (data || []).find((row) => {
-    if (onlyDigits(row.nf_numero) !== nfDigits) return false;
+    if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
     if (row.fornecedor?.id === fornecedorId) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
@@ -647,4 +647,10 @@ function normalize(value) {
 
 function onlyDigits(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeNfNumber(value) {
+  const digits = onlyDigits(value);
+  if (!digits) return '';
+  return digits.replace(/^0+/, '') || '0';
 }

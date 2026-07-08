@@ -3519,7 +3519,7 @@ function validateRecebimentoForm(form) {
 }
 
 function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
-  const nfDigits = onlyDigits(payload.nf_numero);
+  const nfDigits = normalizeNfNumber(payload.nf_numero);
   if (!nfDigits || !payload.fornecedor_id) return null;
 
   const selectedSupplier = (options.fornecedores || []).find((item) => item.id === payload.fornecedor_id);
@@ -3529,7 +3529,7 @@ function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
   return (rows || []).find((row) => {
     if (row.id === editingId) return false;
     if (String(row.status || '').toLowerCase() === 'cancelada') return false;
-    if (onlyDigits(row.nf_numero) !== nfDigits) return false;
+    if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
     if (row.fornecedor_id && row.fornecedor_id === payload.fornecedor_id) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
@@ -3568,7 +3568,7 @@ function validatePortariaForm(form, rows, editingId) {
 
   const duplicate = rows.some((row) => row.id !== editingId
     && row.fornecedor_id === form.fornecedor_id
-    && onlyDigits(row.numero_nf) === onlyDigits(form.numero_nf)
+    && normalizeNfNumber(row.numero_nf) === normalizeNfNumber(form.numero_nf)
     && normalizeName(row.serie_nf) === normalizeName(form.serie_nf)
     && row.status !== 'CANCELADA');
   if (duplicate) {
@@ -4197,6 +4197,12 @@ function normalizePlate(value) {
 
 function onlyDigits(value) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeNfNumber(value) {
+  const digits = onlyDigits(value);
+  if (!digits) return '';
+  return digits.replace(/^0+/, '') || '0';
 }
 
 function filterRecebimentos(rows, query) {
