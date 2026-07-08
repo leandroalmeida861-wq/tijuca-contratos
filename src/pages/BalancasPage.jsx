@@ -2564,13 +2564,13 @@ function exportRecebimentosPdf(rows, filters = {}) {
 
   drawHeader();
   rows.forEach((row, index) => {
-    if (y > 545) {
+    if (y > 520) {
       doc.addPage();
       y = 42;
       drawHeader();
     }
     doc.setFillColor(index % 2 ? 255 : 248, index % 2 ? 255 : 250, index % 2 ? 255 : 252);
-    doc.rect(margin, y, pageWidth - margin * 2, 30, 'F');
+    doc.rect(margin, y, pageWidth - margin * 2, 52, 'F');
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     const values = [
@@ -2597,14 +2597,28 @@ function exportRecebimentosPdf(rows, filters = {}) {
         else doc.setTextColor(51, 65, 85);
         doc.setFont('helvetica', 'bold');
       }
-      doc.text(String(value || '-'), x, y + 12, { maxWidth: width - 6 });
+      const textValue = columns[valueIndex][0] === 'Umidade'
+        ? String(value || '-').replace(/\s\|\s/g, '\n')
+        : String(value || '-');
+      doc.text(textValue, x, y + 12, { maxWidth: width - 6 });
       if (columns[valueIndex][0] === 'Dif.') {
         doc.setTextColor(15, 23, 42);
         doc.setFont('helvetica', 'normal');
       }
       x += width;
     });
-    y += 30;
+    const detailParts = [
+      row.chave_complementar_relatorio ? `Chave complementar: ${row.chave_complementar_relatorio}` : '',
+      row.observacao_complementar_relatorio ? `Observacao: ${row.observacao_complementar_relatorio}` : '',
+    ].filter(Boolean);
+    if (detailParts.length) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(71, 85, 105);
+      doc.text(detailParts.join('  |  '), margin + 6, y + 38, { maxWidth: pageWidth - margin * 2 - 12 });
+      doc.setTextColor(15, 23, 42);
+      doc.setFont('helvetica', 'normal');
+    }
+    y += 52;
   });
 
   doc.save(`relatorio-recebimentos-${todayIso()}.pdf`);
