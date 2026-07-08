@@ -283,6 +283,12 @@ export async function updateRecebimento(id, payload) {
 }
 
 export async function deleteRecebimento(id) {
+  const { error: itensError } = await supabase.from('recebimento_itens').delete().eq('recebimento_id', id);
+  if (itensError && !isMissingRecebimentoItensTable(itensError)) throw itensError;
+
+  const { error: complementosError } = await supabase.from('recebimento_notas_complementares').delete().eq('recebimento_id', id);
+  if (complementosError && !isMissingComplementosTable(complementosError)) throw complementosError;
+
   const { error } = await supabase.from('recebimentos').delete().eq('id', id);
   if (error) throw error;
 }
@@ -616,6 +622,15 @@ function isMissingPortariaTable(error) {
 function isMissingRecebimentoItensTable(error) {
   const message = String(error?.message || '').toLowerCase();
   return message.includes('recebimento_itens') && (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('schema cache')
+  );
+}
+
+function isMissingComplementosTable(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('recebimento_notas_complementares') && (
     message.includes('does not exist')
     || message.includes('could not find')
     || message.includes('schema cache')
