@@ -1583,6 +1583,14 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [labForm, setLabForm] = useState(defaultLaboratorioForm);
   const [editingLabId, setEditingLabId] = useState(null);
   const [savingLab, setSavingLab] = useState(false);
+  const canView = can('balancas', 'visualizar');
+  const canCreate = can('balancas', 'cadastrar');
+  const canEdit = can('balancas', 'editar');
+  const canDelete = can('balancas', 'excluir');
+  const canApprove = can('balancas', 'aprovar');
+  const canCancel = can('balancas', 'cancelar');
+  const canExport = can('balancas', 'exportar');
+  const canManageManualRelease = canCreate || canEdit;
   const pending = sortRecebimentoRows(rows.filter((row) => row.status === 'pendente'));
   const analyzed = sortRecebimentoRows(rows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
 
@@ -1591,6 +1599,15 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   }
 
   async function process(row, action) {
+    if ((action === 'aprovar' || action === 'reprovar') && !canApprove) {
+      setError('Voce nao tem permissao para aprovar ou reprovar cargas de laboratorio.');
+      return;
+    }
+    if (action === 'cancelar' && !canCancel) {
+      setError('Voce nao tem permissao para cancelar cargas de laboratorio.');
+      return;
+    }
+
     const edit = edits[row.id] || {};
     try {
       if (action === 'aprovar') {
@@ -1641,6 +1658,10 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   }
 
   function editLab(row) {
+    if (!canEdit) {
+      setError('Voce nao tem permissao para editar liberacoes de laboratorio.');
+      return;
+    }
     setEditingLabId(row.id);
     setLabForm(rowToLaboratorioForm(row));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1652,6 +1673,10 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   }
 
   async function removeLab(row) {
+    if (!canDelete) {
+      setError('Voce nao tem permissao para excluir liberacoes de laboratorio.');
+      return;
+    }
     if (!window.confirm(`Excluir a liberacao do laboratorio da NF ${row.nf_numero || row.id}?`)) return;
     try {
       await deleteRecebimento(row.id);
@@ -1666,6 +1691,11 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   async function saveManualRelease(event) {
     event.preventDefault();
     setError('');
+
+    if (!canManageManualRelease) {
+      setError('Voce nao tem permissao para cadastrar ou editar liberacoes de laboratorio.');
+      return;
+    }
 
     if (!labForm.veiculo_placa_manual?.trim() || !labForm.fornecedor_nome_manual?.trim() || !labForm.produto_nome_manual?.trim()) {
       setError('Informe veiculo, fornecedor e produto para liberar a carga. Como corrigir: preencha os tres campos obrigatorios e tente novamente.');
@@ -1707,8 +1737,8 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
     }
   }
 
-  if (!can('balancas', 'aprovar') && !can('balancas', 'cancelar')) {
-    return <Alert tone="error" text="Voce nao tem permissao para aprovar, reprovar ou cancelar cargas de laboratorio." />;
+  if (!canView) {
+    return <Alert tone="error" text="Voce nao tem permissao para visualizar cargas de laboratorio." />;
   }
 
   return (
@@ -1720,7 +1750,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         </p>
       </div>
 
-      <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+      {canManageManualRelease ? <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{editingLabId ? 'Editar liberacao do laboratorio' : 'Nova liberacao manual'}</h2>
           <p className="mt-1 text-sm text-slate-500">Use quando o grão chegar primeiro no laboratório. A balança completa NF-e, pesos e dados finais depois.</p>
@@ -1761,7 +1791,9 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
             </button>
           )}
         </div>
-      </form>
+      </form> : (
+        <Alert tone="info" text="Modo somente leitura: voce pode visualizar as cargas de laboratorio, mas nao pode cadastrar, editar, excluir, cancelar ou aprovar." />
+      )}
 
       <section className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -1776,6 +1808,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
             edit={edits[row.id] || {}}
             reason={reason[row.id] || ''}
             can={can}
+            readOnly={!canApprove && !canCancel && !canEdit && !canDelete}
             onEdit={updateEdit}
             onReason={(value) => setReason((current) => ({ ...current, [row.id]: value }))}
             onProcess={process}
@@ -1818,14 +1851,14 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
                   <td className="px-3 py-3"><StatusBadge row={row} /></td>
                   <td className="px-3 py-3">{kg(row.peso_liquido)}</td>
                   <td className="px-3 py-3">
-                    <button type="button" onClick={() => exportLaboratoryReleasePdf(row)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                    {canExport ? <button type="button" onClick={() => exportLaboratoryReleasePdf(row)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                       <Download size={14} /> Baixar PDF
-                    </button>
+                    </button> : '-'}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex gap-1">
-                      {can('balancas', 'editar') && <button type="button" onClick={() => editLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar"><Edit size={16} /></button>}
-                      {can('balancas', 'excluir') && <button type="button" onClick={() => removeLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir"><Trash2 size={16} /></button>}
+                      {canEdit && <button type="button" onClick={() => editLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" title="Editar"><Edit size={16} /></button>}
+                      {canDelete && <button type="button" onClick={() => removeLab(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50" title="Excluir"><Trash2 size={16} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -1839,7 +1872,13 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   );
 }
 
-function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onProcess, onEditLab, onDeleteLab }) {
+function LaboratoryReleaseCard({ row, edit, reason, can, readOnly = false, onEdit, onReason, onProcess, onEditLab, onDeleteLab }) {
+  const canEdit = !readOnly && can('balancas', 'editar');
+  const canDelete = !readOnly && can('balancas', 'excluir');
+  const canApprove = !readOnly && can('balancas', 'aprovar');
+  const canCancel = !readOnly && can('balancas', 'cancelar');
+  const canShowActions = canEdit || canDelete || canApprove || canCancel;
+
   return (
     <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel">
       <div className="grid gap-3 border-b bg-slate-50 p-4 lg:grid-cols-[150px_1fr_190px] lg:items-center">
@@ -1863,38 +1902,38 @@ function LaboratoryReleaseCard({ row, edit, reason, can, onEdit, onReason, onPro
 
       <div className="grid gap-3 p-4 lg:grid-cols-6">
         <SmallField label="Número da NF">
-          <SmallInput value={edit.nf_numero ?? row.nf_numero ?? ''} onChange={(value) => onEdit(row.id, 'nf_numero', onlyDigits(value))} />
+          <SmallInput disabled={readOnly} value={edit.nf_numero ?? row.nf_numero ?? ''} onChange={(value) => onEdit(row.id, 'nf_numero', onlyDigits(value))} />
         </SmallField>
         <SmallField label="Ticket">
-          <SmallInput value={edit.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => onEdit(row.id, 'ticket_numero', value)} />
+          <SmallInput disabled={readOnly} value={edit.ticket_numero ?? row.ticket_numero ?? ''} onChange={(value) => onEdit(row.id, 'ticket_numero', value)} />
         </SmallField>
         <SmallField label="Umidade 01 (%)">
-          <SmallInput type="number" value={edit.umidade_01 ?? row.umidade_01 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_01', value)} />
+          <SmallInput disabled={readOnly} type="number" value={edit.umidade_01 ?? row.umidade_01 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_01', value)} />
         </SmallField>
         <SmallField label="Umidade 02 (%)">
-          <SmallInput type="number" value={edit.umidade_02 ?? row.umidade_02 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_02', value)} />
+          <SmallInput disabled={readOnly} type="number" value={edit.umidade_02 ?? row.umidade_02 ?? ''} onChange={(value) => onEdit(row.id, 'umidade_02', value)} />
         </SmallField>
         <SmallField label="Liberado por">
-          <SmallInput value={edit.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => onEdit(row.id, 'liberado_por', value)} />
+          <SmallInput disabled={readOnly} value={edit.liberado_por ?? row.liberado_por ?? ''} onChange={(value) => onEdit(row.id, 'liberado_por', value)} />
         </SmallField>
         <SmallField label="Peso liquido">
           <div className="flex h-9 items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700">{kg(row.peso_liquido)}</div>
         </SmallField>
-        <div className="lg:col-span-5">
+        {!readOnly && <div className="lg:col-span-5">
           <label className="grid gap-1 text-xs font-bold text-slate-600">
             Motivo para reprovar ou cancelar
             <textarea value={reason} onChange={(event) => onReason(event.target.value)} rows={2} className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs outline-none focus:border-tijuca-500" placeholder="Obrigatorio para reprovar/cancelar" />
           </label>
-        </div>
+        </div>}
       </div>
 
-      <div className="flex flex-col gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end">
-        {can('balancas', 'editar') && <button type="button" onClick={() => onEditLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-white"><Edit size={16} /> Editar</button>}
-        {can('balancas', 'excluir') && <button type="button" onClick={() => onDeleteLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><Trash2 size={16} /> Excluir</button>}
-        {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'aprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"><Check size={16} /> Aprovar e liberar</button>}
-        {can('balancas', 'aprovar') && <button type="button" onClick={() => onProcess(row, 'reprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 px-4 text-sm font-bold text-amber-700 hover:bg-amber-50"><X size={16} /> Reprovar</button>}
-        {can('balancas', 'cancelar') && <button type="button" onClick={() => onProcess(row, 'cancelar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><X size={16} /> Cancelar</button>}
-      </div>
+      {canShowActions && <div className="flex flex-col gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end">
+        {canEdit && <button type="button" onClick={() => onEditLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-white"><Edit size={16} /> Editar</button>}
+        {canDelete && <button type="button" onClick={() => onDeleteLab(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><Trash2 size={16} /> Excluir</button>}
+        {canApprove && <button type="button" onClick={() => onProcess(row, 'aprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white"><Check size={16} /> Aprovar e liberar</button>}
+        {canApprove && <button type="button" onClick={() => onProcess(row, 'reprovar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-300 px-4 text-sm font-bold text-amber-700 hover:bg-amber-50"><X size={16} /> Reprovar</button>}
+        {canCancel && <button type="button" onClick={() => onProcess(row, 'cancelar')} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-300 px-4 text-sm font-bold text-rose-700 hover:bg-rose-50"><X size={16} /> Cancelar</button>}
+      </div>}
     </article>
   );
 }
@@ -3324,8 +3363,8 @@ function MoneyInput({ label, value, onChange, placeholder = '0,00', readOnly = f
   );
 }
 
-function SmallInput({ value, onChange, type = 'text' }) {
-  return <input type={type} value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs outline-none focus:border-tijuca-500" />;
+function SmallInput({ value, onChange, type = 'text', disabled = false }) {
+  return <input type={type} value={value ?? ''} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs outline-none focus:border-tijuca-500 disabled:bg-slate-100 disabled:text-slate-600" />;
 }
 
 function Select({ label, value, onChange, options, required, labelKey = 'nome', error }) {
