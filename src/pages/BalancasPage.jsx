@@ -756,12 +756,21 @@ function HumidityReadings({ row }) {
   const first = formatPercent(row.umidade_01);
   const second = formatPercent(row.umidade_02);
   const fallback = formatPercent(row.umidade);
-  if (!first && !second) return <span>{fallback || '-'}</span>;
+  const readings = [
+    { label: 'U1', value: first },
+    { label: 'U2', value: second },
+  ].filter((item) => item.value);
+
+  if (!readings.length) return <span>{fallback || '-'}</span>;
 
   return (
-    <div className="grid gap-1 text-xs font-extrabold text-slate-700">
-      {first && <span className="whitespace-nowrap">01: {first}</span>}
-      {second && <span className="whitespace-nowrap">02: {second}</span>}
+    <div className="flex flex-wrap gap-1.5">
+      {readings.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-extrabold text-slate-700 ring-1 ring-slate-200">
+          <span className="text-slate-500">{item.label}</span>
+          <span>{item.value}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -2604,14 +2613,14 @@ function exportRecebimentosPdf(rows, filters = {}) {
 function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showReportColumns = false }) {
   const headers = showReportColumns
     ? ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Unid.', 'Valor unit.', 'Valor total', 'Umidade', 'Diferença', 'Status']
-    : ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Diferença', 'Status', 'Ações'];
+    : ['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Umidade', 'Diferença', 'Status', 'Ações'];
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className={`w-full text-left text-sm ${showReportColumns ? 'min-w-[1420px]' : 'min-w-[1180px]'}`}>
+      <table className={`w-full text-left text-sm ${showReportColumns ? 'min-w-[1420px]' : 'min-w-[1260px]'}`}>
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>
-            {['Data', 'NF', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Bruto', 'Tara', 'Líquido', 'Peso - Quantidade', 'Diferença', 'Status', 'Ações'].map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
+            {headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -2643,6 +2652,7 @@ function RecebimentosTable({ rows, loading, can, onView, onEdit, onDelete, showR
                   )}
                 </div>
               </td>
+              <td className="px-4 py-3"><HumidityReadings row={row} /></td>
               <td className="px-4 py-3">
                 <span className={differenceClass(diferencaAgregada(row))}>{kg(diferencaAgregada(row))}</span>
               </td>
@@ -4422,7 +4432,7 @@ function formatPlateDisplay(value) {
 function formatPercent(value) {
   const number = nullableNumber(value);
   if (number === null) return '';
-  return `${number.toFixed(2)}%`;
+  return `${number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 function sortRecebimentoRows(rows) {
