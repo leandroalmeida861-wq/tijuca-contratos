@@ -2447,7 +2447,7 @@ function RelatorioRecebimentosTable({ rows }) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className="w-full min-w-[1820px] text-left text-sm">
+      <table className="w-full min-w-[2140px] text-left text-sm">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>{headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}</tr>
         </thead>
@@ -2467,10 +2467,10 @@ function RelatorioRecebimentosTable({ rows }) {
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_principal_relatorio)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_complemento_relatorio)}</td>
               <td className="px-4 py-3 font-bold">{formatCurrencyCell(row.valor_agregado_relatorio)}</td>
-              <td className="px-4 py-3">{row.umidade_relatorio || '-'}</td>
+              <td className="min-w-[150px] whitespace-normal px-4 py-3 leading-relaxed">{row.umidade_relatorio || '-'}</td>
               <td className="px-4 py-3"><span className={differenceClass(row.diferenca_relatorio)}>{kg(row.diferenca_relatorio)}</span></td>
-              <td className="max-w-[180px] truncate px-4 py-3" title={row.chave_complementar_relatorio || ''}>{row.chave_complementar_relatorio || '-'}</td>
-              <td className="max-w-[200px] truncate px-4 py-3" title={row.observacao_complementar_relatorio || ''}>{row.observacao_complementar_relatorio || '-'}</td>
+              <td className="min-w-[310px] max-w-[360px] break-all px-4 py-3 text-xs leading-relaxed" title={row.chave_complementar_relatorio || ''}>{row.chave_complementar_relatorio || '-'}</td>
+              <td className="min-w-[280px] max-w-[380px] whitespace-normal break-words px-4 py-3 leading-relaxed" title={row.observacao_complementar_relatorio || ''}>{row.observacao_complementar_relatorio || '-'}</td>
             </tr>
           ))}
         </tbody>
