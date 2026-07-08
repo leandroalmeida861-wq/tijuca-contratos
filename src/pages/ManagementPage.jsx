@@ -1,6 +1,7 @@
 import { Download, Edit, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { auditAction, createNote, createRow, deleteNote, deleteRow, listContracts, listFreights, listNotes, listTable, updateRow } from '../lib/api.js';
 import { deleteDocumentPdf, openDocumentPdf, uploadDocumentPdf } from '../lib/documentStorage.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
@@ -73,6 +74,18 @@ const pageConfig = {
   },
 };
 
+const genericRealtimeTables = {
+  documentos: ['documentos'],
+  fabricas: ['fabricas'],
+  fornecedores: ['fornecedores'],
+  fretes: ['contratos', 'fretes'],
+  produtos: ['produtos'],
+};
+
+const contractsRealtimeTables = ['contratos', 'fornecedores', 'fabricas', 'produtos', 'notas_fiscais'];
+const notesRealtimeTables = ['notas_fiscais', 'contratos', 'fornecedores'];
+const financeRealtimeTables = ['contratos', 'fornecedores', 'fretes', 'notas_fiscais'];
+
 export default function ManagementPage({ type }) {
   if (type === 'contratos') return <ContractsPage />;
   if (type === 'notas_fiscais') return <NotesPage />;
@@ -104,6 +117,12 @@ function GenericPage({ config }) {
   useEffect(() => {
     load().catch((err) => setError(toUserError('carregar-cadastro', err)));
   }, [config.table]);
+
+  useSupabaseRealtimeRefresh(genericRealtimeTables[config.table] || [config.table], () => {
+    load().catch((err) => setError(toUserError('carregar-cadastro', err)));
+  }, {
+    channelName: `cadastro-${config.table}`,
+  });
 
   const filtered = filterRows(rows, config.search, query);
 
@@ -338,6 +357,12 @@ function ContractsPage() {
     load().catch((err) => setError(toUserError('carregar-contratos', err)));
   }, []);
 
+  useSupabaseRealtimeRefresh(contractsRealtimeTables, () => {
+    load().catch((err) => setError(toUserError('carregar-contratos', err)));
+  }, {
+    channelName: 'contratos',
+  });
+
   const filtered = filterRows(contracts, ['numero_contrato', 'fornecedor.nome', 'produto.nome'], query);
 
   async function submit(event) {
@@ -429,6 +454,12 @@ function NotesPage() {
   useEffect(() => {
     load().catch((err) => setError(toUserError('carregar-notas', err)));
   }, []);
+
+  useSupabaseRealtimeRefresh(notesRealtimeTables, () => {
+    load().catch((err) => setError(toUserError('carregar-notas', err)));
+  }, {
+    channelName: 'notas-fiscais',
+  });
 
   const filtered = filterRows(notes, ['numero_nf', 'contrato.numero_contrato', 'fornecedor.nome'], query);
   const reportRows = filtered.filter((note) =>
@@ -634,19 +665,32 @@ function FinancePage() {
   const [freights, setFreights] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [filters, setFilters] = useState({ fornecedor_id: '', contrato_id: '' });
+
+  async function load() {
+    const [contractRows, supplierRows, freightRows] = await Promise.all([listContracts(), listTable('fornecedores'), listFreights()]);
+    setContracts(contractRows);
+    setSuppliers(supplierRows);
+    setFreights(freightRows);
+  }
+
   useEffect(() => {
-    Promise.all([listContracts(), listTable('fornecedores'), listFreights()])
-      .then(([contractRows, supplierRows, freightRows]) => {
-        setContracts(contractRows);
-        setSuppliers(supplierRows);
-        setFreights(freightRows);
-      })
+    load()
       .catch(() => {
         setContracts([]);
         setSuppliers([]);
         setFreights([]);
       });
   }, []);
+
+  useSupabaseRealtimeRefresh(financeRealtimeTables, () => {
+    load().catch(() => {
+      setContracts([]);
+      setSuppliers([]);
+      setFreights([]);
+    });
+  }, {
+    channelName: 'financeiro',
+  });
 
   const filteredContracts = contracts.filter((contract) =>
     (!filters.fornecedor_id || contract.fornecedor_id === filters.fornecedor_id)

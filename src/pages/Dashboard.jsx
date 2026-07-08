@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import DashboardFilters from '../components/dashboard/DashboardFilters.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
+import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { deleteRow, exportContractsCsv, exportContractsExcel } from '../lib/api.js';
 import { currency, dateBr, kg, percent, statusClass } from '../lib/formatters.js';
 import { loadDashboardData, loadDashboardOptions } from '../services/dashboardService.js';
@@ -34,6 +35,8 @@ const chartColors = [
   '#a0522d',
   '#52606d',
 ];
+
+const dashboardRealtimeTables = ['contratos', 'notas_fiscais', 'fornecedores', 'produtos', 'fabricas', 'fretes'];
 
 export default function Dashboard() {
   const { can } = useAuth();
@@ -75,6 +78,10 @@ export default function Dashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useSupabaseRealtimeRefresh(dashboardRealtimeTables, load, {
+    channelName: 'dashboard',
+  });
 
   async function removeContract(id) {
     if (!window.confirm('Excluir este contrato?')) return;

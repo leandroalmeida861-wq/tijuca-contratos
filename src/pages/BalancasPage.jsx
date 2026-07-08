@@ -59,6 +59,7 @@ import {
 } from '../services/balancasService.js';
 import { parseNfeRecebimento } from '../lib/nfeRecebimento.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../lib/formatters.js';
 
 const UMIDADE_LIMITE = 14;
@@ -69,6 +70,20 @@ const SCORE_WEIGHTS = {
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
+
+const balancasRealtimeTables = [
+  'balancas',
+  'fornecedores',
+  'portaria_entradas',
+  'produtos',
+  'recebimento_itens',
+  'recebimento_laboratorios',
+  'recebimento_motoristas',
+  'recebimento_notas_complementares',
+  'recebimento_transportadoras',
+  'recebimento_veiculos',
+  'recebimentos',
+];
 
 const tabs = [
   { key: 'dashboard', label: 'Dashboard', menu: 'balancas' },
@@ -205,6 +220,10 @@ export default function BalancasPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useSupabaseRealtimeRefresh(balancasRealtimeTables, () => load(filters), {
+    channelName: 'balancas',
+  });
 
   useEffect(() => {
     if (tabKeys.has(tabParam) && (tabParam === 'cadastros' || canTab(tabParam, 'visualizar'))) {
