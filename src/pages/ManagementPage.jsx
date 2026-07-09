@@ -119,7 +119,7 @@ function GenericPage({ config }) {
   }, [config.table]);
 
   useSupabaseRealtimeRefresh(genericRealtimeTables[config.table] || [config.table], () => {
-    load().catch((err) => setError(toUserError('carregar-cadastro', err)));
+    load().catch(() => {});
   }, {
     channelName: `cadastro-${config.table}`,
   });
@@ -358,7 +358,7 @@ function ContractsPage() {
   }, []);
 
   useSupabaseRealtimeRefresh(contractsRealtimeTables, () => {
-    load().catch((err) => setError(toUserError('carregar-contratos', err)));
+    load().catch(() => {});
   }, {
     channelName: 'contratos',
   });
@@ -456,7 +456,7 @@ function NotesPage() {
   }, []);
 
   useSupabaseRealtimeRefresh(notesRealtimeTables, () => {
-    load().catch((err) => setError(toUserError('carregar-notas', err)));
+    load().catch(() => {});
   }, {
     channelName: 'notas-fiscais',
   });
@@ -683,11 +683,7 @@ function FinancePage() {
   }, []);
 
   useSupabaseRealtimeRefresh(financeRealtimeTables, () => {
-    load().catch(() => {
-      setContracts([]);
-      setSuppliers([]);
-      setFreights([]);
-    });
+    load().catch(() => {});
   }, {
     channelName: 'financeiro',
   });

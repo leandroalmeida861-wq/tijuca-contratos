@@ -199,9 +199,11 @@ export default function BalancasPage() {
   const canTab = (tabKey, action = 'visualizar') => canBalancasTab(can, permissions, tabKey, action);
   const visibleTabs = tabs.filter((tab) => canTab(tab.key, 'visualizar'));
 
-  async function load(customFilters = filters) {
-    setLoading(true);
-    setError('');
+  async function load(customFilters = filters, { silent = false } = {}) {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const [nextOptions, nextRows] = await Promise.all([
         loadBalancasOptions(),
@@ -211,9 +213,9 @@ export default function BalancasPage() {
       setRows(nextRows);
       setPortariaRows(await listPortariaEntradas());
     } catch (err) {
-      setError(toUserError(err));
+      if (!silent) setError(toUserError(err));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -221,7 +223,7 @@ export default function BalancasPage() {
     load();
   }, []);
 
-  useSupabaseRealtimeRefresh(balancasRealtimeTables, () => load(filters), {
+  useSupabaseRealtimeRefresh(balancasRealtimeTables, () => load(filters, { silent: true }), {
     channelName: 'balancas',
   });
 

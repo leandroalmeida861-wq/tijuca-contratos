@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 
 const DEFAULT_DEBOUNCE_MS = 600;
-const DEFAULT_POLL_INTERVAL_MS = 10000;
+const DEFAULT_POLL_INTERVAL_MS = 60000;
 
 export function useSupabaseRealtimeRefresh(
   tables,
@@ -15,6 +15,7 @@ export function useSupabaseRealtimeRefresh(
   } = {},
 ) {
   const refreshRef = useRef(onRefresh);
+  const realtimeConnectedRef = useRef(false);
   const realtimeTimerRef = useRef(null);
   const pollingTimerRef = useRef(null);
 
@@ -29,9 +30,10 @@ export function useSupabaseRealtimeRefresh(
 
   useEffect(() => {
     if (!enabled || !tablesKey) return undefined;
+    realtimeConnectedRef.current = false;
 
     const runRefresh = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       refreshRef.current?.();
     };
 
@@ -48,13 +50,19 @@ export function useSupabaseRealtimeRefresh(
         scheduleRefresh,
       );
     });
-    channel.subscribe();
+    channel.subscribe((status) => {
+      realtimeConnectedRef.current = status === 'SUBSCRIBED';
+    });
 
     if (pollIntervalMs > 0) {
-      pollingTimerRef.current = window.setInterval(runRefresh, pollIntervalMs);
+      pollingTimerRef.current = window.setInterval(() => {
+        if (realtimeConnectedRef.current) return;
+        runRefresh();
+      }, pollIntervalMs);
     }
 
     return () => {
+      realtimeConnectedRef.current = false;
       if (realtimeTimerRef.current) window.clearTimeout(realtimeTimerRef.current);
       if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current);
       supabase.removeChannel(channel);

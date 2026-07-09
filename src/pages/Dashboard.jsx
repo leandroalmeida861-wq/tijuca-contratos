@@ -61,17 +61,21 @@ export default function Dashboard() {
       .catch((err) => setError(err.message || 'Não foi possível carregar as opções dos filtros.'));
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const dashboardData = await loadDashboardData(appliedFilters);
       setContracts(dashboardData.contracts);
       setFreights(dashboardData.freights);
     } catch (err) {
-      setError(err.message || 'Não foi possível carregar o dashboard com os filtros informados.');
+      if (!silent) {
+        setError(err.message || 'Não foi possível carregar o dashboard com os filtros informados.');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [appliedFilters]);
 
@@ -79,7 +83,7 @@ export default function Dashboard() {
     load();
   }, [load]);
 
-  useSupabaseRealtimeRefresh(dashboardRealtimeTables, load, {
+  useSupabaseRealtimeRefresh(dashboardRealtimeTables, () => load({ silent: true }), {
     channelName: 'dashboard',
   });
 
