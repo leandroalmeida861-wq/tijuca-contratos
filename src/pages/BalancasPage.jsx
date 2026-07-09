@@ -70,6 +70,8 @@ const SCORE_WEIGHTS = {
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
+const SEM_LABORATORIO_ID = '__SEM_LABORATORIO__';
+const SEM_LABORATORIO_OPTION = { id: SEM_LABORATORIO_ID, nome: 'Não passa pelo laboratório' };
 
 const balancasRealtimeTables = [
   'balancas',
@@ -925,6 +927,10 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
   const [saving, setSaving] = useState(false);
   const canImportXml = !row || isLaboratorioPendenteBalanca(row);
   const canEditComplementos = !can || can('balancas', 'editar') || can('balancas', 'cadastrar');
+  const laboratorioOptions = useMemo(
+    () => [SEM_LABORATORIO_OPTION, ...(localOptions.laboratorios || [])],
+    [localOptions.laboratorios],
+  );
 
   useEffect(() => {
     setLocalOptions(options);
@@ -1086,7 +1092,10 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
       }
       let saved;
       if (row?.id) saved = await updateRecebimento(row.id, payload);
-      else saved = await createRecebimento({ ...payload, status: 'pendente' });
+      else saved = await createRecebimento({
+        ...payload,
+        status: isSemLaboratorio(syncedForm.laboratorio_id) ? 'aprovada' : 'pendente',
+      });
       const pendingComplementos = complementos.filter((item) => item.__local);
       if (pendingComplementos.length) {
         await Promise.all(pendingComplementos.map((item) => createNotaComplementar({
@@ -1123,7 +1132,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input label="Data" type="date" value={form.data} onChange={(value) => updateField('data', value)} required error={fieldErrors.data} />
         <Select label="Balanca" value={form.balanca_id} onChange={(value) => updateField('balanca_id', value)} options={localOptions.balancas} error={fieldErrors.balanca_id} />
-        <Select label="Laboratório" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={localOptions.laboratorios} />
+        <Select label="Laboratório" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={laboratorioOptions} />
         <Input label="Numero da NF" value={form.nf_numero} onChange={(value) => updateField('nf_numero', value)} error={fieldErrors.nf_numero} />
         <SearchableSelect label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={localOptions.fornecedores} fallbackValue={form.fornecedor_nome_manual} error={fieldErrors.fornecedor_id} />
         {false && <SearchableSelect label="Produto" value={form.produto_id} onChange={(value) => updateField('produto_id', value)} options={localOptions.produtos} fallbackValue={form.produto_nome_manual} error={fieldErrors.produto_id} />}
@@ -3708,8 +3717,10 @@ function normalizeRecebimentoPayload(form) {
   const itens = normalizeRecebimentoItemsForPayload(synced.itens);
   const totals = calcularTotaisRecebimento(synced.itens);
   const first = itens[0] || {};
+  const semLaboratorio = isSemLaboratorio(synced.laboratorio_id);
   return {
     ...synced,
+    laboratorio_id: semLaboratorio ? null : synced.laboratorio_id || null,
     qtd_eixos: nullableNumber(synced.qtd_eixos),
     peso_bruto: Number(synced.peso_bruto || 0),
     tara: Number(synced.tara || 0),
@@ -4511,12 +4522,17 @@ function rowDateTimeValue(row) {
 
 function isLaboratorioPendenteBalanca(row) {
   return row.status === 'aprovada'
+    && row.laboratorio_id
     && (row.veiculo_id || row.veiculo_placa_manual)
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
 }
 
+function isSemLaboratorio(value) {
+  return value === SEM_LABORATORIO_ID;
+}
+
 function isAprovadaLaboratorio(row) {
-  return row.status === 'aprovada';
+  return row.status === 'aprovada' && Boolean(row.laboratorio_id);
 }
 
 function isRecebimentoFinalizadoBalanca(row) {
