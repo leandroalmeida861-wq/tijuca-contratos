@@ -73,6 +73,13 @@ const PRODUCT_MILHO_COLOR = '#facc15';
 const SEM_LABORATORIO_ID = '__SEM_LABORATORIO__';
 const SEM_LABORATORIO_OPTION = { id: SEM_LABORATORIO_ID, nome: 'Não passa pelo laboratório' };
 
+function laboratoriosRecebimentoOptions(laboratorios = []) {
+  return [
+    SEM_LABORATORIO_OPTION,
+    ...(laboratorios || []).filter((item) => item.id !== SEM_LABORATORIO_ID),
+  ];
+}
+
 const balancasRealtimeTables = [
   'balancas',
   'fornecedores',
@@ -928,7 +935,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
   const canImportXml = !row || isLaboratorioPendenteBalanca(row);
   const canEditComplementos = !can || can('balancas', 'editar') || can('balancas', 'cadastrar');
   const laboratorioOptions = useMemo(
-    () => [SEM_LABORATORIO_OPTION, ...(localOptions.laboratorios || [])],
+    () => laboratoriosRecebimentoOptions(localOptions.laboratorios),
     [localOptions.laboratorios],
   );
 
