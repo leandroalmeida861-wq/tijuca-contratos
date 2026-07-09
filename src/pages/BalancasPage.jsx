@@ -4529,7 +4529,6 @@ function rowDateTimeValue(row) {
 
 function isLaboratorioPendenteBalanca(row) {
   return row.status === 'aprovada'
-    && row.laboratorio_id
     && (row.veiculo_id || row.veiculo_placa_manual)
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
 }
@@ -4539,7 +4538,7 @@ function isSemLaboratorio(value) {
 }
 
 function isAprovadaLaboratorio(row) {
-  return row.status === 'aprovada' && Boolean(row.laboratorio_id);
+  return row.status === 'aprovada';
 }
 
 function isRecebimentoFinalizadoBalanca(row) {
