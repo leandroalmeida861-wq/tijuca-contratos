@@ -216,13 +216,14 @@ export default function BalancasPage() {
       setError('');
     }
     try {
-      const [nextOptions, nextRows] = await Promise.all([
+      const [nextOptions, nextRows, nextPortariaRows] = await Promise.all([
         loadBalancasOptions(),
         listRecebimentos(customFilters),
+        listPortariaEntradas(),
       ]);
       setOptions(nextOptions);
-      setRows(nextRows);
-      setPortariaRows(await listPortariaEntradas());
+      setRows(attachPortariaRows(nextRows, nextPortariaRows));
+      setPortariaRows(nextPortariaRows);
     } catch (err) {
       if (!silent) setError(toUserError(err));
     } finally {
@@ -323,6 +324,18 @@ export default function BalancasPage() {
 
 function hasBalancasSubPermissions(permissions = {}) {
   return BALANCAS_SUB_PERMISSION_MENUS.some((menu) => permissions?.[menu]);
+}
+
+function attachPortariaRows(recebimentos = [], portarias = []) {
+  if (!Array.isArray(recebimentos) || !recebimentos.length || !Array.isArray(portarias) || !portarias.length) {
+    return recebimentos || [];
+  }
+  const portariaById = new Map(portarias.map((row) => [row.id, row]));
+  return recebimentos.map((row) => (
+    row.portaria_id && portariaById.has(row.portaria_id)
+      ? { ...row, portaria: portariaById.get(row.portaria_id) }
+      : row
+  ));
 }
 
 function balancasTabMenu(tabKey) {

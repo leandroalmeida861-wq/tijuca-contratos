@@ -9,7 +9,6 @@ const RECEBIMENTO_SELECT = `
   transportadora:recebimento_transportadoras(id,nome),
   fornecedor:fornecedores(id,nome,cnpj),
   produto:produtos(id,nome,unidade),
-  portaria:portaria_entradas(id,status,dispensa_laboratorio),
   itens:recebimento_itens(
     id,
     recebimento_id,
