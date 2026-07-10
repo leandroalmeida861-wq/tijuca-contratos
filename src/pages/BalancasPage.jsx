@@ -139,6 +139,7 @@ const defaultRecebimento = {
   peso_bruto: '',
   tara: '',
   peso_nf: '',
+  peso_nf_manual: false,
   quantidade_nota: '',
   unidade_nota: 'KG',
   peso_por_saca: '60',
@@ -1078,6 +1079,9 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
       if (name === 'fornecedor_id' && value) {
         next.fornecedor_nome_manual = '';
       }
+      if (name === 'peso_nf') {
+        next.peso_nf_manual = true;
+      }
       return next;
     });
   }
@@ -1148,6 +1152,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
           fornecedor_id: matchedSupplier?.id || current.fornecedor_id,
           fornecedor_nome_manual: matchedSupplier?.id ? '' : current.fornecedor_nome_manual,
           peso_nf: totalPesoNf ?? current.peso_nf,
+          peso_nf_manual: false,
           itens: importedItems.length ? importedItems : current.itens,
         });
         return next;
@@ -1271,7 +1276,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         {false && isSacaUnit(form.unidade_nota) && (
           <Input label="Peso por saca KG" type="number" step="0.001" value={form.peso_por_saca || '60'} onChange={(value) => updateField('peso_por_saca', value)} />
         )}
-        <Input label="Peso convertido KG" type="number" step="0.001" value={form.peso_nf} onChange={(value) => updateField('peso_nf', value)} />
+        <Input label="Peso convertido KG" value={form.peso_nf} onChange={(value) => updateField('peso_nf', sanitizeWeightInput(value))} />
         <Input label="Umidade % 01" type="number" step="0.001" value={form.umidade_01} onChange={(value) => updateField('umidade_01', value)} />
         <Input label="Umidade % 02" type="number" step="0.001" value={form.umidade_02} onChange={(value) => updateField('umidade_02', value)} />
         <Input label="Ticket" value={form.ticket_numero} onChange={(value) => updateField('ticket_numero', value)} />
@@ -3762,6 +3767,7 @@ function rowToForm(row) {
   form.valor_total = formatMoneyPt(row.valor_total, 2);
   form.subtotal = formatMoneyPt(row.subtotal, 2);
   form.desconto_total = formatMoneyPt(row.desconto_total, 2);
+  form.peso_nf_manual = isManualStoredPesoNf(form);
   return syncRecebimentoTotals(form);
 }
 
@@ -3849,17 +3855,18 @@ function rowToLaboratorioForm(row) {
 
 function normalizeRecebimentoPayload(form) {
   const synced = syncRecebimentoTotals(form);
+  const { peso_nf_manual: _pesoNfManual, ...syncedPayload } = synced;
   const itens = normalizeRecebimentoItemsForPayload(synced.itens);
   const totals = calcularTotaisRecebimento(synced.itens);
   const first = itens[0] || {};
   const semLaboratorio = isSemLaboratorio(synced.laboratorio_id);
   return {
-    ...synced,
+    ...syncedPayload,
     laboratorio_id: semLaboratorio ? null : synced.laboratorio_id || null,
     qtd_eixos: nullableNumber(synced.qtd_eixos),
     peso_bruto: Number(synced.peso_bruto || 0),
     tara: Number(synced.tara || 0),
-    peso_nf: nullableNumber(synced.peso_nf),
+    peso_nf: nullableLocaleNumber(synced.peso_nf),
     quantidade_nota: first.quantidade ?? null,
     unidade_nota: first.unidade || 'KG',
     peso_por_saca: nullableNumber(synced.peso_por_saca),
@@ -4163,6 +4170,13 @@ function isManualStoredItemTotal(item = {}) {
   return Math.abs(storedTotal - itemCalculatedTotalValue(item)) > 0.01;
 }
 
+function isManualStoredPesoNf(form = {}) {
+  const storedPeso = nullableLocaleNumber(form.peso_nf);
+  const calculatedPeso = sumItemsConvertedWeight(form.itens);
+  if (storedPeso === null || calculatedPeso === null) return false;
+  return Math.abs(storedPeso - calculatedPeso) > 0.001;
+}
+
 function calcularTotaisRecebimento(itens = []) {
   return (itens || []).reduce((acc, item) => {
     const subtotal = itemSubtotalValue(item);
@@ -4179,6 +4193,7 @@ function syncRecebimentoTotals(form = {}) {
   const totals = calcularTotaisRecebimento(itens);
   const first = itens[0] || {};
   const totalPesoNf = sumItemsConvertedWeight(itens);
+  const pesoNfManual = Boolean(form.peso_nf_manual);
   return {
     ...form,
     itens,
@@ -4187,7 +4202,8 @@ function syncRecebimentoTotals(form = {}) {
     quantidade_nota: first.quantidade ?? '',
     unidade_nota: first.unidade || 'KG',
     valor_unitario: first.valor_unitario || '',
-    peso_nf: totalPesoNf === null ? form.peso_nf : String(totalPesoNf),
+    peso_nf: pesoNfManual || totalPesoNf === null ? form.peso_nf : String(totalPesoNf),
+    peso_nf_manual: pesoNfManual,
     subtotal: formatMoneyPt(totals.subtotal, 2),
     desconto_total: formatMoneyPt(totals.descontoTotal, 2),
     valor_total: formatMoneyPt(totals.valorTotal, 2),
