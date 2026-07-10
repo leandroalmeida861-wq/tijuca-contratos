@@ -174,6 +174,7 @@ const defaultPortariaForm = {
   qtd_eixos: '',
   observacao: '',
   status: 'AGUARDANDO_LABORATORIO',
+  dispensa_laboratorio: false,
 };
 
 const defaultLaboratorioForm = {
@@ -460,6 +461,49 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     });
   }
 
+  async function sendDirectToRecebimento(row) {
+    const existing = await findRecebimentoByPortariaId(row.id);
+    const duplicate = await findDuplicateRecebimentoNotaFornecedor({
+      fornecedor_id: row.fornecedor_id,
+      nf_numero: row.numero_nf,
+      excludeId: existing?.id,
+    });
+    if (duplicate && duplicate.portaria_id !== row.id) {
+      throw new Error('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
+    }
+
+    if (existing?.id) {
+      await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
+      return existing;
+    }
+
+    const payload = {
+      portaria_id: row.id,
+      data: row.data_entrada,
+      balanca_id: row.balanca_id,
+      veiculo_id: row.veiculo_id,
+      motorista_id: row.motorista_id,
+      transportadora_id: row.transportadora_id,
+      fornecedor_id: row.fornecedor_id,
+      produto_id: row.produto_id,
+      tipo_veiculo: row.tipo_veiculo,
+      qtd_eixos: row.qtd_eixos,
+      nf_numero: row.numero_nf,
+      quantidade_nota: row.peso_nf_kg,
+      unidade_nota: row.unidade_nota || 'KG',
+      peso_nf: normalizarQuantidadeParaKg(row.peso_nf_kg, row.unidade_nota || 'KG', 60) ?? row.peso_nf_kg,
+      peso_bruto: 0,
+      tara: 0,
+      status: 'aprovada',
+      dispensa_laboratorio: true,
+      observacao: row.observacao,
+    };
+
+    await createRecebimento(payload);
+    await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
+    return null;
+  }
+
   async function submit(event) {
     event.preventDefault();
     setError('');
@@ -473,9 +517,20 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     setSaving(true);
     try {
       const payload = normalizePortariaPayload(form);
-      if (editing?.id) await updatePortariaEntrada(editing.id, payload);
-      else await createPortariaEntrada(payload);
-      setMessage(editing?.id ? 'Entrada da portaria atualizada com sucesso.' : 'Entrada da portaria cadastrada com sucesso.');
+      const existing = editing?.id ? await findRecebimentoByPortariaId(editing.id) : null;
+      if (editing?.id && Boolean(editing.dispensa_laboratorio) !== Boolean(payload.dispensa_laboratorio) && existing) {
+        setError('Esta entrada ja possui lancamento vinculado. Cancele ou exclua o lancamento antes de alterar o fluxo de laboratorio.');
+        return;
+      }
+      const saved = editing?.id
+        ? await updatePortariaEntrada(editing.id, payload)
+        : await createPortariaEntrada(payload);
+      if (payload.dispensa_laboratorio) {
+        await sendDirectToRecebimento(saved);
+        setMessage('Entrada salva e enviada diretamente para Recebimentos.');
+      } else {
+        setMessage(editing?.id ? 'Entrada da portaria atualizada com sucesso.' : 'Entrada da portaria cadastrada com sucesso.');
+      }
       setFormOpen(false);
       setEditing(null);
       setForm(defaultPortariaForm);
@@ -582,6 +637,18 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
             <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
             <Input label="Quantidade de eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
           </div>
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={Boolean(form.dispensa_laboratorio)}
+              onChange={(event) => updateField('dispensa_laboratorio', event.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-tijuca-600 focus:ring-tijuca-500"
+            />
+            <span>
+              <span className="block font-extrabold text-slate-900">Não passa pelo laboratório</span>
+              <span className="block font-medium text-slate-500">Marque esta opção para encaminhar a entrada diretamente para Recebimentos.</span>
+            </span>
+          </label>
           <label className="grid gap-2 text-sm font-semibold text-slate-700">
             Observação
             <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
@@ -620,12 +687,17 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
                 <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
                 <td className="px-3 py-3">{row.numero_nf}/{row.serie_nf}</td>
                 <td className="px-3 py-3">{formatPortariaQuantidade(row)}</td>
-                <td className="px-3 py-3"><PortariaStatus status={row.status} /></td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-col items-start gap-1">
+                    <PortariaStatus status={row.status} />
+                    {row.dispensa_laboratorio && <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold text-sky-700 ring-1 ring-sky-200">Direto para recebimento</span>}
+                  </div>
+                </td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => setViewing(row)} className="text-slate-600 hover:text-tijuca-700" title="Visualizar"><Eye size={17} /></button>
                     {canEdit && <button type="button" onClick={() => openEdit(row)} className="text-slate-600 hover:text-tijuca-700" title="Editar"><Edit size={17} /></button>}
-                    {canCreate && row.status === 'AGUARDANDO_LABORATORIO' && <button type="button" onClick={() => sendToLab(row)} className="text-tijuca-700 hover:text-tijuca-900" title="Enviar para laboratório"><Check size={17} /></button>}
+                    {canCreate && row.status === 'AGUARDANDO_LABORATORIO' && !row.dispensa_laboratorio && <button type="button" onClick={() => sendToLab(row)} className="text-tijuca-700 hover:text-tijuca-900" title="Enviar para laboratório"><Check size={17} /></button>}
                     {canDelete && <button type="button" onClick={() => remove(row)} className="text-rose-600 hover:text-rose-700" title="Excluir"><Trash2 size={17} /></button>}
                   </div>
                 </td>
@@ -3373,11 +3445,13 @@ function PortariaStatus({ status }) {
   const labels = {
     AGUARDANDO_LABORATORIO: 'Aguardando laboratório',
     ENVIADO_LABORATORIO: 'Enviado ao laboratório',
+    ENVIADO_RECEBIMENTO: 'Enviado para recebimento',
     CANCELADA: 'Cancelada',
   };
   const classes = {
     AGUARDANDO_LABORATORIO: 'bg-amber-100 text-amber-700 ring-amber-200',
     ENVIADO_LABORATORIO: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    ENVIADO_RECEBIMENTO: 'bg-sky-100 text-sky-700 ring-sky-200',
     CANCELADA: 'bg-slate-100 text-slate-700 ring-slate-200',
   };
   return (
@@ -3720,6 +3794,7 @@ function portariaRowToForm(row) {
     qtd_eixos: row.qtd_eixos ?? row.veiculo?.qtd_eixos ?? '',
     observacao: row.observacao || '',
     status: row.status || 'AGUARDANDO_LABORATORIO',
+    dispensa_laboratorio: Boolean(row.dispensa_laboratorio),
   };
 }
 
@@ -3813,6 +3888,7 @@ function normalizePortariaPayload(form) {
     qtd_eixos: nullableNumber(form.qtd_eixos),
     observacao: form.observacao || null,
     status: form.status || 'AGUARDANDO_LABORATORIO',
+    dispensa_laboratorio: Boolean(form.dispensa_laboratorio),
   };
 
   if (form.balanca_id) payload.balanca_id = form.balanca_id;
@@ -4553,6 +4629,7 @@ function rowDateTimeValue(row) {
 
 function isLaboratorioPendenteBalanca(row) {
   return row.status === 'aprovada'
+    && !row.dispensa_laboratorio
     && (row.veiculo_id || row.veiculo_placa_manual)
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
 }
