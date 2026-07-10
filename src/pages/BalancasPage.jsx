@@ -45,6 +45,7 @@ import {
   deleteRecebimento,
   exportRecebimentosCsv,
   findDuplicateRecebimentoNotaFornecedor,
+  findRecebimentoByPortariaId,
   listLookup,
   listPortariaEntradas,
   listRecebimentos,
@@ -500,7 +501,20 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
   async function sendToLab(row) {
     if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return;
     try {
-      await createRecebimento({
+      setError('');
+      setMessage('');
+      const existing = await findRecebimentoByPortariaId(row.id);
+      const duplicate = await findDuplicateRecebimentoNotaFornecedor({
+        fornecedor_id: row.fornecedor_id,
+        nf_numero: row.numero_nf,
+        excludeId: existing?.id,
+      });
+      if (duplicate && duplicate.portaria_id !== row.id) {
+        setError('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
+        return;
+      }
+
+      const payload = {
         portaria_id: row.id,
         data: row.data_entrada,
         balanca_id: row.balanca_id,
@@ -519,7 +533,9 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
         tara: 0,
         status: 'pendente',
         observacao: row.observacao,
-      });
+      };
+      if (existing?.id) await updateRecebimento(existing.id, payload);
+      else await createRecebimento(payload);
       await updatePortariaEntrada(row.id, { status: 'ENVIADO_LABORATORIO' });
       setMessage('Entrada disponibilizada para Aprovação Laboratório.');
       await reload();
@@ -697,6 +713,9 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
     if (!window.confirm(`Excluir o recebimento da NF ${row.nf_numero || row.id}?`)) return;
     try {
       await deleteRecebimento(row.id);
+      if (row.portaria_id) {
+        await updatePortariaEntrada(row.portaria_id, { status: 'AGUARDANDO_LABORATORIO' });
+      }
       setMessage('Recebimento excluído com sucesso.');
       await reload();
     } catch (err) {
@@ -1725,7 +1744,12 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
     }
     if (!window.confirm(`Excluir a liberacao do laboratorio da NF ${row.nf_numero || row.id}?`)) return;
     try {
+      setError('');
+      setMessage('');
       await deleteRecebimento(row.id);
+      if (row.portaria_id) {
+        await updatePortariaEntrada(row.portaria_id, { status: 'AGUARDANDO_LABORATORIO' });
+      }
       setMessage('Liberacao do laboratorio excluida com sucesso.');
       if (editingLabId === row.id) cancelLabEdit();
       await reload();

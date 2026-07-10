@@ -217,6 +217,20 @@ export async function getRecebimento(id) {
   return data;
 }
 
+export async function findRecebimentoByPortariaId(portariaId) {
+  if (!portariaId) return null;
+  const { data, error } = await supabase
+    .from('recebimentos')
+    .select(RECEBIMENTO_SELECT)
+    .eq('portaria_id', portariaId)
+    .neq('status', 'cancelada')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error && isMissingColumn(error, 'portaria_id')) return null;
+  if (error) throw error;
+  return data?.[0] || null;
+}
+
 export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf_numero, excludeId } = {}) {
   const fornecedorId = fornecedor_id || '';
   const nfDigits = normalizeNfNumber(nf_numero);
@@ -231,12 +245,22 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
 
   let query = supabase
     .from('recebimentos')
-    .select('id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
+    .select('id,portaria_id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
     .neq('status', 'cancelada');
 
   if (excludeId) query = query.neq('id', excludeId);
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error && isMissingColumn(error, 'portaria_id')) {
+    query = supabase
+      .from('recebimentos')
+      .select('id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
+      .neq('status', 'cancelada');
+    if (excludeId) query = query.neq('id', excludeId);
+    const fallback = await query;
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) throw error;
 
   const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
