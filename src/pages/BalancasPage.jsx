@@ -486,7 +486,9 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     }
 
     if (existing?.id) {
-      await updateRecebimento(existing.id, { dispensa_laboratorio: true });
+      const existingPayload = { dispensa_laboratorio: true };
+      if (!isRecebimentoFinalizadoBalanca(existing)) existingPayload.status = 'pendente';
+      await updateRecebimento(existing.id, existingPayload);
       await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
       return existing;
     }
@@ -508,7 +510,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       peso_nf: normalizarQuantidadeParaKg(row.peso_nf_kg, row.unidade_nota || 'KG', 60) ?? row.peso_nf_kg,
       peso_bruto: 0,
       tara: 0,
-      status: 'aprovada',
+      status: 'pendente',
       dispensa_laboratorio: true,
       observacao: row.observacao,
     };
@@ -3439,6 +3441,14 @@ function SupplierMoistureTooltip({ active, payload }) {
 }
 
 function StatusBadge({ row }) {
+  if (hasDispensaLaboratorio(row) && !isRecebimentoFinalizadoBalanca(row)) {
+    return (
+      <span className="inline-flex max-w-64 rounded-md bg-sky-100 px-2 py-1 text-xs font-bold leading-snug text-sky-800 ring-1 ring-sky-200">
+        Direto para Recebimentos - Pendente finalizar recebimento
+      </span>
+    );
+  }
+
   if (isLaboratorioPendenteBalanca(row)) {
     return (
       <span className="inline-flex max-w-64 rounded-md bg-amber-100 px-2 py-1 text-xs font-bold leading-snug text-amber-800 ring-1 ring-amber-200">
@@ -4680,6 +4690,7 @@ function recebimentoRowClass(row) {
 }
 
 function recebimentoStatusLabel(row) {
+  if (hasDispensaLaboratorio(row) && !isRecebimentoFinalizadoBalanca(row)) return 'Direto para Recebimentos - Pendente finalizar recebimento';
   if (isLaboratorioPendenteBalanca(row)) return 'Aprovado pelo Laboratório - Pendente finalizar recebimento';
   if (isRecebimentoFinalizadoBalanca(row)) return 'Aprovada balança';
   return statusLabel(row.status);
