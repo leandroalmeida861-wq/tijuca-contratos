@@ -473,6 +473,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     }
 
     if (existing?.id) {
+      await updateRecebimento(existing.id, { dispensa_laboratorio: true });
       await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
       return existing;
     }
@@ -1732,7 +1733,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const canCancel = can('balancas', 'cancelar');
   const canExport = can('balancas', 'exportar');
   const canManageManualRelease = canCreate || canEdit;
-  const laboratorioRows = rows.filter((row) => !row.dispensa_laboratorio);
+  const laboratorioRows = rows.filter((row) => !hasDispensaLaboratorio(row));
   const pending = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'pendente'));
   const analyzed = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
 
@@ -4634,9 +4635,17 @@ function rowDateTimeValue(row) {
 
 function isLaboratorioPendenteBalanca(row) {
   return row.status === 'aprovada'
-    && !row.dispensa_laboratorio
+    && !hasDispensaLaboratorio(row)
     && (row.veiculo_id || row.veiculo_placa_manual)
     && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
+}
+
+function hasDispensaLaboratorio(row) {
+  return Boolean(
+    row?.dispensa_laboratorio
+    || row?.portaria?.dispensa_laboratorio
+    || row?.portaria?.status === 'ENVIADO_RECEBIMENTO',
+  );
 }
 
 function isSemLaboratorio(value) {
