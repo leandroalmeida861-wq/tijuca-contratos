@@ -554,6 +554,10 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
   }
 
   async function sendToLab(row) {
+    if (row.dispensa_laboratorio) {
+      setError('Esta entrada esta marcada como "Nao passa pelo laboratorio" e deve seguir diretamente para Recebimentos.');
+      return;
+    }
     if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return;
     try {
       setError('');
@@ -1728,8 +1732,9 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const canCancel = can('balancas', 'cancelar');
   const canExport = can('balancas', 'exportar');
   const canManageManualRelease = canCreate || canEdit;
-  const pending = sortRecebimentoRows(rows.filter((row) => row.status === 'pendente'));
-  const analyzed = sortRecebimentoRows(rows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
+  const laboratorioRows = rows.filter((row) => !row.dispensa_laboratorio);
+  const pending = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'pendente'));
+  const analyzed = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
 
   function updateEdit(id, field, value) {
     setEdits((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
