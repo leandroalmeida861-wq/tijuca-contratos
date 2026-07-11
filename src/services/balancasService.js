@@ -154,6 +154,8 @@ export async function listPortariaEntradas() {
   const { data, error } = await supabase
     .from('portaria_entradas')
     .select(PORTARIA_SELECT)
+    .order('data_entrada', { ascending: false })
+    .order('hora_entrada', { ascending: false })
     .order('created_at', { ascending: false });
   if (error && isMissingPortariaTable(error)) return [];
   if (error) throw error;
