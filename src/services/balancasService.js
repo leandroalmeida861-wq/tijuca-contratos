@@ -133,7 +133,11 @@ export async function listLookup(table, orderColumn = 'nome') {
 }
 
 export async function listRecebimentos(filters = {}) {
-  let query = supabase.from('recebimentos').select(RECEBIMENTO_SELECT).order('created_at', { ascending: false });
+  let query = supabase
+    .from('recebimentos')
+    .select(RECEBIMENTO_SELECT)
+    .order('data', { ascending: false })
+    .order('created_at', { ascending: false });
 
   if (filters.dataInicial) query = query.gte('data', filters.dataInicial);
   if (filters.dataFinal) query = query.lte('data', filters.dataFinal);

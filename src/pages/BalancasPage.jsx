@@ -4643,7 +4643,7 @@ function sortRecebimentoRows(rows) {
   return [...rows].sort((a, b) => {
     const priorityDiff = recebimentoSortPriority(a) - recebimentoSortPriority(b);
     if (priorityDiff) return priorityDiff;
-    return rowDateTimeValue(b) - rowDateTimeValue(a);
+    return compareOperationalDateTimeDesc(a, b);
   });
 }
 
@@ -4665,11 +4665,15 @@ function recebimentoSortPriority(row) {
   return 2;
 }
 
-function rowDateTimeValue(row) {
-  const dateValue = row.data ? new Date(`${row.data}T00:00:00`).getTime() : 0;
-  const tieBreaker = row.created_at ? new Date(row.created_at).getTime() / 100000000 : 0;
-  const value = dateValue + tieBreaker;
-  return Number.isFinite(value) ? value : 0;
+function compareOperationalDateTimeDesc(a, b) {
+  const dateDiff = String(b.data || '').localeCompare(String(a.data || ''));
+  if (dateDiff) return dateDiff;
+
+  const createdAtA = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const createdAtB = b.created_at ? new Date(b.created_at).getTime() : 0;
+  if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+
+  return String(b.id || '').localeCompare(String(a.id || ''));
 }
 
 function isLaboratorioPendenteBalanca(row) {
