@@ -62,6 +62,7 @@ import { parseNfeRecebimento } from '../lib/nfeRecebimento.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../lib/formatters.js';
+import { fortalezaDateIso, fortalezaTime } from '../lib/fortalezaDateTime.js';
 
 const UMIDADE_LIMITE = 14;
 const SCORE_WEIGHTS = {
@@ -157,8 +158,8 @@ const defaultRecebimento = {
 };
 
 const defaultPortariaForm = {
-  data_entrada: todayIso(),
-  hora_entrada: currentTime(),
+  data_entrada: fortalezaDateIso(),
+  hora_entrada: fortalezaTime(),
   balanca_id: '',
   placa: '',
   veiculo_id: '',
@@ -374,7 +375,6 @@ function portariaDisplayRow(row) {
 
   return {
     ...row,
-    data_entrada: recebimento.data || row.data_entrada,
     balanca_id: recebimento.balanca_id || row.balanca_id,
     balanca: recebimento.balanca || row.balanca,
     placa: placaVeiculo(recebimento, row.placa),
@@ -509,7 +509,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
 
   function openNew() {
     setEditing(null);
-    setForm(defaultPortariaForm);
+    setForm({ ...defaultPortariaForm, data_entrada: fortalezaDateIso(), hora_entrada: fortalezaTime() });
     setFieldErrors({});
     setFormOpen(true);
   }
@@ -618,7 +618,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       }
       setFormOpen(false);
       setEditing(null);
-      setForm(defaultPortariaForm);
+      setForm({ ...defaultPortariaForm, data_entrada: fortalezaDateIso(), hora_entrada: fortalezaTime() });
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -3927,8 +3927,8 @@ function portariaRowToForm(row) {
   if (!row) return { ...defaultPortariaForm };
   return {
     ...defaultPortariaForm,
-    data_entrada: row.data_entrada || todayIso(),
-    hora_entrada: row.hora_entrada?.slice(0, 5) || currentTime(),
+    data_entrada: row.data_entrada || fortalezaDateIso(),
+    hora_entrada: row.hora_entrada?.slice(0, 5) || fortalezaTime(),
     balanca_id: row.balanca_id || '',
     placa: row.placa || '',
     veiculo_id: row.veiculo_id || '',
