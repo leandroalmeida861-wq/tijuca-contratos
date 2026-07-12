@@ -217,14 +217,19 @@ export default function BalancasPage() {
       setError('');
     }
     try {
-      const [nextOptions, nextRows, nextPortariaRows] = await Promise.all([
+      const nextRowsPromise = listRecebimentos(customFilters);
+      const portariaRecebimentosPromise = hasActiveBalancasFilters(customFilters)
+        ? listRecebimentos({ origemPortaria: 'com_portaria' })
+        : nextRowsPromise;
+      const [nextOptions, nextRows, nextPortariaRows, portariaRecebimentos] = await Promise.all([
         loadBalancasOptions(),
-        listRecebimentos(customFilters),
+        nextRowsPromise,
         listPortariaEntradas(),
+        portariaRecebimentosPromise,
       ]);
       setOptions(nextOptions);
       setRows(attachPortariaRows(nextRows, nextPortariaRows));
-      setPortariaRows(nextPortariaRows);
+      setPortariaRows(attachRecebimentosToPortarias(nextPortariaRows, portariaRecebimentos));
     } catch (err) {
       if (!silent) setError(toUserError(err));
     } finally {
@@ -337,6 +342,69 @@ function attachPortariaRows(recebimentos = [], portarias = []) {
       ? { ...row, portaria: portariaById.get(row.portaria_id) }
       : row
   ));
+}
+
+function hasActiveBalancasFilters(filters = {}) {
+  return Object.values(filters || {}).some(Boolean);
+}
+
+function attachRecebimentosToPortarias(portarias = [], recebimentos = []) {
+  if (!Array.isArray(portarias) || !portarias.length) return portarias || [];
+
+  const recebimentoByPortariaId = new Map();
+  (recebimentos || []).forEach((row) => {
+    if (!row.portaria_id) return;
+    const current = recebimentoByPortariaId.get(row.portaria_id);
+    if (!current || (current.status === 'cancelada' && row.status !== 'cancelada')) {
+      recebimentoByPortariaId.set(row.portaria_id, row);
+    }
+  });
+
+  return portarias
+    .map((row) => ({ ...row, recebimento: recebimentoByPortariaId.get(row.id) || null }))
+    .sort((a, b) => comparePortariaOperationalDateTimeDesc(portariaDisplayRow(a), portariaDisplayRow(b)));
+}
+
+function portariaDisplayRow(row) {
+  const recebimento = row?.recebimento;
+  if (!recebimento) return row;
+  const hasManualSupplier = Boolean(recebimento.fornecedor_nome_manual);
+  const hasManualProduct = Boolean(recebimento.produto_nome_manual);
+  const hasManualVehicle = Boolean(recebimento.veiculo_placa_manual);
+
+  return {
+    ...row,
+    data_entrada: recebimento.data || row.data_entrada,
+    balanca_id: recebimento.balanca_id || row.balanca_id,
+    balanca: recebimento.balanca || row.balanca,
+    placa: placaVeiculo(recebimento, row.placa),
+    veiculo_id: hasManualVehicle ? null : recebimento.veiculo_id || row.veiculo_id,
+    veiculo: hasManualVehicle ? null : recebimento.veiculo || row.veiculo,
+    motorista_id: recebimento.motorista_id || row.motorista_id,
+    motorista: recebimento.motorista || row.motorista,
+    transportadora_id: recebimento.transportadora_id || row.transportadora_id,
+    transportadora: recebimento.transportadora || row.transportadora,
+    fornecedor_id: hasManualSupplier ? null : recebimento.fornecedor_id || row.fornecedor_id,
+    fornecedor: hasManualSupplier ? null : recebimento.fornecedor || row.fornecedor,
+    fornecedor_nome_sincronizado: fornecedorNome(recebimento, ''),
+    produto_id: hasManualProduct ? null : recebimento.produto_id || row.produto_id,
+    produto: hasManualProduct ? null : recebimento.produto || row.produto,
+    produto_nome_sincronizado: produtoNome(recebimento, ''),
+    numero_nf: recebimento.nf_numero || row.numero_nf,
+    peso_nf_kg: recebimento.quantidade_nota ?? recebimento.peso_nf ?? row.peso_nf_kg,
+    unidade_nota: recebimento.unidade_nota || row.unidade_nota,
+    tipo_veiculo: recebimento.tipo_veiculo || recebimento.veiculo?.tipo_veiculo || row.tipo_veiculo,
+    qtd_eixos: recebimento.qtd_eixos ?? recebimento.veiculo?.qtd_eixos ?? row.qtd_eixos,
+    observacao: recebimento.observacao ?? row.observacao,
+  };
+}
+
+function comparePortariaOperationalDateTimeDesc(a, b) {
+  const dateDiff = String(b?.data_entrada || '').localeCompare(String(a?.data_entrada || ''));
+  if (dateDiff) return dateDiff;
+  const timeDiff = String(b?.hora_entrada || '').localeCompare(String(a?.hora_entrada || ''));
+  if (timeDiff) return timeDiff;
+  return String(b?.created_at || '').localeCompare(String(a?.created_at || ''));
 }
 
 function balancasTabMenu(tabKey) {
@@ -697,20 +765,22 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
           <tbody>
             {loading ? (
               <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Carregando portaria...</td></tr>
-            ) : rows.length ? rows.map((row) => (
+            ) : rows.length ? rows.map((row) => {
+              const displayRow = portariaDisplayRow(row);
+              return (
               <tr key={row.id} className="border-b last:border-0">
-                <td className="px-3 py-3 font-semibold">{dateBr(row.data_entrada)} {row.hora_entrada?.slice(0, 5) || ''}</td>
-                <td className="px-3 py-3">{balancaNome(row, options)}</td>
-                <td className="px-3 py-3 font-extrabold">{row.placa}</td>
-                <td className="px-3 py-3">{row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'}</td>
-                <td className="px-3 py-3">{row.motorista?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.fornecedor?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.produto?.nome || '-'}</td>
-                <td className="px-3 py-3">{row.numero_nf}/{row.serie_nf}</td>
-                <td className="px-3 py-3">{formatPortariaQuantidade(row)}</td>
+                <td className="px-3 py-3 font-semibold">{dateBr(displayRow.data_entrada)} {displayRow.hora_entrada?.slice(0, 5) || ''}</td>
+                <td className="px-3 py-3">{balancaNome(displayRow, options)}</td>
+                <td className="px-3 py-3 font-extrabold">{displayRow.placa}</td>
+                <td className="px-3 py-3">{displayRow.tipo_veiculo || displayRow.veiculo?.tipo_veiculo || '-'}</td>
+                <td className="px-3 py-3">{displayRow.motorista?.nome || '-'}</td>
+                <td className="px-3 py-3">{displayRow.fornecedor_nome_sincronizado || displayRow.fornecedor?.nome || '-'}</td>
+                <td className="px-3 py-3">{displayRow.produto_nome_sincronizado || displayRow.produto?.nome || '-'}</td>
+                <td className="px-3 py-3">{displayRow.numero_nf}/{displayRow.serie_nf}</td>
+                <td className="px-3 py-3">{formatPortariaQuantidade(displayRow)}</td>
                 <td className="px-3 py-3">
                   <div className="flex flex-col items-start gap-1">
-                    <PortariaStatus status={row.status} />
+                    <PortariaStatus status={row.status} recebimento={row.recebimento} />
                     {row.dispensa_laboratorio && <span className="rounded-md bg-sky-100 px-2 py-1 text-xs font-bold text-sky-700 ring-1 ring-sky-200">Direto para recebimento</span>}
                   </div>
                 </td>
@@ -723,7 +793,8 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
                   </div>
                 </td>
               </tr>
-            )) : (
+              );
+            }) : (
               <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada cadastrada.</td></tr>
             )}
           </tbody>
@@ -736,20 +807,27 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
 }
 
 function PortariaViewModal({ row, options, onClose }) {
+  const displayRow = portariaDisplayRow(row);
+  const recebimento = row.recebimento;
   const fields = [
-    ['Data/Hora', `${dateBr(row.data_entrada)} ${row.hora_entrada?.slice(0, 5) || ''}`],
-    ['Balança', balancaNome(row, options)],
-    ['Placa', row.placa],
-    ['Veículo', row.tipo_veiculo || row.veiculo?.tipo_veiculo || '-'],
-    ['Motorista', row.motorista?.nome || '-'],
-    ['Transportadora', row.transportadora?.nome || '-'],
-    ['Fornecedor', row.fornecedor?.nome || '-'],
-    ['CNPJ / CPF', formatDocument(row.cnpj_fornecedor)],
-    ['Produto', row.produto?.nome || '-'],
-    ['NF/Série', `${row.numero_nf || '-'}/${row.serie_nf || '-'}`],
-    ['Peso - Quantidade', formatPortariaQuantidade(row)],
-    ['Status', row.status || '-'],
-    ['Observação', row.observacao || '-'],
+    ['Data/Hora', `${dateBr(displayRow.data_entrada)} ${displayRow.hora_entrada?.slice(0, 5) || ''}`],
+    ['Balança', balancaNome(displayRow, options)],
+    ['Placa', displayRow.placa],
+    ['Veículo', displayRow.tipo_veiculo || displayRow.veiculo?.tipo_veiculo || '-'],
+    ['Motorista', displayRow.motorista?.nome || '-'],
+    ['Transportadora', displayRow.transportadora?.nome || '-'],
+    ['Fornecedor', displayRow.fornecedor_nome_sincronizado || displayRow.fornecedor?.nome || '-'],
+    ['CNPJ / CPF', formatDocument(displayRow.fornecedor?.cnpj || displayRow.cnpj_fornecedor)],
+    ['Produto', displayRow.produto_nome_sincronizado || displayRow.produto?.nome || '-'],
+    ['NF/Série', `${displayRow.numero_nf || '-'}/${displayRow.serie_nf || '-'}`],
+    ['Peso - Quantidade', formatPortariaQuantidade(displayRow)],
+    ['Status', recebimento ? recebimentoStatusLabel(recebimento) : displayRow.status || '-'],
+    ...(recebimento ? [
+      ['Laboratório', recebimento.laboratorio?.nome || '-'],
+      ['Umidade', humidityText(recebimento)],
+      ['Responsável', recebimento.liberado_por || '-'],
+    ] : []),
+    ['Observação', displayRow.observacao || '-'],
   ];
 
   return (
@@ -758,7 +836,7 @@ function PortariaViewModal({ row, options, onClose }) {
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <h2 className="text-lg font-extrabold text-slate-950">Entrada da Portaria</h2>
-            <p className="text-sm font-semibold text-slate-500">NF {row.numero_nf || '-'} - {row.placa || '-'}</p>
+            <p className="text-sm font-semibold text-slate-500">NF {displayRow.numero_nf || '-'} - {displayRow.placa || '-'}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
         </div>
@@ -1876,14 +1954,38 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
 
     setSavingLab(true);
     try {
+      const currentRow = editingLabId ? rows.find((row) => row.id === editingLabId) : null;
+      if (editingLabId && !currentRow) {
+        throw new Error('O recebimento editado não foi encontrado. Atualize os dados e tente novamente.');
+      }
+      const baseForm = currentRow ? rowToForm(currentRow) : defaultRecebimento;
+      const supplierChanged = !currentRow
+        || normalizeName(labForm.fornecedor_nome_manual) !== normalizeName(fornecedorNome(currentRow, ''));
+      const vehicleChanged = !currentRow
+        || normalizePlate(labForm.veiculo_placa_manual) !== normalizePlate(placaVeiculo(currentRow, ''));
+      const productChanged = !currentRow
+        || normalizeProductName(labForm.produto_nome_manual) !== normalizeProductName(produtoNome(currentRow, ''));
+      const resolvedProduct = resolveManualProductFields(labForm.produto_nome_manual, options.produtos);
+      const currentItems = ensureRecebimentoItems(baseForm);
+      const syncedItems = productChanged
+        ? currentItems.map((item, index) => index === 0 ? {
+          ...item,
+          produto_id: resolvedProduct.produto_id || '',
+          produto_nome_manual: resolvedProduct.produto_id ? '' : labForm.produto_nome_manual,
+        } : item)
+        : currentItems;
       const payload = {
         ...normalizeRecebimentoPayload({
-          ...defaultRecebimento,
+          ...baseForm,
           ...labForm,
-          ...resolveManualProductFields(labForm.produto_nome_manual, options.produtos),
-          peso_bruto: 0,
-          tara: 0,
-          peso_nf: '',
+          fornecedor_id: supplierChanged ? '' : baseForm.fornecedor_id,
+          fornecedor_nome_manual: supplierChanged ? labForm.fornecedor_nome_manual : baseForm.fornecedor_nome_manual,
+          veiculo_id: vehicleChanged ? '' : baseForm.veiculo_id,
+          veiculo_placa_manual: vehicleChanged ? labForm.veiculo_placa_manual : baseForm.veiculo_placa_manual,
+          itens: syncedItems,
+          peso_bruto: currentRow ? baseForm.peso_bruto : 0,
+          tara: currentRow ? baseForm.tara : 0,
+          peso_nf: currentRow ? baseForm.peso_nf : '',
         }),
         status: labForm.status || 'aprovada',
         motivo_reprovacao: labForm.status === 'reprovada' ? labForm.motivo_reprovacao : null,
@@ -3475,7 +3577,21 @@ function StatusBadge({ row }) {
   );
 }
 
-function PortariaStatus({ status }) {
+function PortariaStatus({ status, recebimento }) {
+  if (recebimento && status !== 'CANCELADA') {
+    const classesByStatus = {
+      pendente: 'bg-amber-100 text-amber-700 ring-amber-200',
+      aprovada: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+      reprovada: 'bg-rose-100 text-rose-700 ring-rose-200',
+      cancelada: 'bg-slate-100 text-slate-700 ring-slate-200',
+    };
+    return (
+      <span className={`max-w-64 rounded-md px-2 py-1 text-xs font-bold leading-snug ring-1 ${classesByStatus[recebimento.status] || classesByStatus.pendente}`}>
+        {recebimentoStatusLabel(recebimento)}
+      </span>
+    );
+  }
+
   const labels = {
     AGUARDANDO_LABORATORIO: 'Aguardando laboratório',
     ENVIADO_LABORATORIO: 'Enviado ao laboratório',
