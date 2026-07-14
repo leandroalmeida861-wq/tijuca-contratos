@@ -82,7 +82,9 @@ const migration = await readFile(new URL('../supabase/armazenagem-materia-prima.
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
 const permissions = await readFile(new URL('../src/lib/permissions.js', import.meta.url), 'utf8');
 const immutableLinkMigration = await readFile(new URL('../supabase/armazenagem-vinculo-id-imutavel.sql', import.meta.url), 'utf8');
+const atomicSaveMigration = await readFile(new URL('../supabase/armazenagem-salvar-atomico.sql', import.meta.url), 'utf8');
 const storagePage = await readFile(new URL('../src/components/balancas/ArmazenagemTab.jsx', import.meta.url), 'utf8');
+const storageService = await readFile(new URL('../src/services/armazenagemService.js', import.meta.url), 'utf8');
 const service = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 
 for (const required of [
@@ -104,6 +106,14 @@ assert.ok(immutableLinkMigration.includes('new.recebimento_id is distinct from o
 assert.ok(immutableLinkMigration.includes("raise exception 'RECEBIMENTO_ID_ARMAZENAGEM_IMUTAVEL'"));
 assert.ok(storagePage.includes('key={modal.record.id || modal.record.recebimento_id}'), 'Modal deve reiniciar pelo ID selecionado');
 assert.ok(storagePage.includes('key={row.id || row.recebimento_id}'), 'Linha deve ter chave estável e única');
+assert.ok(storagePage.includes('const record = isNew && !readOnly ? draftStorageRecord(row) : row;'), 'Abrir a edição deve criar apenas um rascunho local');
+assert.ok(!storagePage.includes('await iniciarArmazenagem(row.recebimento_id)'), 'Abrir ou fechar o modal não pode gravar no banco');
+assert.ok(storagePage.includes('Baixar relatório em PDF'), 'Mês fechado deve oferecer o PDF mensal');
+assert.ok(storagePage.includes("month.status !== 'FECHADO') return"), 'PDF mensal deve aceitar somente mês fechado');
+assert.ok(storageService.includes("rpc('agroflow_armazenagem_salvar_recebimento'"), 'Primeiro salvamento deve usar a operação atômica');
+assert.ok(atomicSaveMigration.includes('v_armazenagem_id := public.agroflow_armazenagem_iniciar(p_recebimento_id);'));
+assert.ok(atomicSaveMigration.includes('return public.agroflow_armazenagem_salvar('), 'Criação e salvamento devem compartilhar a mesma transação');
+assert.ok(atomicSaveMigration.includes('revoke all on function public.agroflow_armazenagem_salvar_recebimento'));
 assert.ok(page.includes("key={editing?.id || 'novo-recebimento'}"), 'Formulário deve reiniciar ao trocar de recebimento');
 assert.ok(service.includes(".update(cleanedPayload)\n    .eq('id', id)"), 'Portaria deve atualizar pelo ID');
 assert.ok(service.includes(".update(cleanedPayload).eq('id', id)"), 'Recebimento deve atualizar pelo ID');

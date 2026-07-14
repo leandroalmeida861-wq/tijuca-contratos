@@ -118,13 +118,19 @@ export async function salvarArmazenagem({ id, dataArmazenagem, observacao, distr
     p_armazenagem_id: id,
     p_data_armazenagem: dataArmazenagem,
     p_observacao: observacao || null,
-    p_distribuicoes: (distribuicoes || []).map((item) => ({
-      armazenagem_item_id: item.armazenagem_item_id,
-      silo: String(item.silo || '').trim() || null,
-      baia: String(item.baia || '').trim() || null,
-      peso_armazenado: localeNumber(item.peso_armazenado),
-      observacao: String(item.observacao || '').trim() || null,
-    })),
+    p_distribuicoes: serializeDistributions(distribuicoes),
+  });
+  if (error) throw error;
+  return getArmazenagem(data);
+}
+
+export async function salvarNovaArmazenagem({ recebimentoId, dataArmazenagem, observacao, distribuicoes }) {
+  requireRecordId(recebimentoId, 'recebimento');
+  const { data, error } = await supabase.rpc('agroflow_armazenagem_salvar_recebimento', {
+    p_recebimento_id: recebimentoId,
+    p_data_armazenagem: dataArmazenagem,
+    p_observacao: observacao || null,
+    p_distribuicoes: serializeDistributions(distribuicoes, true),
   });
   if (error) throw error;
   return getArmazenagem(data);
@@ -223,4 +229,15 @@ function localeNumber(value) {
     : text;
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
+}
+
+function serializeDistributions(distributions, includeItemOrder = false) {
+  return (distributions || []).map((item) => ({
+    armazenagem_item_id: item.armazenagem_item_id,
+    ...(includeItemOrder ? { item_ordem: Number(item.item_ordem || 0) } : {}),
+    silo: String(item.silo || '').trim() || null,
+    baia: String(item.baia || '').trim() || null,
+    peso_armazenado: localeNumber(item.peso_armazenado),
+    observacao: String(item.observacao || '').trim() || null,
+  }));
 }

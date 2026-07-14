@@ -34,11 +34,12 @@ import { dateBr, kg } from '../../lib/formatters.js';
 import {
   cancelarArmazenagem,
   fecharMesArmazenagem,
-  iniciarArmazenagem,
   listArmazenagemData,
   mergeRecebimentosArmazenagens,
+  notaItemPesoKg,
   reabrirMesArmazenagem,
   salvarArmazenagem,
+  salvarNovaArmazenagem,
   toArmazenagemError,
 } from '../../services/armazenagemService.js';
 
@@ -158,16 +159,13 @@ export default function ArmazenagemTab({ can }) {
     setError('');
     try {
       const isNew = !row.id;
-      const record = readOnly && isNew
-        ? row
-        : row.id ? row : await iniciarArmazenagem(row.recebimento_id);
+      const record = isNew && !readOnly ? draftStorageRecord(row) : row;
       setModal({
         type: readOnly ? 'view' : 'form',
         record,
         form: storageForm(record),
         isNew,
       });
-      if (!readOnly && isNew) await load({ silent: true });
     } catch (openError) {
       setError(toArmazenagemError(openError));
     }
@@ -312,6 +310,7 @@ export default function ArmazenagemTab({ can }) {
         busy={closing}
         onClose={handleCloseMonth}
         onReopen={handleReopenMonth}
+        onDownloadPdf={exportClosedMonthPdf}
       />
 
       {modal && (
@@ -431,6 +430,7 @@ function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
             const products = productNames(row);
             const silos = distributionValues(row, 'silo');
             const bays = distributionValues(row, 'baia');
+            const saved = hasSavedDistribution(row);
             return (
               <tr key={row.id || row.recebimento_id} className="border-t border-slate-200 align-top hover:bg-slate-50">
                 <td className="px-3 py-3 whitespace-nowrap">{dateBr(row.data_armazenagem || row.recebimento?.data)}</td>
@@ -445,8 +445,8 @@ function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
                 <td className="px-3 py-3">{silos}</td>
                 <td className="px-3 py-3">{bays}</td>
                 <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
-                <td className="max-w-36 px-3 py-3">{row.updated_by_nome || row.created_by_nome || '-'}</td>
-                <td className="px-3 py-3 whitespace-nowrap">{dateTimeBr(row.updated_at || row.created_at)}</td>
+                <td className="max-w-36 px-3 py-3">{saved ? row.updated_by_nome || row.created_by_nome || '-' : '-'}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{saved ? dateTimeBr(row.updated_at || row.created_at) : '-'}</td>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-1">
                     <IconButton title="Visualizar" onClick={() => onView(row)}><Eye className="h-4 w-4" /></IconButton>
@@ -497,12 +497,19 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
     }
     setSaving(true);
     try {
-      await salvarArmazenagem({
-        id: record.id,
+      const payload = {
         dataArmazenagem: form.data_armazenagem,
         observacao: form.observacao,
-        distribuicoes: form.distribuicoes,
-      });
+        distribuicoes: form.distribuicoes.map((distribution) => ({
+          ...distribution,
+          item_ordem: record.itens?.find((item) => item.id === distribution.armazenagem_item_id)?.ordem,
+        })),
+      };
+      if (modal.isNew) {
+        await salvarNovaArmazenagem({ recebimentoId: record.recebimento_id, ...payload });
+      } else {
+        await salvarArmazenagem({ id: record.id, ...payload });
+      }
       await onSaved();
     } catch (saveError) {
       onError(saveError);
@@ -573,7 +580,7 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
   );
 }
 
-function MonthlyClosing({ year, rows, can, isAdmin, busy, onClose, onReopen }) {
+function MonthlyClosing({ year, rows, can, isAdmin, busy, onClose, onReopen, onDownloadPdf }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
       <div><h2 className="text-base font-extrabold uppercase text-slate-800">Fechamento mensal · {year}</h2><p className="mt-1 text-sm text-slate-500">O fechamento bloqueia alterações no período. Reabertura somente pelo Admin, com justificativa auditada.</p></div>
@@ -583,8 +590,9 @@ function MonthlyClosing({ year, rows, can, isAdmin, busy, onClose, onReopen }) {
             <div className="flex items-start justify-between gap-2"><h3 className="font-extrabold text-slate-900">{month.nome}</h3><span className={`rounded px-2 py-1 text-xs font-extrabold ${month.status === 'FECHADO' ? 'bg-slate-800 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{month.status === 'FECHADO' ? 'Fechado' : 'Aberto'}</span></div>
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs"><Summary label="Cargas" value={month.cargas} /><Summary label="Produtos" value={month.produtos} /><Summary label="Peso NF" value={kg(month.pesoNota)} /><Summary label="Armazenado" value={kg(month.armazenado)} /><Summary label="Saldo" value={kg(month.saldo)} /><Summary label="Silos / Baias" value={`${month.silos} / ${month.baias}`} /></dl>
             {month.status === 'FECHADO' && <p className="mt-3 text-xs text-slate-500">Fechado por {month.fechamento?.fechado_por_nome || '-'} em {dateTimeBr(month.fechamento?.fechado_em)}</p>}
-            <div className="mt-3">
+            <div className={`mt-3 grid gap-2 ${month.status === 'FECHADO' && isAdmin && can('balancas', 'exportar') ? 'grid-cols-2' : ''}`}>
               {month.status !== 'FECHADO' && can('balancas', 'aprovar') && <button type="button" className={`${BUTTON_SECONDARY} w-full`} disabled={busy} onClick={() => onClose(month)}><CalendarCheck className="h-4 w-4" /> Fechar mês</button>}
+              {month.status === 'FECHADO' && can('balancas', 'exportar') && <button type="button" className={`${BUTTON_SECONDARY} w-full`} onClick={() => onDownloadPdf(month)}><Download className="h-4 w-4" /> Baixar relatório em PDF</button>}
               {month.status === 'FECHADO' && isAdmin && <button type="button" className={`${BUTTON_SECONDARY} w-full`} disabled={busy} onClick={() => onReopen(month)}><RotateCcw className="h-4 w-4" /> Reabrir mês</button>}
             </div>
           </article>
@@ -634,6 +642,36 @@ function storageForm(record) {
     observacao: record.observacao || '',
     distribuicoes: distributions.length ? distributions : [emptyDistribution(record.itens?.[0]?.id)],
   };
+}
+
+function draftStorageRecord(row) {
+  const receiptItems = row.recebimento?.itens || [];
+  const items = receiptItems.length
+    ? receiptItems.map((item, index) => {
+      const weight = notaItemPesoKg(item.quantidade, item.unidade, row.recebimento?.peso_por_saca);
+      return {
+        id: item.id,
+        recebimento_item_id: item.id,
+        produto_id: item.produto_id,
+        produto: item.produto,
+        ordem: Number(item.ordem || index + 1),
+        peso_nota: weight,
+        peso_distribuido: 0,
+        saldo_distribuir: weight,
+        distribuicoes: [],
+      };
+    })
+    : [{
+      id: `draft-${row.recebimento_id}`,
+      produto_id: row.recebimento?.produto_id,
+      produto: row.recebimento?.produto,
+      ordem: 1,
+      peso_nota: Number(row.peso_nota || 0),
+      peso_distribuido: 0,
+      saldo_distribuir: Number(row.peso_nota || 0),
+      distribuicoes: [],
+    }];
+  return { ...row, itens };
 }
 
 function emptyDistribution(itemId = '') {
@@ -736,7 +774,16 @@ function buildMonthlyClosures(rows, closures, year) {
     const metrics = calculateMetrics(monthRows);
     const products = new Set(monthRows.flatMap((row) => (row.itens || []).map((item) => item.produto_id || item.produto?.nome).filter(Boolean)));
     const closure = closures.find((item) => Number(item.ano) === year && Number(item.mes) === month);
-    return { ano: year, mes: month, nome: name, ...metrics, produtos: products.size, fechamento: closure, status: closure?.status === 'FECHADO' ? 'FECHADO' : 'ABERTO' };
+    return {
+      ano: year,
+      mes: month,
+      nome: name,
+      ...metrics,
+      produtos: products.size,
+      registros: monthRows,
+      fechamento: closure,
+      status: closure?.status === 'FECHADO' ? 'FECHADO' : 'ABERTO',
+    };
   });
 }
 
@@ -761,6 +808,59 @@ function exportPdf(rows, filters) {
   });
   doc.setFontSize(10); doc.text(`Peso total da NF: ${kg(sum(rows, 'peso_nota'))} | Total armazenado: ${kg(sum(rows, 'peso_distribuido'))} | Saldo: ${kg(sum(rows, 'saldo_distribuir'))}`, 12, Math.min(y + 4, 198));
   doc.save('relatorio-armazenagem-mp.pdf');
+}
+
+function exportClosedMonthPdf(month) {
+  if (month.status !== 'FECHADO') return;
+  const prefix = `${month.ano}-${String(month.mes).padStart(2, '0')}`;
+  const rows = (month.registros || []).filter((row) => {
+    const date = row.data_armazenagem || row.recebimento?.data || '';
+    return date.startsWith(prefix) && row.status !== 'CANCELADO';
+  });
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = 14;
+
+  function addText(text, options = {}) {
+    const { size = 9, bold = false, indent = 12, gap = 5, maxWidth = pageWidth - indent - 12 } = options;
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(size);
+    const lines = doc.splitTextToSize(String(text || '-'), maxWidth);
+    const needed = lines.length * gap;
+    if (y + needed > pageHeight - 12) {
+      doc.addPage();
+      y = 14;
+    }
+    doc.text(lines, indent, y);
+    y += needed;
+  }
+
+  addText('AgroFlow - Relatório Mensal de Armazenagem M.P.', { size: 16, bold: true, gap: 7 });
+  addText(`Período: ${month.nome}/${month.ano} | Situação: Fechado`, { size: 11, bold: true, gap: 6 });
+  addText(`Fechado em: ${dateTimeBr(month.fechamento?.fechado_em)} | Responsável pelo fechamento: ${month.fechamento?.fechado_por_nome || '-'}`);
+  if (month.fechamento?.justificativa_pendencias) {
+    addText(`Observação do fechamento: ${month.fechamento.justificativa_pendencias}`);
+  }
+  addText(`Cargas: ${rows.length} | Produtos: ${month.produtos} | Peso da NF: ${kg(sum(rows, 'peso_nota'))} | Armazenado: ${kg(sum(rows, 'peso_distribuido'))} | Saldo: ${kg(sum(rows, 'saldo_distribuir'))}`, { bold: true, gap: 6 });
+  y += 2;
+
+  rows.forEach((row, index) => {
+    addText(`${index + 1}. ${dateBr(row.data_armazenagem || row.recebimento?.data)} | NF ${row.recebimento?.nf_numero || '-'} | ${row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '-'}`, { bold: true, gap: 5 });
+    addText(`Placa: ${row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'} | Transportadora: ${row.recebimento?.transportadora?.nome || row.recebimento?.tipo_veiculo || '-'} | Status: ${statusText(row.status)}`, { indent: 18 });
+    (row.itens || []).forEach((item) => {
+      addText(`Matéria-prima: ${item.produto?.nome || row.recebimento?.produto_nome_manual || '-'} | Peso da NF: ${kg(item.peso_nota)} | Distribuído: ${kg(item.peso_distribuido)} | Saldo: ${kg(item.saldo_distribuir)}`, { indent: 18 });
+      (item.distribuicoes || []).forEach((distribution) => {
+        addText(`Movimentação: ${kg(distribution.peso_armazenado)} | Silo: ${distribution.silo || '-'} | Baia: ${distribution.baia || '-'}${distribution.observacao ? ` | Observação: ${distribution.observacao}` : ''}`, { indent: 24 });
+      });
+    });
+    if (row.observacao) addText(`Observação geral: ${row.observacao}`, { indent: 18 });
+    addText(`Responsável pelo registro: ${hasSavedDistribution(row) ? row.updated_by_nome || row.created_by_nome || '-' : '-'} | Registro: ${hasSavedDistribution(row) ? dateTimeBr(row.updated_at || row.created_at) : '-'}`, { indent: 18 });
+    y += 2;
+  });
+
+  if (!rows.length) addText('Nenhum registro consolidado neste mês.', { bold: true });
+  doc.save(`armazenagem-mp-${prefix}-fechado.pdf`);
 }
 
 function exportExcel(rows) {
@@ -803,6 +903,10 @@ function productNames(row) {
 function distributionValues(row, field) {
   const values = (row.itens || []).flatMap((item) => (item.distribuicoes || []).map((entry) => entry[field]).filter(Boolean));
   return [...new Set(values)].join(', ') || '-';
+}
+
+function hasSavedDistribution(row) {
+  return (row.itens || []).some((item) => (item.distribuicoes || []).length > 0);
 }
 
 function mapChart(map, sort = true) {
