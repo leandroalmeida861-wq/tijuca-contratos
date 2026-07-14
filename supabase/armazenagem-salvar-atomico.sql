@@ -36,6 +36,7 @@ begin
   end if;
 
   v_armazenagem_id := public.agroflow_armazenagem_iniciar(p_recebimento_id);
+  perform private.armazenagem_sincronizar_complementos(v_armazenagem_id, p_recebimento_id);
   v_quantidade_informada := jsonb_array_length(p_distribuicoes);
 
   select jsonb_agg(
@@ -70,4 +71,3 @@ revoke all on function public.agroflow_armazenagem_salvar_recebimento(uuid, date
   from public, anon, authenticated;
 grant execute on function public.agroflow_armazenagem_salvar_recebimento(uuid, date, text, jsonb)
   to authenticated;
-

@@ -8,7 +8,6 @@ import {
   LockKeyhole,
   PackageCheck,
   Plus,
-  Printer,
   RotateCcw,
   Save,
   Search,
@@ -32,11 +31,12 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../../lib/formatters.js';
 import {
-  cancelarArmazenagem,
   fecharMesArmazenagem,
   listArmazenagemData,
   mergeRecebimentosArmazenagens,
+  notaComplementoPesoKg,
   notaItemPesoKg,
+  pesoNotaPrincipalRecebimento,
   reabrirMesArmazenagem,
   salvarArmazenagem,
   salvarNovaArmazenagem,
@@ -46,6 +46,7 @@ import {
 const REALTIME_TABLES = [
   'recebimentos',
   'recebimento_itens',
+  'recebimento_notas_complementares',
   'armazenagens_materia_prima',
   'armazenagem_itens',
   'armazenagem_distribuicoes',
@@ -171,19 +172,6 @@ export default function ArmazenagemTab({ can }) {
     }
   }
 
-  async function handleCancel(row) {
-    const motivo = window.prompt('Informe o motivo do cancelamento da armazenagem:');
-    if (!motivo?.trim()) return;
-    if (!window.confirm('Confirma o cancelamento? O histórico será preservado para auditoria.')) return;
-    try {
-      await cancelarArmazenagem(row.id, motivo.trim());
-      setMessage('Armazenagem cancelada com sucesso.');
-      await load({ silent: true });
-    } catch (cancelError) {
-      setError(toArmazenagemError(cancelError));
-    }
-  }
-
   async function handleCloseMonth(month) {
     const pending = Number(month.saldo || 0) > 0;
     let justification = '';
@@ -297,8 +285,6 @@ export default function ArmazenagemTab({ can }) {
           can={can}
           onView={(row) => openStorage(row, true)}
           onEdit={(row) => openStorage(row, false)}
-          onCancel={handleCancel}
-          onPrint={printReceipt}
         />
       </section>
 
@@ -417,7 +403,7 @@ function StorageCharts({ charts }) {
   );
 }
 
-function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
+function StorageTable({ rows, can, onView, onEdit }) {
   if (!rows.length) return <Empty text="Nenhum recebimento finalizado encontrado para os filtros atuais." />;
   return (
     <div className="overflow-x-auto">
@@ -434,7 +420,7 @@ function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
             return (
               <tr key={row.id || row.recebimento_id} className="border-t border-slate-200 align-top hover:bg-slate-50">
                 <td className="px-3 py-3 whitespace-nowrap">{dateBr(row.data_armazenagem || row.recebimento?.data)}</td>
-                <td className="px-3 py-3 font-bold">{row.recebimento?.nf_numero || '-'}</td>
+                <td className="px-3 py-3 font-bold"><StorageInvoiceNumbers recebimento={row.recebimento} /></td>
                 <td className="px-3 py-3 font-semibold">{row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'}</td>
                 <td className="max-w-52 px-3 py-3">{row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '-'}</td>
                 <td className="max-w-48 px-3 py-3">{products}</td>
@@ -450,9 +436,7 @@ function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-1">
                     <IconButton title="Visualizar" onClick={() => onView(row)}><Eye className="h-4 w-4" /></IconButton>
-                    {can('balancas', row.id ? 'editar' : 'cadastrar') && row.status !== 'CANCELADO' && <IconButton title={row.id ? 'Editar' : 'Distribuir'} onClick={() => onEdit(row)}><Edit className="h-4 w-4" /></IconButton>}
-                    {row.id && can('balancas', 'exportar') && <IconButton title="Imprimir comprovante" onClick={() => onPrint(row)}><Printer className="h-4 w-4" /></IconButton>}
-                    {row.id && row.status !== 'CANCELADO' && (can('balancas', 'cancelar') || can('balancas', 'excluir')) && <IconButton title="Cancelar" tone="danger" onClick={() => onCancel(row)}><Trash2 className="h-4 w-4" /></IconButton>}
+                    {(row.id ? can('balancas', 'editar') : (can('balancas', 'cadastrar') || can('balancas', 'editar'))) && row.status !== 'CANCELADO' && <IconButton title={row.id ? 'Editar' : 'Distribuir'} onClick={() => onEdit(row)}><Edit className="h-4 w-4" /></IconButton>}
                   </div>
                 </td>
               </tr>
@@ -549,7 +533,7 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
                   <article key={`${distribution.id || 'new'}-${index}`} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_1.5fr_auto]">
                     <Filter label="Produto / item">
                       <select disabled={readOnly} value={distribution.armazenagem_item_id} onChange={(event) => updateDistribution(index, 'armazenagem_item_id', event.target.value)}>
-                        {(record.itens || []).map((entry) => <option key={entry.id} value={entry.id}>{entry.produto?.nome || record.recebimento?.produto_nome_manual || `Item ${entry.ordem}`} · NF {kg(entry.peso_nota)} · saldo {kg(entry.saldo_distribuir)}</option>)}
+                        {(record.itens || []).map((entry) => <option key={entry.id} value={entry.id}>{storageItemLabel(entry, record.recebimento)}</option>)}
                       </select>
                     </Filter>
                     <Filter label="Silo"><input disabled={readOnly} value={distribution.silo} onChange={(event) => updateDistribution(index, 'silo', event.target.value)} placeholder="Ex: 06" /></Filter>
@@ -573,7 +557,7 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
         </div>
         <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white p-4">
           <button type="button" className={BUTTON_SECONDARY} onClick={onClose}>Fechar</button>
-          {!readOnly && can('balancas', modal.isNew ? 'cadastrar' : 'editar') && <button type="submit" className={BUTTON_PRIMARY} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar distribuição'}</button>}
+          {!readOnly && (modal.isNew ? (can('balancas', 'cadastrar') || can('balancas', 'editar')) : can('balancas', 'editar')) && <button type="submit" className={BUTTON_PRIMARY} disabled={saving}><Save className="h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar distribuição'}</button>}
         </footer>
       </form>
     </div>
@@ -646,7 +630,7 @@ function storageForm(record) {
 
 function draftStorageRecord(row) {
   const receiptItems = row.recebimento?.itens || [];
-  const items = receiptItems.length
+  const principalItems = receiptItems.length
     ? receiptItems.map((item, index) => {
       const weight = notaItemPesoKg(item.quantidade, item.unidade, row.recebimento?.peso_por_saca);
       return {
@@ -666,11 +650,30 @@ function draftStorageRecord(row) {
       produto_id: row.recebimento?.produto_id,
       produto: row.recebimento?.produto,
       ordem: 1,
-      peso_nota: Number(row.peso_nota || 0),
+      peso_nota: pesoNotaPrincipalRecebimento(row.recebimento),
       peso_distribuido: 0,
-      saldo_distribuir: Number(row.peso_nota || 0),
+      saldo_distribuir: pesoNotaPrincipalRecebimento(row.recebimento),
       distribuicoes: [],
     }];
+  const fallbackProduct = row.recebimento?.produto || receiptItems.find((item) => item.produto)?.produto;
+  const fallbackProductId = row.recebimento?.produto_id || receiptItems.find((item) => item.produto_id)?.produto_id;
+  const complementItems = (row.recebimento?.complementos || []).map((complemento, index) => {
+    const weight = notaComplementoPesoKg(complemento);
+    return {
+      id: `draft-complemento-${complemento.id}`,
+      recebimento_complemento_id: complemento.id,
+      complemento,
+      nf_numero_origem: complemento.numero_nf,
+      produto_id: fallbackProductId,
+      produto: fallbackProduct,
+      ordem: principalItems.length + index + 1,
+      peso_nota: weight,
+      peso_distribuido: 0,
+      saldo_distribuir: weight,
+      distribuicoes: [],
+    };
+  }).filter((item) => item.peso_nota > 0);
+  const items = [...principalItems, ...complementItems];
   return { ...row, itens };
 }
 
@@ -787,15 +790,6 @@ function buildMonthlyClosures(rows, closures, year) {
   });
 }
 
-function printReceipt(row) {
-  const doc = new jsPDF();
-  doc.setFontSize(16); doc.text('AgroFlow - Comprovante de Armazenagem M.P.', 14, 18);
-  doc.setFontSize(10);
-  const lines = reportLines(row);
-  lines.forEach((line, index) => doc.text(line, 14, 32 + index * 7));
-  doc.save(`armazenagem-${row.recebimento?.nf_numero || row.id}.pdf`);
-}
-
 function exportPdf(rows, filters) {
   const doc = new jsPDF({ orientation: 'landscape' });
   doc.setFontSize(15); doc.text('AgroFlow - Relatorio de Armazenagem M.P.', 12, 14);
@@ -876,21 +870,6 @@ function exportExcel(rows) {
   XLSX.writeFile(workbook, 'relatorio-armazenagem-mp.xlsx');
 }
 
-function reportLines(row) {
-  return [
-    `Data: ${dateBr(row.data_armazenagem)}`,
-    `NF: ${row.recebimento?.nf_numero || '-'}`,
-    `Placa: ${row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'}`,
-    `Fornecedor: ${row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '-'}`,
-    `Produto(s): ${productNames(row)}`,
-    `Peso da NF: ${kg(row.peso_nota)} (${originLabel(row.origem_peso)})`,
-    `Peso distribuido: ${kg(row.peso_distribuido)} | Saldo: ${kg(row.saldo_distribuir)}`,
-    `Silo(s): ${distributionValues(row, 'silo')} | Baia(s): ${distributionValues(row, 'baia')}`,
-    `Status: ${statusText(row.status)}`,
-    `Responsavel: ${row.updated_by_nome || row.created_by_nome || '-'}`,
-  ];
-}
-
 function productNames(row) {
   const names = (row.itens || []).map((item) => item.produto?.nome).filter(Boolean);
   if (names.length) return [...new Set(names)].join(', ');
@@ -898,6 +877,23 @@ function productNames(row) {
   const receivingNames = receivingItems.map((item) => item.produto?.nome).filter(Boolean);
   const fallback = row.recebimento?.produto?.nome || row.recebimento?.produto_nome_manual;
   return [...new Set(receivingNames.length ? receivingNames : [fallback].filter(Boolean))].join(', ') || '-';
+}
+
+function StorageInvoiceNumbers({ recebimento }) {
+  const complementos = (recebimento?.complementos || []).filter((item) => item.numero_nf);
+  return (
+    <div className="grid gap-1">
+      <span>{recebimento?.nf_numero || '-'}</span>
+      {complementos.map((item) => <span key={item.id} className="whitespace-nowrap text-xs font-bold text-amber-700">Compl. {item.numero_nf}</span>)}
+    </div>
+  );
+}
+
+function storageItemLabel(entry, recebimento) {
+  const product = entry.produto?.nome || recebimento?.produto_nome_manual || `Item ${entry.ordem}`;
+  const isComplement = Boolean(entry.recebimento_complemento_id || entry.complemento);
+  const invoice = entry.complemento?.numero_nf || entry.nf_numero_origem || recebimento?.nf_numero || '-';
+  return `${product} · ${isComplement ? 'NF complementar' : 'NF'} ${invoice} · ${kg(entry.peso_nota)} · saldo ${kg(entry.saldo_distribuir)}`;
 }
 
 function distributionValues(row, field) {

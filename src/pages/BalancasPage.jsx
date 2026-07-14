@@ -73,16 +73,6 @@ const SCORE_WEIGHTS = {
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
-const SEM_LABORATORIO_ID = '__SEM_LABORATORIO__';
-const SEM_LABORATORIO_OPTION = { id: SEM_LABORATORIO_ID, nome: 'Não passa pelo laboratório' };
-
-function laboratoriosRecebimentoOptions(laboratorios = []) {
-  return [
-    SEM_LABORATORIO_OPTION,
-    ...(laboratorios || []).filter((item) => item.id !== SEM_LABORATORIO_ID),
-  ];
-}
-
 const balancasRealtimeTables = [
   'balancas',
   'fornecedores',
@@ -1132,10 +1122,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
   const [saving, setSaving] = useState(false);
   const canImportXml = !row || isLaboratorioPendenteBalanca(row);
   const canEditComplementos = !can || can('balancas', 'editar') || can('balancas', 'cadastrar');
-  const laboratorioOptions = useMemo(
-    () => laboratoriosRecebimentoOptions(localOptions.laboratorios),
-    [localOptions.laboratorios],
-  );
+  const laboratorioOptions = localOptions.laboratorios;
 
   useEffect(() => {
     setLocalOptions(options);
@@ -1303,7 +1290,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
       if (row?.id) saved = await updateRecebimento(row.id, payload);
       else saved = await createRecebimento({
         ...payload,
-        status: isSemLaboratorio(syncedForm.laboratorio_id) ? 'aprovada' : 'pendente',
+        status: 'pendente',
       });
       const pendingComplementos = complementos.filter((item) => item.__local);
       if (pendingComplementos.length) {
@@ -3983,10 +3970,9 @@ function normalizeRecebimentoPayload(form) {
   const itens = normalizeRecebimentoItemsForPayload(synced.itens);
   const totals = calcularTotaisRecebimento(synced.itens);
   const first = itens[0] || {};
-  const semLaboratorio = isSemLaboratorio(synced.laboratorio_id);
   return {
     ...syncedPayload,
-    laboratorio_id: semLaboratorio ? null : synced.laboratorio_id || null,
+    laboratorio_id: synced.laboratorio_id || null,
     qtd_eixos: nullableNumber(synced.qtd_eixos),
     peso_bruto: Number(synced.peso_bruto || 0),
     tara: Number(synced.tara || 0),
@@ -4815,12 +4801,8 @@ function hasDispensaLaboratorio(row) {
   );
 }
 
-function isSemLaboratorio(value) {
-  return value === SEM_LABORATORIO_ID;
-}
-
 function isAprovadaLaboratorio(row) {
-  return row.status === 'aprovada';
+  return row.status === 'aprovada' && !hasDispensaLaboratorio(row);
 }
 
 function isRecebimentoFinalizadoBalanca(row) {

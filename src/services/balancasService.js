@@ -204,28 +204,8 @@ export async function updatePortariaEntrada(id, payload) {
       .eq('id', id)
       .select(PORTARIA_SELECT)
       .single();
-    if (fallback.error && fallbackPayload.status === 'ENVIADO_RECEBIMENTO' && isPortariaStatusCheckError(fallback.error)) {
-      const statusFallback = await supabase
-        .from('portaria_entradas')
-        .update({ ...fallbackPayload, status: 'ENVIADO_LABORATORIO' })
-        .eq('id', id)
-        .select(PORTARIA_SELECT)
-        .single();
-      if (statusFallback.error) throw statusFallback.error;
-      return statusFallback.data;
-    }
     if (fallback.error) throw fallback.error;
     return fallback.data;
-  }
-  if (error && cleanedPayload.status === 'ENVIADO_RECEBIMENTO' && isPortariaStatusCheckError(error)) {
-    const statusFallback = await supabase
-      .from('portaria_entradas')
-      .update({ ...cleanedPayload, status: 'ENVIADO_LABORATORIO' })
-      .eq('id', id)
-      .select(PORTARIA_SELECT)
-      .single();
-    if (statusFallback.error) throw statusFallback.error;
-    return statusFallback.data;
   }
   if (error) throw error;
   return data;
@@ -661,7 +641,7 @@ function stripMissingPortariaOptionalColumns(error, payload) {
   const fallbackPayload = { ...payload };
   let changed = false;
 
-  ['unidade_nota', 'dispensa_laboratorio'].forEach((column) => {
+  ['unidade_nota'].forEach((column) => {
     if (fallbackPayload[column] !== undefined && isMissingColumn(error, column)) {
       delete fallbackPayload[column];
       changed = true;
@@ -671,11 +651,6 @@ function stripMissingPortariaOptionalColumns(error, payload) {
   return changed ? fallbackPayload : null;
 }
 
-function isPortariaStatusCheckError(error) {
-  const message = String(error?.message || '').toLowerCase();
-  return message.includes('portaria_entradas_status_check') || (message.includes('check constraint') && message.includes('status'));
-}
-
 function stripMissingOptionalColumns(error, payload) {
   if (!error) return null;
   const fallbackPayload = { ...payload };
@@ -683,11 +658,6 @@ function stripMissingOptionalColumns(error, payload) {
 
   if (fallbackPayload.portaria_id !== undefined && isMissingColumn(error, 'portaria_id')) {
     delete fallbackPayload.portaria_id;
-    changed = true;
-  }
-
-  if (fallbackPayload.dispensa_laboratorio !== undefined && isMissingColumn(error, 'dispensa_laboratorio')) {
-    delete fallbackPayload.dispensa_laboratorio;
     changed = true;
   }
 

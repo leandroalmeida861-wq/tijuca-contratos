@@ -8,6 +8,13 @@ export function isRecebimentoFinalizadoParaArmazenagem(row) {
 }
 
 export function pesoNotaRecebimento(row) {
+  const pesoPrincipal = pesoNotaPrincipalRecebimento(row);
+  const pesoComplementos = (Array.isArray(row?.complementos) ? row.complementos : [])
+    .reduce((total, complemento) => total + notaComplementoPesoKg(complemento), 0);
+  return roundWeight(pesoPrincipal + pesoComplementos);
+}
+
+export function pesoNotaPrincipalRecebimento(row) {
   const itens = Array.isArray(row?.itens) ? row.itens : [];
   if (itens.length) {
     const itemWeights = itens.map((item) => notaItemPesoKg(item.quantidade, item.unidade, row?.peso_por_saca));
@@ -20,6 +27,18 @@ export function pesoNotaRecebimento(row) {
     if (converted > 0) return converted;
   }
   return roundWeight(Math.max(Number(row?.peso_nf || 0), 0));
+}
+
+export function notaComplementoPesoKg(complemento) {
+  if (Number(complemento?.quantidade_nota || 0) > 0) {
+    const converted = notaItemPesoKg(
+      complemento.quantidade_nota,
+      complemento.unidade_nota,
+      complemento.peso_por_saca,
+    );
+    if (converted > 0) return converted;
+  }
+  return roundWeight(Math.max(Number(complemento?.peso_nf || 0), 0));
 }
 
 export function notaItemPesoKg(quantidade, unidade = 'KG', pesoPorSaca = 60) {

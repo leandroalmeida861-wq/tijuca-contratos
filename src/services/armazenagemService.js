@@ -8,7 +8,9 @@ import {
 export {
   isRecebimentoFinalizadoParaArmazenagem,
   mergeRecebimentosArmazenagens,
+  notaComplementoPesoKg,
   notaItemPesoKg,
+  pesoNotaPrincipalRecebimento,
   pesoNotaRecebimento,
 } from '../lib/armazenagem.js';
 
@@ -27,14 +29,25 @@ const ARMAZENAGEM_SELECT = `
     produto_id,
     transportadora_id,
     tipo_veiculo,
+    peso_por_saca,
     fornecedor:fornecedores(id,nome,cnpj),
     produto:produtos(id,nome,unidade),
     transportadora:recebimento_transportadoras(id,nome),
-    veiculo:recebimento_veiculos(id,placa,tipo_veiculo)
+    veiculo:recebimento_veiculos(id,placa,tipo_veiculo),
+    complementos:recebimento_notas_complementares(
+      id,
+      numero_nf,
+      quantidade_nota,
+      unidade_nota,
+      peso_por_saca,
+      peso_nf,
+      chave_nfe
+    )
   ),
   itens:armazenagem_itens(
     *,
     produto:produtos(id,nome,unidade),
+    complemento:recebimento_notas_complementares(id,numero_nf),
     distribuicoes:armazenagem_distribuicoes(*)
   )
 `;
