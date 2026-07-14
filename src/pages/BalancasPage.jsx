@@ -63,6 +63,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../lib/formatters.js';
 import { fortalezaDateIso, fortalezaTime } from '../lib/fortalezaDateTime.js';
+import ArmazenagemTab from '../components/balancas/ArmazenagemTab.jsx';
 
 const UMIDADE_LIMITE = 14;
 const SCORE_WEIGHTS = {
@@ -94,6 +95,10 @@ const balancasRealtimeTables = [
   'recebimento_transportadoras',
   'recebimento_veiculos',
   'recebimentos',
+  'armazenagens_materia_prima',
+  'armazenagem_itens',
+  'armazenagem_distribuicoes',
+  'fechamentos_armazenagem',
 ];
 
 const tabs = [
@@ -101,6 +106,7 @@ const tabs = [
   { key: 'portaria', label: 'Portaria', menu: 'balancas_portaria' },
   { key: 'laboratorio', label: 'Aprovacao Laboratorio', menu: 'balancas_laboratorio' },
   { key: 'recebimentos', label: 'Recebimentos', menu: 'balancas_recebimentos' },
+  { key: 'armazenagem', label: 'Armazenagem M.P.', menu: 'balancas_armazenagem' },
   { key: 'relatorios', label: 'Relatorios', menu: 'balancas_relatorios' },
 ];
 
@@ -323,6 +329,7 @@ export default function BalancasPage() {
       {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'armazenagem' && <ArmazenagemTab can={scopedBalancasCan(can, permissions, 'armazenagem')} />}
       {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
       {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={scopedBalancasCan(can, permissions, 'relatorios')} />}
     </div>

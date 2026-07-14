@@ -14,7 +14,8 @@
     "test:dashboard": "node scripts/test-dashboard-filters.mjs",
     "test:rbac": "node scripts/test-rbac.mjs",
     "test:resilience": "node scripts/test-resilience.mjs",
-    "test:ui": "node scripts/test-ui-contracts.mjs"
+    "test:ui": "node scripts/test-ui-contracts.mjs",
+    "test:armazenagem": "node scripts/test-armazenagem.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

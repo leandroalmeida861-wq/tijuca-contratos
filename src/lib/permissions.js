@@ -13,6 +13,7 @@ export const MENU_DEFINITIONS = [
   { key: 'balancas_portaria', label: 'Balanças - Portaria', path: '/balancas?tab=portaria' },
   { key: 'balancas_laboratorio', label: 'Balanças - Aprovação Laboratório', path: '/balancas?tab=laboratorio' },
   { key: 'balancas_recebimentos', label: 'Balanças - Recebimentos', path: '/balancas?tab=recebimentos' },
+  { key: 'balancas_armazenagem', label: 'Balanças - Armazenagem M.P.', path: '/balancas?tab=armazenagem' },
   { key: 'balancas_relatorios', label: 'Balanças - Relatórios', path: '/balancas?tab=relatorios' },
   { key: 'usuarios', label: 'Usuários e permissões', path: '/admin/acessos' },
   { key: 'auditoria', label: 'Auditoria', path: '/admin/auditoria' },
