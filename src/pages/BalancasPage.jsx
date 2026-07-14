@@ -948,6 +948,7 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
       {formOpen && (
         <div ref={formRef} className="scroll-mt-4">
           <RecebimentoForm
+            key={editing?.id || 'novo-recebimento'}
             row={editing}
             rows={rows}
             options={options}

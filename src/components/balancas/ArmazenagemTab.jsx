@@ -316,6 +316,7 @@ export default function ArmazenagemTab({ can }) {
 
       {modal && (
         <StorageModal
+          key={modal.record.id || modal.record.recebimento_id}
           modal={modal}
           can={can}
           onClose={() => setModal(null)}
@@ -431,7 +432,7 @@ function StorageTable({ rows, can, onView, onEdit, onCancel, onPrint }) {
             const silos = distributionValues(row, 'silo');
             const bays = distributionValues(row, 'baia');
             return (
-              <tr key={row.recebimento_id} className="border-t border-slate-200 align-top hover:bg-slate-50">
+              <tr key={row.id || row.recebimento_id} className="border-t border-slate-200 align-top hover:bg-slate-50">
                 <td className="px-3 py-3 whitespace-nowrap">{dateBr(row.data_armazenagem || row.recebimento?.data)}</td>
                 <td className="px-3 py-3 font-bold">{row.recebimento?.nf_numero || '-'}</td>
                 <td className="px-3 py-3 font-semibold">{row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'}</td>
