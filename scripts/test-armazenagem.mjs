@@ -40,9 +40,50 @@ assert.equal(merged[0].peso_distribuido, 0);
 assert.equal(merged[0].saldo_distribuir, 48000);
 assert.equal(merged[0].origem_peso, 'XML');
 
+const recebimentoMesmoNumeroA = {
+  ...recebimento,
+  id: '11111111-1111-4111-8111-111111111111',
+  nf_numero: '006',
+  fornecedor: { id: 'fornecedor-a', nome: 'Fornecedor A' },
+  veiculo: { placa: 'ABC1D23' },
+};
+const recebimentoMesmoNumeroB = {
+  ...recebimento,
+  id: '22222222-2222-4222-8222-222222222222',
+  nf_numero: '006',
+  fornecedor: { id: 'fornecedor-b', nome: 'Fornecedor B' },
+  veiculo: { placa: 'ABC1D23' },
+};
+const armazenagemA = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  recebimento_id: recebimentoMesmoNumeroA.id,
+  peso_nota: 48000,
+  recebimento: { nf_numero: 'registro-antigo-que-nao-deve-prevalecer' },
+};
+const armazenagemB = {
+  id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  recebimento_id: recebimentoMesmoNumeroB.id,
+  peso_nota: 48000,
+};
+const isolados = mergeRecebimentosArmazenagens(
+  [recebimentoMesmoNumeroA, recebimentoMesmoNumeroB],
+  [armazenagemB, armazenagemA],
+);
+
+assert.equal(isolados.length, 2, 'Notas iguais devem continuar em registros separados');
+assert.equal(isolados[0].id, armazenagemA.id, 'A associação deve usar somente recebimento_id');
+assert.equal(isolados[1].id, armazenagemB.id, 'A ordem da consulta não pode misturar vínculos');
+assert.equal(isolados[0].recebimento.fornecedor.nome, 'Fornecedor A', 'Fornecedor deve vir do recebimento do mesmo ID');
+assert.equal(isolados[1].recebimento.fornecedor.nome, 'Fornecedor B', 'Fornecedores com a mesma NF não podem se misturar');
+assert.equal(isolados[0].recebimento.veiculo.placa, 'ABC1D23', 'Placas iguais não podem ser usadas como chave');
+assert.equal(isolados[0].recebimento.nf_numero, '006', 'Dados atuais do recebimento devem substituir estado antigo da relação');
+
 const migration = await readFile(new URL('../supabase/armazenagem-materia-prima.sql', import.meta.url), 'utf8');
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
 const permissions = await readFile(new URL('../src/lib/permissions.js', import.meta.url), 'utf8');
+const immutableLinkMigration = await readFile(new URL('../supabase/armazenagem-vinculo-id-imutavel.sql', import.meta.url), 'utf8');
+const storagePage = await readFile(new URL('../src/components/balancas/ArmazenagemTab.jsx', import.meta.url), 'utf8');
+const service = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 
 for (const required of [
   'constraint armazenagens_recebimento_unico unique (recebimento_id)',
@@ -59,5 +100,14 @@ for (const required of [
 
 assert.ok(page.includes("{ key: 'armazenagem', label: 'Armazenagem M.P.', menu: 'balancas_armazenagem' }"));
 assert.ok(permissions.includes("key: 'balancas_armazenagem'"));
+assert.ok(immutableLinkMigration.includes('new.recebimento_id is distinct from old.recebimento_id'));
+assert.ok(immutableLinkMigration.includes("raise exception 'RECEBIMENTO_ID_ARMAZENAGEM_IMUTAVEL'"));
+assert.ok(storagePage.includes('key={modal.record.id || modal.record.recebimento_id}'), 'Modal deve reiniciar pelo ID selecionado');
+assert.ok(storagePage.includes('key={row.id || row.recebimento_id}'), 'Linha deve ter chave estável e única');
+assert.ok(page.includes("key={editing?.id || 'novo-recebimento'}"), 'Formulário deve reiniciar ao trocar de recebimento');
+assert.ok(service.includes(".update(cleanedPayload)\n    .eq('id', id)"), 'Portaria deve atualizar pelo ID');
+assert.ok(service.includes(".update(cleanedPayload).eq('id', id)"), 'Recebimento deve atualizar pelo ID');
+assert.ok(!service.includes(".update(cleanedPayload).eq('nf_numero'"), 'NF não pode identificar updates');
+assert.ok(!service.includes(".update(cleanedPayload).eq('placa'"), 'Placa não pode identificar updates');
 
 console.log('Testes da Armazenagem M.P. aprovados.');

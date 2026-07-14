@@ -36,14 +36,19 @@ export function notaItemPesoKg(quantidade, unidade = 'KG', pesoPorSaca = 60) {
 }
 
 export function mergeRecebimentosArmazenagens(recebimentos = [], armazenagens = []) {
-  const byRecebimento = new Map(armazenagens.map((item) => [item.recebimento_id, item]));
+  const byRecebimento = new Map(
+    (armazenagens || [])
+      .filter((item) => item.recebimento_id)
+      .map((item) => [item.recebimento_id, item]),
+  );
   return (recebimentos || []).map((recebimento) => {
     const armazenagem = byRecebimento.get(recebimento.id);
-    if (armazenagem) return armazenagem;
+    if (armazenagem) return { ...armazenagem, recebimento };
     const pesoNota = pesoNotaRecebimento(recebimento);
     return {
       id: null,
       recebimento_id: recebimento.id,
+      origem: 'recebimento',
       data_armazenagem: recebimento.data,
       peso_nota: pesoNota,
       peso_distribuido: 0,

@@ -93,6 +93,7 @@ export async function listFechamentosArmazenagem(ano) {
 }
 
 export async function iniciarArmazenagem(recebimentoId) {
+  requireRecordId(recebimentoId, 'recebimento');
   const { data, error } = await supabase.rpc('agroflow_armazenagem_iniciar', {
     p_recebimento_id: recebimentoId,
   });
@@ -101,6 +102,7 @@ export async function iniciarArmazenagem(recebimentoId) {
 }
 
 export async function getArmazenagem(id) {
+  requireRecordId(id, 'armazenagem');
   const { data, error } = await supabase
     .from('armazenagens_materia_prima')
     .select(ARMAZENAGEM_SELECT)
@@ -111,6 +113,7 @@ export async function getArmazenagem(id) {
 }
 
 export async function salvarArmazenagem({ id, dataArmazenagem, observacao, distribuicoes }) {
+  requireRecordId(id, 'armazenagem');
   const { data, error } = await supabase.rpc('agroflow_armazenagem_salvar', {
     p_armazenagem_id: id,
     p_data_armazenagem: dataArmazenagem,
@@ -128,6 +131,7 @@ export async function salvarArmazenagem({ id, dataArmazenagem, observacao, distr
 }
 
 export async function cancelarArmazenagem(id, motivo) {
+  requireRecordId(id, 'armazenagem');
   const { error } = await supabase.rpc('agroflow_armazenagem_cancelar', {
     p_armazenagem_id: id,
     p_motivo: motivo,
@@ -181,6 +185,14 @@ export function toArmazenagemError(error) {
     return 'O banco ainda não reconheceu a Armazenagem M.P. Aplique a migration supabase/armazenagem-materia-prima.sql e recarregue o app.';
   }
   return message || 'Não foi possível concluir a operação de armazenagem.';
+}
+
+function requireRecordId(id, label) {
+  const value = String(id || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(`Identificador inválido para ${label}. Recarregue a tela e selecione o registro novamente.`);
+  }
+  return value;
 }
 
 function normalizeArmazenagem(row) {

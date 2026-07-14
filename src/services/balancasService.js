@@ -188,6 +188,7 @@ export async function createPortariaEntrada(payload) {
 }
 
 export async function updatePortariaEntrada(id, payload) {
+  requireRecordId(id, 'entrada da Portaria');
   const cleanedPayload = cleanPayload(payload);
   const { data, error } = await supabase
     .from('portaria_entradas')
@@ -231,11 +232,13 @@ export async function updatePortariaEntrada(id, payload) {
 }
 
 export async function deletePortariaEntrada(id) {
+  requireRecordId(id, 'entrada da Portaria');
   const { error } = await supabase.from('portaria_entradas').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function getRecebimento(id) {
+  requireRecordId(id, 'recebimento');
   const { data, error } = await supabase.from('recebimentos').select(RECEBIMENTO_SELECT).eq('id', id).single();
   if (error) throw error;
   return data;
@@ -243,6 +246,7 @@ export async function getRecebimento(id) {
 
 export async function findRecebimentoByPortariaId(portariaId) {
   if (!portariaId) return null;
+  requireRecordId(portariaId, 'entrada da Portaria');
   const { data, error } = await supabase
     .from('recebimentos')
     .select(RECEBIMENTO_SELECT)
@@ -317,6 +321,7 @@ export async function createRecebimento(payload) {
 }
 
 export async function updateRecebimento(id, payload) {
+  requireRecordId(id, 'recebimento');
   const { itens, header } = prepareRecebimentoForSave(payload);
   const cleanedPayload = cleanPayload(header);
   const { data, error } = await supabase.from('recebimentos').update(cleanedPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
@@ -331,6 +336,7 @@ export async function updateRecebimento(id, payload) {
 }
 
 async function updateRecebimentoFields(id, payload) {
+  requireRecordId(id, 'recebimento');
   const { data, error } = await supabase
     .from('recebimentos')
     .update(cleanPayload(payload))
@@ -342,6 +348,7 @@ async function updateRecebimentoFields(id, payload) {
 }
 
 export async function deleteRecebimento(id) {
+  requireRecordId(id, 'recebimento');
   const { error: itensError } = await supabase.from('recebimento_itens').delete().eq('recebimento_id', id);
   if (itensError && !isMissingRecebimentoItensTable(itensError)) throw itensError;
 
@@ -527,6 +534,14 @@ export function toUserError(error) {
     return 'Banco ainda não reconheceu o módulo Balanças. Como corrigir: aplique os SQLs supabase/balancas-modulo-recebimento.sql e supabase/portaria-balancas.sql no Supabase e recarregue o app.';
   }
   return message || 'Não foi possível concluir a operação. Como corrigir: confira os dados e tente novamente.';
+}
+
+function requireRecordId(id, label) {
+  const value = String(id || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(`Identificador inválido para ${label}. Recarregue a tela e selecione o registro novamente.`);
+  }
+  return value;
 }
 
 function cleanPayload(payload) {
