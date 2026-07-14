@@ -541,7 +541,7 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
                   <article key={`${distribution.id || 'new'}-${index}`} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_1.5fr_auto]">
                     <Filter label="Produto / item">
                       <select disabled={readOnly} value={distribution.armazenagem_item_id} onChange={(event) => updateDistribution(index, 'armazenagem_item_id', event.target.value)}>
-                        {(record.itens || []).map((entry) => <option key={entry.id} value={entry.id}>{entry.produto?.nome || `Item ${entry.ordem}`} · NF {kg(entry.peso_nota)} · saldo {kg(entry.saldo_distribuir)}</option>)}
+                        {(record.itens || []).map((entry) => <option key={entry.id} value={entry.id}>{entry.produto?.nome || record.recebimento?.produto_nome_manual || `Item ${entry.ordem}`} · NF {kg(entry.peso_nota)} · saldo {kg(entry.saldo_distribuir)}</option>)}
                       </select>
                     </Filter>
                     <Filter label="Silo"><input disabled={readOnly} value={distribution.silo} onChange={(event) => updateDistribution(index, 'silo', event.target.value)} placeholder="Ex: 06" /></Filter>
@@ -713,7 +713,7 @@ function buildCharts(rows) {
     months.set(month, (months.get(month) || 0) + Number(row.peso_distribuido || 0));
     (row.itens || []).forEach((item) => (item.distribuicoes || []).forEach((distribution) => {
       const weight = Number(distribution.peso_armazenado || 0);
-      const product = item.produto?.nome || row.recebimento?.produto?.nome || 'Sem produto';
+      const product = item.produto?.nome || row.recebimento?.produto?.nome || row.recebimento?.produto_nome_manual || 'Sem produto';
       products.set(product, (products.get(product) || 0) + weight);
       if (distribution.silo) silos.set(distribution.silo, (silos.get(distribution.silo) || 0) + weight);
     }));
@@ -795,7 +795,8 @@ function productNames(row) {
   if (names.length) return [...new Set(names)].join(', ');
   const receivingItems = row.recebimento?.itens || [];
   const receivingNames = receivingItems.map((item) => item.produto?.nome).filter(Boolean);
-  return [...new Set(receivingNames.length ? receivingNames : [row.recebimento?.produto?.nome].filter(Boolean))].join(', ') || '-';
+  const fallback = row.recebimento?.produto?.nome || row.recebimento?.produto_nome_manual;
+  return [...new Set(receivingNames.length ? receivingNames : [fallback].filter(Boolean))].join(', ') || '-';
 }
 
 function distributionValues(row, field) {
