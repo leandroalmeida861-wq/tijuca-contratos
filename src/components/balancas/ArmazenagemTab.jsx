@@ -674,7 +674,7 @@ function draftStorageRecord(row) {
     };
   }).filter((item) => item.peso_nota > 0);
   const items = [...principalItems, ...complementItems];
-  return { ...row, itens };
+  return { ...row, itens: items };
 }
 
 function emptyDistribution(itemId = '') {

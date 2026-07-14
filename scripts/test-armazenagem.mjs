@@ -118,6 +118,8 @@ assert.ok(immutableLinkMigration.includes("raise exception 'RECEBIMENTO_ID_ARMAZ
 assert.ok(storagePage.includes('key={modal.record.id || modal.record.recebimento_id}'), 'Modal deve reiniciar pelo ID selecionado');
 assert.ok(storagePage.includes('key={row.id || row.recebimento_id}'), 'Linha deve ter chave estável e única');
 assert.ok(storagePage.includes('const record = isNew && !readOnly ? draftStorageRecord(row) : row;'), 'Abrir a edição deve criar apenas um rascunho local');
+assert.ok(storagePage.includes('return { ...row, itens: items };'), 'NF principal sem complemento deve gerar itens distribuíveis sem erro de variável');
+assert.ok(!storagePage.includes('return { ...row, itens };'), 'O rascunho não pode retornar a variável inexistente itens');
 assert.ok(!storagePage.includes('await iniciarArmazenagem(row.recebimento_id)'), 'Abrir ou fechar o modal não pode gravar no banco');
 assert.ok(storagePage.includes('Baixar relatório em PDF'), 'Mês fechado deve oferecer o PDF mensal');
 assert.ok(!storagePage.includes('title="Imprimir comprovante"'), 'Impressão por linha não deve aparecer na armazenagem');
