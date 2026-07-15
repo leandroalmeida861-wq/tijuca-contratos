@@ -97,6 +97,7 @@ const directFlowMigration = await readFile(new URL('../supabase/portaria-dispens
 const storagePage = await readFile(new URL('../src/components/balancas/ArmazenagemTab.jsx', import.meta.url), 'utf8');
 const storageService = await readFile(new URL('../src/services/armazenagemService.js', import.meta.url), 'utf8');
 const service = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
+const flowHelper = await readFile(new URL('../src/lib/balancasFlow.js', import.meta.url), 'utf8');
 
 for (const required of [
   'constraint armazenagens_recebimento_unico unique (recebimento_id)',
@@ -126,7 +127,7 @@ assert.ok(!storagePage.includes('title="Imprimir comprovante"'), 'Impressão por
 assert.ok(!storagePage.includes('onCancel={handleCancel}'), 'Cancelamento/exclusão por linha não deve aparecer na armazenagem');
 assert.ok(storagePage.includes('<StorageInvoiceNumbers recebimento={row.recebimento} />'), 'NF complementar deve aparecer na armazenagem');
 assert.ok(storagePage.includes("can('balancas', 'cadastrar') || can('balancas', 'editar')"), 'Distribuir deve aceitar as mesmas permissões da operação atômica');
-assert.ok(page.includes("return row.status === 'aprovada' && !hasDispensaLaboratorio(row);"), 'Dispensa da Portaria não deve ser contabilizada como aprovação do laboratório');
+assert.ok(flowHelper.includes("return row?.status === 'aprovada' && !hasDispensaLaboratorio(row);"), 'Dispensa da Portaria não deve ser contabilizada como aprovação do laboratório');
 assert.ok(storagePage.includes("month.status !== 'FECHADO') return"), 'PDF mensal deve aceitar somente mês fechado');
 assert.ok(storageService.includes("rpc('agroflow_armazenagem_salvar_recebimento'"), 'Primeiro salvamento deve usar a operação atômica');
 assert.ok(atomicSaveMigration.includes('v_armazenagem_id := public.agroflow_armazenagem_iniciar(p_recebimento_id);'));

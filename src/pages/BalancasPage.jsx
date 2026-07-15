@@ -63,6 +63,14 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../lib/formatters.js';
 import { fortalezaDateIso, fortalezaTime } from '../lib/fortalezaDateTime.js';
+import {
+  hasDispensaLaboratorio,
+  hasRecebimentoFinalizationData,
+  isAprovadaLaboratorio,
+  isDiretoPendenteBalanca,
+  isLaboratorioPendenteBalanca,
+  isRecebimentoFinalizadoBalanca,
+} from '../lib/balancasFlow.js';
 import ArmazenagemTab from '../components/balancas/ArmazenagemTab.jsx';
 
 const UMIDADE_LIMITE = 14;
@@ -555,7 +563,10 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       const existingPayload = { dispensa_laboratorio: true };
       if (!isRecebimentoFinalizadoBalanca(existing)) existingPayload.status = 'pendente';
       await updateRecebimento(existing.id, existingPayload);
-      await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
+      await updatePortariaEntrada(row.id, {
+        status: isRecebimentoFinalizadoBalanca(existing) ? 'RECEBIMENTO_FINALIZADO' : 'ENVIADO_RECEBIMENTO',
+        dispensa_laboratorio: true,
+      });
       return existing;
     }
 
@@ -858,7 +869,8 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
   const formRef = useRef(null);
 
   const filtered = sortRecebimentoRows(filterRecebimentos(rows, query));
-  const releasedForScale = sortRecebimentoRows(rows.filter(isLaboratorioPendenteBalanca));
+  const directForScale = sortPendingScaleRows(rows.filter(isDiretoPendenteBalanca));
+  const releasedForScale = sortPendingScaleRows(rows.filter(isLaboratorioPendenteBalanca));
 
   function newForm() {
     setEditing(null);
@@ -893,35 +905,20 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
 
   return (
     <div className="grid gap-4">
-      {releasedForScale.length > 0 && (
-        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-panel">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-amber-900">Aprovado pelo laboratorio - pendente finalizar recebimento</h2>
-              <p className="mt-1 text-sm font-semibold text-amber-800">Clique em preencher balanca para abrir o cadastro abaixo e concluir NF, pesos e balanca.</p>
-            </div>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-amber-800">{releasedForScale.length} carga(s)</span>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {releasedForScale.map((row) => (
-              <div key={row.id} className="grid gap-3 rounded-lg border border-amber-100 bg-white p-3 text-sm shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                  <PendingScaleField label="NF" value={row.nf_numero || 'Pendente'} />
-                  <PendingScaleField label="Placa" value={placaVeiculo(row)} strong />
-                  <PendingScaleField label="Produto" value={produtoNome(row)} />
-                  <PendingScaleField label="Fornecedor" value={fornecedorNome(row)} />
-                  <PendingScaleField label="Umidade" value={row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'} />
-                </div>
-                {can('balancas', 'editar') && (
-                  <button type="button" onClick={() => edit(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-xs font-extrabold text-white shadow-sm hover:bg-tijuca-700">
-                    <Edit size={14} /> Preencher balanca
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <PendingScaleSection
+        rows={directForScale}
+        title="Direto para Recebimentos - Pendente finalizar recebimento"
+        tone="direct"
+        canEdit={can('balancas', 'editar')}
+        onEdit={edit}
+      />
+      <PendingScaleSection
+        rows={releasedForScale}
+        title="Aprovado pelo Laboratorio - Pendente finalizar recebimento"
+        tone="laboratorio"
+        canEdit={can('balancas', 'editar')}
+        onEdit={edit}
+      />
 
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:flex-row md:items-center md:justify-between">
         <label className="flex h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500 md:min-w-80">
@@ -958,6 +955,45 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
 
       <RecebimentosTable rows={filtered} loading={loading} can={can} onView={setViewing} onEdit={edit} onDelete={remove} />
     </div>
+  );
+}
+
+function PendingScaleSection({ rows, title, tone, canEdit, onEdit }) {
+  if (!rows.length) return null;
+  const isDirect = tone === 'direct';
+  const sectionClass = isDirect ? 'border-sky-200 bg-sky-50' : 'border-amber-200 bg-amber-50';
+  const titleClass = isDirect ? 'text-sky-900' : 'text-amber-900';
+  const textClass = isDirect ? 'text-sky-800' : 'text-amber-800';
+  const rowClass = isDirect ? 'border-sky-100' : 'border-amber-100';
+
+  return (
+    <section className={`rounded-lg border p-4 shadow-panel ${sectionClass}`}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className={`text-sm font-extrabold uppercase tracking-wide ${titleClass}`}>{title}</h2>
+          <p className={`mt-1 text-sm font-semibold ${textClass}`}>Clique em preencher balanca para abrir o cadastro abaixo e concluir NF, pesos e balanca.</p>
+        </div>
+        <span className={`rounded-full bg-white px-3 py-1 text-xs font-extrabold ${textClass}`}>{rows.length} carga(s)</span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {rows.map((row) => (
+          <div key={row.id} className={`grid gap-3 rounded-lg border bg-white p-3 text-sm shadow-sm lg:grid-cols-[1fr_auto] lg:items-center ${rowClass}`}>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <PendingScaleField label="NF" value={row.nf_numero || 'Pendente'} />
+              <PendingScaleField label="Placa" value={placaVeiculo(row)} strong />
+              <PendingScaleField label="Produto" value={produtoNome(row)} />
+              <PendingScaleField label="Fornecedor" value={fornecedorNome(row)} />
+              <PendingScaleField label="Umidade" value={row.umidade ? `${Number(row.umidade).toFixed(2)}%` : '-'} />
+            </div>
+            {canEdit && (
+              <button type="button" onClick={() => onEdit(row)} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-xs font-extrabold text-white shadow-sm hover:bg-tijuca-700">
+                <Edit size={14} /> Preencher balanca
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1286,10 +1322,18 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         setSaving(false);
         return;
       }
+      const shouldFinalizeDirect = Boolean(
+        row?.id
+        && isDiretoPendenteBalanca(row)
+        && hasRecebimentoFinalizationData(payload),
+      );
+      const savePayload = shouldFinalizeDirect
+        ? { ...payload, status: 'aprovada', dispensa_laboratorio: true }
+        : payload;
       let saved;
-      if (row?.id) saved = await updateRecebimento(row.id, payload);
+      if (row?.id) saved = await updateRecebimento(row.id, savePayload);
       else saved = await createRecebimento({
-        ...payload,
+        ...savePayload,
         status: 'pendente',
       });
       const pendingComplementos = complementos.filter((item) => item.__local);
@@ -3543,7 +3587,15 @@ function SupplierMoistureTooltip({ active, payload }) {
 }
 
 function StatusBadge({ row }) {
-  if (hasDispensaLaboratorio(row) && !isRecebimentoFinalizadoBalanca(row)) {
+  if (isRecebimentoFinalizadoBalanca(row)) {
+    return (
+      <span className="inline-flex rounded-md bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+        Recebimento finalizado
+      </span>
+    );
+  }
+
+  if (isDiretoPendenteBalanca(row)) {
     return (
       <span className="inline-flex max-w-64 rounded-md bg-sky-100 px-2 py-1 text-xs font-bold leading-snug text-sky-800 ring-1 ring-sky-200">
         Direto para Recebimentos - Pendente finalizar recebimento
@@ -3591,12 +3643,14 @@ function PortariaStatus({ status, recebimento }) {
     AGUARDANDO_LABORATORIO: 'Aguardando laboratório',
     ENVIADO_LABORATORIO: 'Enviado ao laboratório',
     ENVIADO_RECEBIMENTO: 'Enviado para recebimento',
+    RECEBIMENTO_FINALIZADO: 'Recebimento finalizado',
     CANCELADA: 'Cancelada',
   };
   const classes = {
     AGUARDANDO_LABORATORIO: 'bg-amber-100 text-amber-700 ring-amber-200',
     ENVIADO_LABORATORIO: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
     ENVIADO_RECEBIMENTO: 'bg-sky-100 text-sky-700 ring-sky-200',
+    RECEBIMENTO_FINALIZADO: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
     CANCELADA: 'bg-slate-100 text-slate-700 ring-slate-200',
   };
   return (
@@ -4757,6 +4811,24 @@ function sortRecebimentoRows(rows) {
   });
 }
 
+function sortPendingScaleRows(rows) {
+  return [...rows].sort((a, b) => {
+    const dateA = String(a.portaria?.data_entrada || a.data || '');
+    const dateB = String(b.portaria?.data_entrada || b.data || '');
+    const dateDiff = dateA.localeCompare(dateB);
+    if (dateDiff) return dateDiff;
+
+    const timeA = String(a.portaria?.hora_entrada || '00:00:00');
+    const timeB = String(b.portaria?.hora_entrada || '00:00:00');
+    const timeDiff = timeA.localeCompare(timeB);
+    if (timeDiff) return timeDiff;
+
+    const createdAtA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const createdAtB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return createdAtA - createdAtB;
+  });
+}
+
 function sortReportRows(rows) {
   return [...rows].sort((a, b) => {
     const supplierDiff = normalizeName(fornecedorNome(a)).localeCompare(normalizeName(fornecedorNome(b)), 'pt-BR');
@@ -4770,7 +4842,7 @@ function sortReportRows(rows) {
 }
 
 function recebimentoSortPriority(row) {
-  if (isLaboratorioPendenteBalanca(row)) return 0;
+  if (isLaboratorioPendenteBalanca(row) || isDiretoPendenteBalanca(row)) return 0;
   if (row.status === 'aprovada') return 1;
   return 2;
 }
@@ -4786,39 +4858,17 @@ function compareOperationalDateTimeDesc(a, b) {
   return String(b.id || '').localeCompare(String(a.id || ''));
 }
 
-function isLaboratorioPendenteBalanca(row) {
-  return row.status === 'aprovada'
-    && !hasDispensaLaboratorio(row)
-    && (row.veiculo_id || row.veiculo_placa_manual)
-    && (!Number(row.peso_bruto || 0) || !Number(row.tara || 0) || !row.nf_numero || !row.balanca_id);
-}
-
-function hasDispensaLaboratorio(row) {
-  return Boolean(
-    row?.dispensa_laboratorio
-    || row?.portaria?.dispensa_laboratorio
-    || row?.portaria?.status === 'ENVIADO_RECEBIMENTO',
-  );
-}
-
-function isAprovadaLaboratorio(row) {
-  return row.status === 'aprovada' && !hasDispensaLaboratorio(row);
-}
-
-function isRecebimentoFinalizadoBalanca(row) {
-  return row.status === 'aprovada' && !isLaboratorioPendenteBalanca(row);
-}
-
 function recebimentoRowClass(row) {
   const base = 'border-b last:border-0';
+  if (isDiretoPendenteBalanca(row)) return `${base} bg-sky-50/80 hover:bg-sky-100/80`;
   if (isLaboratorioPendenteBalanca(row)) return `${base} bg-amber-50/80 hover:bg-amber-100/80`;
   return base;
 }
 
 function recebimentoStatusLabel(row) {
-  if (hasDispensaLaboratorio(row) && !isRecebimentoFinalizadoBalanca(row)) return 'Direto para Recebimentos - Pendente finalizar recebimento';
+  if (isRecebimentoFinalizadoBalanca(row)) return 'Recebimento finalizado';
   if (isLaboratorioPendenteBalanca(row)) return 'Aprovado pelo Laboratório - Pendente finalizar recebimento';
-  if (isRecebimentoFinalizadoBalanca(row)) return 'Aprovada balança';
+  if (isDiretoPendenteBalanca(row)) return 'Direto para Recebimentos - Pendente finalizar recebimento';
   return statusLabel(row.status);
 }
 
