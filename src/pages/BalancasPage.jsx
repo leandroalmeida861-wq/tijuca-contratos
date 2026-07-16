@@ -1156,7 +1156,9 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const canImportXml = !row || isLaboratorioPendenteBalanca(row);
+  const canImportXml = !row
+    || isLaboratorioPendenteBalanca(row)
+    || isDiretoPendenteBalanca(row);
   const canEditComplementos = !can || can('balancas', 'editar') || can('balancas', 'cadastrar');
   const laboratorioOptions = localOptions.laboratorios;
 

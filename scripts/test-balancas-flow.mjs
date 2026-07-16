@@ -46,6 +46,10 @@ const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta
 const migration = await readFile(new URL('../supabase/portaria-dispensa-laboratorio.sql', import.meta.url), 'utf8');
 
 assert.ok(page.includes("status: 'aprovada', dispensa_laboratorio: true"), 'Salvar carga direta completa deve persistir status final');
+assert.ok(
+  page.includes('|| isDiretoPendenteBalanca(row);'),
+  'Carga direta pendente deve reutilizar a importação XML do formulário de recebimento',
+);
 assert.ok(page.includes('sortPendingScaleRows'), 'Pendências devem usar ordenação operacional crescente');
 assert.ok(page.toUpperCase().includes('DIRETO PARA RECEBIMENTOS - PENDENTE FINALIZAR RECEBIMENTO'), 'Fila direta deve ter identificação própria');
 assert.ok(page.includes("return 'Recebimento finalizado'"), 'Status final deve ter texto próprio e prioritário');
