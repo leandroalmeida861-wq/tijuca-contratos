@@ -54,3 +54,24 @@ export const TABLE_MENU = {
 export function permissionsToMap(rows = []) {
   return Object.fromEntries(rows.map((row) => [row.menu, row]));
 }
+
+const LANDING_MENU_PRIORITY = [
+  'dashboard',
+  'balancas',
+  'fornecedores',
+  'fabricas',
+  'produtos',
+  'contratos',
+  'notas_fiscais',
+  'fretes',
+  'documentos',
+  'financeiro',
+  'backup',
+  'usuarios',
+  'auditoria',
+];
+
+export function getFirstAllowedRoute(can) {
+  const menu = LANDING_MENU_PRIORITY.find((menuKey) => can(menuKey, 'visualizar'));
+  return MENU_DEFINITIONS.find((item) => item.key === menu)?.path || null;
+}

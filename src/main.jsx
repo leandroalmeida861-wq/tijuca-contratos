@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppErrorBoundary from './components/AppErrorBoundary.jsx';
 import AppLayout from './components/AppLayout.jsx';
+import AuthorizedHome from './components/AuthorizedHome.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import BackupPage from './pages/BackupPage.jsx';
@@ -11,7 +12,6 @@ import AdminAccessPage from './pages/AdminAccessPage.jsx';
 import AdminSolicitacoes from './pages/AdminSolicitacoes.jsx';
 import AuditLogsPage from './pages/AuditLogsPage.jsx';
 import BalancasPage from './pages/BalancasPage.jsx';
-import Dashboard from './pages/Dashboard.jsx';
 import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
 import './styles/index.css';
@@ -32,7 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           >
-            <Route index element={<ProtectedRoute menu="dashboard"><Dashboard /></ProtectedRoute>} />
+            <Route index element={<AuthorizedHome />} />
             <Route path="fornecedores" element={<ProtectedRoute menu="fornecedores"><ManagementPage type="fornecedores" /></ProtectedRoute>} />
             <Route path="fabricas" element={<ProtectedRoute menu="fabricas"><ManagementPage type="fabricas" /></ProtectedRoute>} />
             <Route path="produtos" element={<ProtectedRoute menu="produtos"><ManagementPage type="produtos" /></ProtectedRoute>} />
