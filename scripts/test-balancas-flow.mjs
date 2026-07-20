@@ -45,6 +45,20 @@ assert.equal(isLaboratorioPendenteBalanca({ ...complete, dispensa_laboratorio: f
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
 const migration = await readFile(new URL('../supabase/portaria-dispensa-laboratorio.sql', import.meta.url), 'utf8');
 
+assert.ok(
+  page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
+  'Envio ao laboratorio deve respeitar a permissao de aprovacao da Portaria',
+);
+assert.ok(
+  page.includes("row.status !== 'AGUARDANDO_LABORATORIO'"),
+  'Entrada ja encaminhada nao pode ser enviada novamente ao laboratorio',
+);
+assert.ok(
+  page.includes('Enviar para Laborat'),
+  'Visualizacao da entrada deve oferecer a acao de envio ao laboratorio',
+);
+assert.ok(page.includes('sendingToLabId'), 'Envio deve bloquear cliques simultaneos na mesma entrada');
+
 assert.ok(page.includes("status: 'aprovada', dispensa_laboratorio: true"), 'Salvar carga direta completa deve persistir status final');
 assert.ok(
   page.includes('|| isDiretoPendenteBalanca(row);'),

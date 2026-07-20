@@ -508,9 +508,11 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
   const [form, setForm] = useState(defaultPortariaForm);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [sendingToLabId, setSendingToLabId] = useState(null);
   const canCreate = can('balancas', 'cadastrar');
   const canEdit = can('balancas', 'editar');
   const canDelete = can('balancas', 'excluir') || can('balancas', 'cancelar');
+  const canSendToLab = can('balancas', 'aprovar') || canCreate;
 
   function openNew() {
     setEditing(null);
@@ -647,11 +649,21 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
   }
 
   async function sendToLab(row) {
+    if (!canSendToLab) {
+      setError('Voce nao tem permissao para enviar entradas ao laboratorio.');
+      return false;
+    }
     if (row.dispensa_laboratorio) {
       setError('Esta entrada esta marcada como "Nao passa pelo laboratorio" e deve seguir diretamente para Recebimentos.');
-      return;
+      return false;
     }
-    if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return;
+    if (row.status !== 'AGUARDANDO_LABORATORIO') {
+      setError('Esta entrada ja foi encaminhada e nao pode ser enviada novamente.');
+      return false;
+    }
+    if (sendingToLabId === row.id) return false;
+    if (!window.confirm(`Disponibilizar a NF ${row.numero_nf} para o laboratorio?`)) return false;
+    setSendingToLabId(row.id);
     try {
       setError('');
       setMessage('');
@@ -663,7 +675,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       });
       if (duplicate && duplicate.portaria_id !== row.id) {
         setError('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
-        return;
+        return false;
       }
 
       const payload = {
@@ -691,9 +703,18 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       await updatePortariaEntrada(row.id, { status: 'ENVIADO_LABORATORIO' });
       setMessage('Entrada disponibilizada para Aprovação Laboratório.');
       await reload();
+      return true;
     } catch (err) {
       setError(toUserError(err));
+      return false;
+    } finally {
+      setSendingToLabId(null);
     }
+  }
+
+  async function sendToLabFromView(row) {
+    const sent = await sendToLab(row);
+    if (sent) setViewing(null);
   }
 
   return (
@@ -796,7 +817,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={() => setViewing(row)} className="text-slate-600 hover:text-tijuca-700" title="Visualizar"><Eye size={17} /></button>
                     {canEdit && <button type="button" onClick={() => openEdit(row)} className="text-slate-600 hover:text-tijuca-700" title="Editar"><Edit size={17} /></button>}
-                    {canCreate && row.status === 'AGUARDANDO_LABORATORIO' && !row.dispensa_laboratorio && <button type="button" onClick={() => sendToLab(row)} className="text-tijuca-700 hover:text-tijuca-900" title="Enviar para laboratório"><Check size={17} /></button>}
+                    {canSendToLab && row.status === 'AGUARDANDO_LABORATORIO' && !row.dispensa_laboratorio && <button type="button" disabled={sendingToLabId === row.id} onClick={() => sendToLab(row)} className="text-tijuca-700 hover:text-tijuca-900 disabled:cursor-not-allowed disabled:opacity-50" title="Enviar para laboratório"><Check size={17} /></button>}
                     {canDelete && <button type="button" onClick={() => remove(row)} className="text-rose-600 hover:text-rose-700" title="Excluir"><Trash2 size={17} /></button>}
                   </div>
                 </td>
@@ -809,12 +830,19 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
         </table>
       </div>
 
-      {viewing && <PortariaViewModal row={viewing} options={options} onClose={() => setViewing(null)} />}
+      {viewing && <PortariaViewModal
+        row={viewing}
+        options={options}
+        canSendToLab={canSendToLab && viewing.status === 'AGUARDANDO_LABORATORIO' && !viewing.dispensa_laboratorio}
+        sendingToLab={sendingToLabId === viewing.id}
+        onSendToLab={sendToLabFromView}
+        onClose={() => setViewing(null)}
+      />}
     </div>
   );
 }
 
-function PortariaViewModal({ row, options, onClose }) {
+function PortariaViewModal({ row, options, canSendToLab, sendingToLab, onSendToLab, onClose }) {
   const displayRow = portariaDisplayRow(row);
   const recebimento = row.recebimento;
   const fields = [
@@ -855,6 +883,21 @@ function PortariaViewModal({ row, options, onClose }) {
               <p className="mt-1 break-words text-sm font-bold text-slate-800">{value}</p>
             </div>
           ))}
+        </div>
+        <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          {canSendToLab && (
+            <button
+              type="button"
+              disabled={sendingToLab}
+              onClick={() => onSendToLab(row)}
+              className="inline-flex h-11 items-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Check size={17} /> {sendingToLab ? 'Enviando...' : 'Enviar para Laboratório'}
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+            Fechar
+          </button>
         </div>
       </div>
     </div>
