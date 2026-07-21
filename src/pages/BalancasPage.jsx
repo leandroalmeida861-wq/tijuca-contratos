@@ -1367,13 +1367,13 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
         setSaving(false);
         return;
       }
-      const shouldFinalizeDirect = Boolean(
+      const shouldFinalizePending = Boolean(
         row?.id
-        && isDiretoPendenteBalanca(row)
+        && (isLaboratorioPendenteBalanca(row) || isDiretoPendenteBalanca(row))
         && hasRecebimentoFinalizationData(payload),
       );
-      const savePayload = shouldFinalizeDirect
-        ? { ...payload, status: 'aprovada', dispensa_laboratorio: true }
+      const savePayload = shouldFinalizePending
+        ? { ...payload, status: 'aprovada', dispensa_laboratorio: hasDispensaLaboratorio(row) }
         : payload;
       let saved;
       if (row?.id) saved = await updateRecebimento(row.id, savePayload);
@@ -3855,8 +3855,15 @@ function validateRecebimentoForm(form) {
   requireField('nf_numero', 'Numero da NF');
   requireField('fornecedor_id', 'Fornecedor cadastrado', Boolean(form.fornecedor_id));
   requireField('veiculo_id', 'Veiculo', Boolean(form.veiculo_id || form.veiculo_placa_manual));
-  requireField('peso_bruto', 'Peso bruto KG', form.peso_bruto !== '' && form.peso_bruto !== null && form.peso_bruto !== undefined);
-  requireField('tara', 'Tara KG', form.tara !== '' && form.tara !== null && form.tara !== undefined);
+  const pesoBruto = Number(form.peso_bruto);
+  const tara = Number(form.tara);
+  requireField('peso_bruto', 'Peso bruto KG maior que zero', Number.isFinite(pesoBruto) && pesoBruto > 0);
+  requireField('tara', 'Tara KG maior que zero', Number.isFinite(tara) && tara > 0);
+  if (Number.isFinite(pesoBruto) && Number.isFinite(tara) && pesoBruto > 0 && tara > 0 && pesoBruto < tara) {
+    fields.peso_bruto = 'Peso bruto menor que a tara';
+    fields.tara = 'Tara maior que o peso bruto';
+    missing.push('Peso bruto deve ser maior ou igual a tara');
+  }
 
   const itens = ensureRecebimentoItems(form);
   if (!itens.length) {

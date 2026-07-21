@@ -59,7 +59,17 @@ assert.ok(
 );
 assert.ok(page.includes('sendingToLabId'), 'Envio deve bloquear cliques simultaneos na mesma entrada');
 
-assert.ok(page.includes("status: 'aprovada', dispensa_laboratorio: true"), 'Salvar carga direta completa deve persistir status final');
+assert.ok(page.includes('const shouldFinalizePending = Boolean('), 'Salvamento deve concluir qualquer pendencia de balanca valida');
+assert.ok(
+  page.includes('(isLaboratorioPendenteBalanca(row) || isDiretoPendenteBalanca(row))'),
+  'Finalizacao deve contemplar cargas vindas do laboratorio e cargas diretas',
+);
+assert.ok(
+  page.includes("status: 'aprovada', dispensa_laboratorio: hasDispensaLaboratorio(row)"),
+  'Finalizacao deve preservar a origem laboratorial ou direta do recebimento',
+);
+assert.ok(page.includes("'Peso bruto KG maior que zero'"), 'Peso bruto zerado nao pode produzir falso sucesso');
+assert.ok(page.includes("'Tara KG maior que zero'"), 'Tara zerada nao pode produzir falso sucesso');
 assert.ok(
   page.includes('|| isDiretoPendenteBalanca(row);'),
   'Carga direta pendente deve reutilizar a importação XML do formulário de recebimento',
