@@ -30,6 +30,7 @@ export function pesoNotaPrincipalRecebimento(row) {
 }
 
 export function notaComplementoPesoKg(complemento) {
+  if (complemento?.afeta_peso === false) return 0;
   if (Number(complemento?.quantidade_nota || 0) > 0) {
     const converted = notaItemPesoKg(
       complemento.quantidade_nota,

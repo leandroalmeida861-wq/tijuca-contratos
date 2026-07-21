@@ -14,6 +14,7 @@ assert.equal(notaItemPesoKg(48, 'TON'), 48000, 'TON deve converter para KG');
 assert.equal(notaItemPesoKg(638, 'SC', 60), 38280, 'SC deve respeitar peso por saca');
 assert.equal(notaItemPesoKg(10, 'UN'), 0, 'Unidade sem peso não pode ser tratada como KG');
 assert.equal(notaComplementoPesoKg({ quantidade_nota: 10, unidade_nota: 'TON' }), 10000, 'Complemento em tonelada deve converter para KG');
+assert.equal(notaComplementoPesoKg({ quantidade_nota: 10, unidade_nota: 'TON', afeta_peso: false }), 0, 'Complemento financeiro nao deve alterar o peso');
 
 const recebimento = {
   id: 'recebimento-1',
@@ -38,6 +39,11 @@ assert.equal(
   pesoNotaRecebimento({ ...recebimento, complementos: [{ quantidade_nota: 5, unidade_nota: 'TON' }] }),
   53000,
   'Peso da armazenagem deve somar a NF principal e as notas complementares',
+);
+assert.equal(
+  pesoNotaRecebimento({ ...recebimento, complementos: [{ quantidade_nota: 5, unidade_nota: 'TON', afeta_peso: false }] }),
+  48000,
+  'Complemento marcado como financeiro deve preservar o peso principal',
 );
 assert.equal(isRecebimentoFinalizadoParaArmazenagem(recebimento), true, 'Recebimento finalizado deve ficar disponível');
 assert.equal(isRecebimentoFinalizadoParaArmazenagem({ ...recebimento, status: 'pendente' }), false, 'Recebimento pendente não pode entrar');

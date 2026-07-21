@@ -1106,7 +1106,9 @@ function valorPrincipalRecebimento(row) {
 }
 
 function complementoPesoTotal(complementos = []) {
-  return (complementos || []).reduce((sum, item) => sum + Number(item.peso_nf || 0), 0);
+  return (complementos || [])
+    .filter((item) => item?.afeta_peso !== false)
+    .reduce((sum, item) => sum + Number(item.peso_nf || 0), 0);
 }
 
 function pesoNotaAgregado(row) {

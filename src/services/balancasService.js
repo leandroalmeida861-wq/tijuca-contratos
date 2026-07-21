@@ -36,6 +36,7 @@ const RECEBIMENTO_SELECT = `
     unidade_nota,
     peso_por_saca,
     peso_nf,
+    afeta_peso,
     valor_unitario,
     valor_total,
     xml_nome_arquivo,

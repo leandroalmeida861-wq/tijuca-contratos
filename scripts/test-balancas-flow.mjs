@@ -43,6 +43,7 @@ assert.equal(isRecebimentoFinalizadoBalanca(labPending), false, 'Aprovação do 
 assert.equal(isLaboratorioPendenteBalanca({ ...complete, dispensa_laboratorio: false }), false, 'Carga completa deve sair da fila laboratorial');
 
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
+const service = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 const migration = await readFile(new URL('../supabase/portaria-dispensa-laboratorio.sql', import.meta.url), 'utf8');
 
 assert.ok(
@@ -70,6 +71,8 @@ assert.ok(
 );
 assert.ok(page.includes("'Peso bruto KG maior que zero'"), 'Peso bruto zerado nao pode produzir falso sucesso');
 assert.ok(page.includes("'Tara KG maior que zero'"), 'Tara zerada nao pode produzir falso sucesso');
+assert.ok(page.includes("item?.afeta_peso !== false"), 'Complemento financeiro nao deve alterar a diferenca de peso');
+assert.ok(service.includes('afeta_peso,'), 'Consulta deve carregar o marcador de peso do complemento');
 assert.ok(
   page.includes('|| isDiretoPendenteBalanca(row);'),
   'Carga direta pendente deve reutilizar a importação XML do formulário de recebimento',
