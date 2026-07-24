@@ -213,6 +213,7 @@ export default function BalancasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const generalDataLoaded = useRef(false);
   const canTab = (tabKey, action = 'visualizar') => canBalancasTab(can, permissions, tabKey, action);
   const visibleTabs = tabs.filter((tab) => canTab(tab.key, 'visualizar'));
 
@@ -235,6 +236,7 @@ export default function BalancasPage() {
       setOptions(nextOptions);
       setRows(attachPortariaRows(nextRows, nextPortariaRows));
       setPortariaRows(attachRecebimentosToPortarias(nextPortariaRows, portariaRecebimentos));
+      generalDataLoaded.current = true;
     } catch (err) {
       if (!silent) setError(toUserError(err));
     } finally {
@@ -243,10 +245,12 @@ export default function BalancasPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    if (activeTab !== 'armazenagem' && !generalDataLoaded.current) load();
+  }, [activeTab]);
 
-  useSupabaseRealtimeRefresh(balancasRealtimeTables, () => load(filters, { silent: true }), {
+  useSupabaseRealtimeRefresh(balancasRealtimeTables, () => {
+    if (activeTab !== 'armazenagem') load(filters, { silent: true });
+  }, {
     channelName: 'balancas',
   });
 
@@ -321,7 +325,7 @@ export default function BalancasPage() {
       </div>
 
       {message && <Alert tone="success" text={message} />}
-      {error && <Alert tone="error" text={error} />}
+      {error && activeTab !== 'armazenagem' && <Alert tone="error" text={error} />}
 
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
       {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}

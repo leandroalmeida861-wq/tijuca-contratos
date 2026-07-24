@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.js';
+import { classifyRequestError } from '../lib/reliableFetch.js';
 
 const RECEBIMENTO_SELECT = `
   *,
@@ -499,6 +500,19 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
 export function toUserError(error) {
   const message = String(error?.message || error || '');
   const lower = message.toLowerCase();
+  const requestError = classifyRequestError(error);
+  if (requestError === 'connection') {
+    return 'Falha de conexao com o banco de dados. Verifique sua internet e tente novamente.';
+  }
+  if (requestError === 'session') {
+    return 'Sua sessao expirou. Entre novamente no AgroFlow para carregar os dados.';
+  }
+  if (requestError === 'permission') {
+    return 'Acesso negado. Confira se seu perfil tem permissao no menu Balancas.';
+  }
+  if (requestError === 'server') {
+    return 'O servidor de dados esta temporariamente indisponivel. Aguarde um momento e tente novamente.';
+  }
   if (lower.includes('row-level security') || lower.includes('permission')) {
     return 'Acesso negado. Como corrigir: confira se seu perfil tem permissão no menu Balanças.';
   }

@@ -218,8 +218,12 @@ export default function ArmazenagemTab({ can }) {
 
   if (loading) {
     return (
-      <div className="grid min-h-48 place-items-center rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-500 shadow-panel">
-        Carregando Armazenagem M.P...
+      <div className="grid min-h-48 place-items-center rounded-lg border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-500 shadow-panel">
+        {error ? (
+          <LoadError text={error} onRetry={() => load()} />
+        ) : (
+          'Carregando Armazenagem M.P...'
+        )}
       </div>
     );
   }
@@ -227,7 +231,7 @@ export default function ArmazenagemTab({ can }) {
   return (
     <div className="grid gap-5">
       {message && <Notice tone="success" text={message} onClose={() => setMessage('')} />}
-      {error && <Notice tone="error" text={error} onClose={() => setError('')} />}
+      {error && <Notice tone="error" text={error} onClose={() => setError('')} actionLabel="Tentar novamente" onAction={() => load()} />}
 
       <section className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
         <div className="flex items-start gap-3">
@@ -608,8 +612,31 @@ function Empty({ text }) {
   return <div className="grid min-h-32 place-items-center p-6 text-center text-sm font-semibold text-slate-500">{text}</div>;
 }
 
-function Notice({ tone, text, onClose }) {
-  return <div className={`flex items-start justify-between gap-3 rounded-lg border p-3 text-sm font-bold ${tone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}><span>{text}</span><button type="button" title="Fechar aviso" onClick={onClose}><X className="h-4 w-4" /></button></div>;
+function Notice({ tone, text, onClose, actionLabel, onAction }) {
+  return (
+    <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm font-bold ${tone === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+      <span>{text}</span>
+      <div className="flex items-center gap-2">
+        {actionLabel && onAction && (
+          <button type="button" className="rounded-md border border-current px-3 py-2 hover:bg-white/60" onClick={onAction}>
+            {actionLabel}
+          </button>
+        )}
+        <button type="button" title="Fechar aviso" onClick={onClose}><X className="h-4 w-4" /></button>
+      </div>
+    </div>
+  );
+}
+
+function LoadError({ text, onRetry }) {
+  return (
+    <div className="grid max-w-xl justify-items-center gap-3 text-center text-rose-700">
+      <span>{text}</span>
+      <button type="button" className={BUTTON_SECONDARY} onClick={onRetry}>
+        <RotateCcw className="h-4 w-4" /> Tentar novamente
+      </button>
+    </div>
+  );
 }
 
 function storageForm(record) {

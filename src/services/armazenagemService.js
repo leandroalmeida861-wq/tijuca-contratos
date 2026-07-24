@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.js';
+import { classifyRequestError } from '../lib/reliableFetch.js';
 import { listRecebimentos } from './balancasService.js';
 import {
   isRecebimentoFinalizadoParaArmazenagem,
@@ -181,6 +182,19 @@ export async function reabrirMesArmazenagem({ ano, mes, justificativa }) {
 export function toArmazenagemError(error) {
   const message = String(error?.message || error || '');
   const normalized = message.toUpperCase();
+  const requestError = classifyRequestError(error);
+  if (requestError === 'connection') {
+    return 'Falha de conexao com o banco de dados. Verifique sua internet e tente novamente.';
+  }
+  if (requestError === 'session') {
+    return 'Sua sessao expirou. Entre novamente no AgroFlow para carregar os dados.';
+  }
+  if (requestError === 'permission') {
+    return 'Acesso negado pelo banco. Peca ao Admin a permissao necessaria em Balancas - Armazenagem M.P.';
+  }
+  if (requestError === 'server') {
+    return 'O servidor de dados esta temporariamente indisponivel. Aguarde um momento e tente novamente.';
+  }
   const errors = [
     ['PESO_DISTRIBUIDO_SUPERA_NOTA', 'O peso distribuído ultrapassa o peso da NF. Como corrigir: reduza o peso do Silo ou da Baia.'],
     ['SILO_OU_BAIA_OBRIGATORIO', 'Informe pelo menos um Silo ou uma Baia para cada distribuição.'],

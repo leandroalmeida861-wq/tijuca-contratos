@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createReliableFetch } from './reliableFetch.js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -37,6 +38,12 @@ export const supabase = isSupabaseConfigured
         flowType: 'pkce',
         storage: authStorage,
         storageKey: `agroflow-auth-${tabId}`,
+      },
+      global: {
+        fetch: createReliableFetch(globalThis.fetch),
+      },
+      db: {
+        retry: false,
       },
     })
   : null;
