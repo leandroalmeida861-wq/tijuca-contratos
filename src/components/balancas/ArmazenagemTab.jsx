@@ -271,6 +271,7 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
       await fecharMesArmazenagem({
         ano: month.ano,
         mes: month.mes,
+        balancaId,
         autorizarPendencias: pending,
         justificativa: justification,
       });
@@ -288,7 +289,12 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
     if (!justification.trim()) return;
     setClosing(true);
     try {
-      await reabrirMesArmazenagem({ ano: month.ano, mes: month.mes, justificativa: justification });
+      await reabrirMesArmazenagem({
+        ano: month.ano,
+        mes: month.mes,
+        balancaId,
+        justificativa: justification,
+      });
       setMessage(`${month.nome}/${month.ano} reaberto com sucesso.`);
       await load({ silent: true });
     } catch (reopenError) {

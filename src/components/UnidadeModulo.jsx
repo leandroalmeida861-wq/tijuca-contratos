@@ -26,5 +26,7 @@ export default function UnidadeModulo({ unidade }) {
 
   if (!aba) return <Navigate to={rotaInicialDaUnidade(unidade)} replace />;
 
-  return <BalancasPage unidade={unidade} aba={aba.key} />;
+  // O React Router reaproveita o mesmo tipo de componente entre as rotas das
+  // unidades. A chave garante estado, filtros e dados novos a cada troca.
+  return <BalancasPage key={unidade.codigo} unidade={unidade} aba={aba.key} />;
 }

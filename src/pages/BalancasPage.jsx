@@ -352,20 +352,23 @@ export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
 
   return (
     <div className="grid gap-5">
-      <header>
-        <h1 className="text-2xl font-extrabold text-slate-950">{unidade.nome}</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">{unidade.descricao}</p>
+      <header className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{unidade.nome}</h1>
+        <p className="mt-1.5 text-sm font-semibold leading-relaxed text-slate-600 sm:text-base">{unidade.descricao}</p>
       </header>
 
-      <div className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-panel">
+      <div className="flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2.5 shadow-panel">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => selectTab(tab.key)}
+            aria-current={activeTab === tab.key ? 'page' : undefined}
             className={[
-              'h-10 shrink-0 rounded-md px-3 text-sm font-bold transition',
-              activeTab === tab.key ? 'bg-tijuca-600 text-white' : 'text-slate-600 hover:bg-slate-100',
+              'h-11 shrink-0 rounded-lg border px-4 text-sm font-extrabold transition sm:text-base',
+              activeTab === tab.key
+                ? 'border-tijuca-600 bg-tijuca-600 text-white shadow-sm'
+                : 'border-transparent text-slate-800 hover:border-slate-200 hover:bg-slate-100',
             ].join(' ')}
           >
             {tab.label}

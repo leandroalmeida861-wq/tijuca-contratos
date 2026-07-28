@@ -95,6 +95,7 @@ assert.equal(isolados[0].recebimento.nf_numero, '006', 'Dados atuais do recebime
 
 const migration = await readFile(new URL('../supabase/armazenagem-materia-prima.sql', import.meta.url), 'utf8');
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
+const unidadesConfig = await readFile(new URL('../src/config/unidades.js', import.meta.url), 'utf8');
 const permissions = await readFile(new URL('../src/lib/permissions.js', import.meta.url), 'utf8');
 const immutableLinkMigration = await readFile(new URL('../supabase/armazenagem-vinculo-id-imutavel.sql', import.meta.url), 'utf8');
 const atomicSaveMigration = await readFile(new URL('../supabase/armazenagem-salvar-atomico.sql', import.meta.url), 'utf8');
@@ -118,7 +119,7 @@ for (const required of [
   assert.ok(migration.includes(required), `Migration deve conter: ${required}`);
 }
 
-assert.ok(page.includes("{ key: 'armazenagem', label: 'Armazenagem M.P.', menu: 'balancas_armazenagem' }"));
+assert.ok(unidadesConfig.includes("armazenagem: { key: 'armazenagem', label: 'Armazenagem M.P.'"));
 assert.ok(permissions.includes("key: 'balancas_armazenagem'"));
 assert.ok(immutableLinkMigration.includes('new.recebimento_id is distinct from old.recebimento_id'));
 assert.ok(immutableLinkMigration.includes("raise exception 'RECEBIMENTO_ID_ARMAZENAGEM_IMUTAVEL'"));
@@ -141,7 +142,7 @@ assert.ok(atomicSaveMigration.includes('private.armazenagem_sincronizar_compleme
 assert.ok(atomicSaveMigration.includes('return public.agroflow_armazenagem_salvar('), 'Criação e salvamento devem compartilhar a mesma transação');
 assert.ok(atomicSaveMigration.includes('revoke all on function public.agroflow_armazenagem_salvar_recebimento'));
 assert.ok(page.includes("key={editing?.id || 'novo-recebimento'}"), 'Formulário deve reiniciar ao trocar de recebimento');
-assert.ok(service.includes(".update(cleanedPayload)\n    .eq('id', id)"), 'Portaria deve atualizar pelo ID');
+assert.match(service, /\.update\(cleanedPayload\)\r?\n\s+\.eq\('id', id\)/, 'Portaria deve atualizar pelo ID');
 assert.ok(service.includes(".update(cleanedPayload).eq('id', id)"), 'Recebimento deve atualizar pelo ID');
 assert.ok(!service.includes(".update(cleanedPayload).eq('nf_numero'"), 'NF não pode identificar updates');
 assert.ok(!service.includes(".update(cleanedPayload).eq('placa'"), 'Placa não pode identificar updates');

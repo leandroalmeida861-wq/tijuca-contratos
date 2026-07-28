@@ -135,6 +135,7 @@ export async function listLookup(table, orderColumn = 'nome') {
 }
 
 export async function listRecebimentos(filters = {}) {
+  requireUnidadeScope(filters);
   let query = supabase
     .from('recebimentos')
     .select(RECEBIMENTO_SELECT)
@@ -157,6 +158,7 @@ export async function listRecebimentos(filters = {}) {
 }
 
 export async function listPortariaEntradas(escopo = {}) {
+  requireUnidadeScope(escopo);
   let query = supabase
     .from('portaria_entradas')
     .select(PORTARIA_SELECT)
@@ -178,7 +180,7 @@ export async function listPortariaEntradas(escopo = {}) {
  * gravados sem `balanca_id` — usado apenas pelo modulo legado de Beberibe.
  */
 function aplicarEscopoUnidade(query, escopo = {}) {
-  if (!escopo.balancaId) return query;
+  requireUnidadeScope(escopo);
   return escopo.incluirSemUnidade
     ? query.or(`balanca_id.eq.${escopo.balancaId},balanca_id.is.null`)
     : query.eq('balanca_id', escopo.balancaId);
@@ -186,6 +188,7 @@ function aplicarEscopoUnidade(query, escopo = {}) {
 
 export async function createPortariaEntrada(payload) {
   const cleanedPayload = cleanPayload(payload);
+  requirePayloadUnidade(cleanedPayload);
   const { data, error } = await supabase
     .from('portaria_entradas')
     .insert(cleanedPayload)
@@ -208,6 +211,7 @@ export async function createPortariaEntrada(payload) {
 export async function updatePortariaEntrada(id, payload) {
   requireRecordId(id, 'entrada da Portaria');
   const cleanedPayload = cleanPayload(payload);
+  requirePayloadUnidade(cleanedPayload);
   const { data, error } = await supabase
     .from('portaria_entradas')
     .update(cleanedPayload)
@@ -307,6 +311,7 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
 export async function createRecebimento(payload) {
   const { itens, header } = prepareRecebimentoForSave(payload);
   const cleanedPayload = cleanPayload(header);
+  requirePayloadUnidade(cleanedPayload);
   const { data, error } = await supabase.from('recebimentos').insert(cleanedPayload).select(RECEBIMENTO_SELECT).single();
   const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
   if (error && fallbackPayload) {
@@ -322,6 +327,7 @@ export async function updateRecebimento(id, payload) {
   requireRecordId(id, 'recebimento');
   const { itens, header } = prepareRecebimentoForSave(payload);
   const cleanedPayload = cleanPayload(header);
+  requirePayloadUnidade(cleanedPayload);
   const { data, error } = await supabase.from('recebimentos').update(cleanedPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
   const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
   if (error && fallbackPayload) {
@@ -553,6 +559,22 @@ function requireRecordId(id, label) {
     throw new Error(`Identificador inválido para ${label}. Recarregue a tela e selecione o registro novamente.`);
   }
   return value;
+}
+
+export function requireUnidadeScope(escopo = {}) {
+  const balancaId = String(escopo?.balancaId || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(balancaId)) {
+    throw new Error('UNIDADE_NAO_RESOLVIDA');
+  }
+  return balancaId;
+}
+
+function requirePayloadUnidade(payload = {}) {
+  const balancaId = String(payload?.balanca_id || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(balancaId)) {
+    throw new Error('UNIDADE_OBRIGATORIA');
+  }
+  return balancaId;
 }
 
 function cleanPayload(payload) {
