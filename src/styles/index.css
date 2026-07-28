@@ -39,6 +39,15 @@ textarea {
   min-width: 0;
 }
 
+/*
+ * Campos de formulario: um <select> cresce para caber a maior opcao, entao um
+ * nome de fornecedor longo esticava a coluna e vazava para fora da tela.
+ */
+:where(main) :where(select, input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* A rolagem horizontal fica dentro do container, com inercia no toque. */
 :where(.overflow-x-auto) {
   -webkit-overflow-scrolling: touch;
