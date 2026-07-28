@@ -263,9 +263,18 @@ export async function findRecebimentoByPortariaId(portariaId) {
   return data?.[0] || null;
 }
 
-export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf_numero, excludeId } = {}) {
+export async function findDuplicateRecebimentoNotaFornecedor({
+  fornecedor_id,
+  nf_numero,
+  nf_serie,
+  balanca_id,
+  excludeId,
+  excludePortariaId,
+} = {}) {
   const fornecedorId = fornecedor_id || '';
   const nfDigits = normalizeNfNumber(nf_numero);
+  const nfSerie = normalize(nf_serie);
+  const balancaId = requirePayloadUnidade({ balanca_id });
   if (!fornecedorId || !nfDigits) return null;
 
   const { data: selectedSupplier, error: supplierError } = await supabase
@@ -277,36 +286,25 @@ export async function findDuplicateRecebimentoNotaFornecedor({ fornecedor_id, nf
 
   let query = supabase
     .from('recebimentos')
-    .select('id,portaria_id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
+    .select('id,portaria_id,balanca_id,nf_numero,nf_serie,status,fornecedor:fornecedores(id,nome,cnpj)')
+    .eq('balanca_id', balancaId)
     .neq('status', 'cancelada');
 
   if (excludeId) query = query.neq('id', excludeId);
+  if (excludePortariaId) query = query.or(`portaria_id.is.null,portaria_id.neq.${excludePortariaId}`);
 
   let { data, error } = await query;
-  if (error && isMissingColumn(error, 'portaria_id')) {
-    query = supabase
-      .from('recebimentos')
-      .select('id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
-      .neq('status', 'cancelada');
-    if (excludeId) query = query.neq('id', excludeId);
-    const fallback = await query;
-    data = fallback.data;
-    error = fallback.error;
-  }
   if (error) throw error;
 
   const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
-  const selectedSupplierName = normalize(selectedSupplier?.nome);
 
   return (data || []).find((row) => {
     if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
+    if (normalize(row.nf_serie) !== nfSerie) return false;
     if (row.fornecedor?.id === fornecedorId) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
-    if (selectedSupplierDoc && rowSupplierDoc && rowSupplierDoc === selectedSupplierDoc) return true;
-
-    const rowSupplierName = normalize(row.fornecedor?.nome);
-    return Boolean(selectedSupplierName && rowSupplierName && rowSupplierName === selectedSupplierName);
+    return Boolean(selectedSupplierDoc && rowSupplierDoc && rowSupplierDoc === selectedSupplierDoc);
   }) || null;
 }
 
@@ -728,11 +726,6 @@ function stripMissingOptionalColumns(error, payload) {
   if (!error) return null;
   const fallbackPayload = { ...payload };
   let changed = false;
-
-  if (fallbackPayload.portaria_id !== undefined && isMissingColumn(error, 'portaria_id')) {
-    delete fallbackPayload.portaria_id;
-    changed = true;
-  }
 
   if ((fallbackPayload.umidade_01 !== undefined || fallbackPayload.umidade_02 !== undefined)
     && (isMissingColumn(error, 'umidade_01') || isMissingColumn(error, 'umidade_02'))) {

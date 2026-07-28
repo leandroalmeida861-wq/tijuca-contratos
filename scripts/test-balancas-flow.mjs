@@ -48,6 +48,7 @@ const migration = await readFile(new URL('../supabase/portaria-dispensa-laborato
 const unitMigration = await readFile(new URL('../supabase/portaria-exigir-unidade.sql', import.meta.url), 'utf8');
 const iguatuTriggerMigration = await readFile(new URL('../supabase/portaria-corrigir-trigger-iguatu.sql', import.meta.url), 'utf8');
 const rlsUnitMigration = await readFile(new URL('../supabase/portaria-corrigir-rls-unidade.sql', import.meta.url), 'utf8');
+const atomicFlowMigration = await readFile(new URL('../supabase/portaria-corrigir-fluxo-atomico.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -109,6 +110,66 @@ assert.ok(
   'Visualizacao da entrada deve oferecer a acao de envio ao laboratorio',
 );
 assert.ok(page.includes('sendingToLabId'), 'Envio deve bloquear cliques simultaneos na mesma entrada');
+assert.ok(
+  page.includes('nf_serie: row.serie_nf'),
+  'Recebimento originado na Portaria deve preservar a serie da NF',
+);
+assert.ok(
+  page.includes('balanca_id: payload.balanca_id'),
+  'Validacao remota de duplicidade deve receber a unidade da rota',
+);
+assert.ok(
+  service.includes(".eq('balanca_id', balancaId)"),
+  'Consulta de duplicidade deve ser filtrada no banco pela unidade',
+);
+assert.ok(
+  service.includes('normalize(row.nf_serie) !== nfSerie'),
+  'Consulta de duplicidade deve comparar tambem a serie da NF',
+);
+assert.ok(
+  service.includes('portaria_id.is.null,portaria_id.neq.'),
+  'Consulta de duplicidade deve ignorar o registro da propria Portaria',
+);
+assert.ok(
+  !service.includes("delete fallbackPayload.portaria_id"),
+  'Falha de schema nao pode remover silenciosamente o vinculo idempotente da Portaria',
+);
+assert.ok(
+  atomicFlowMigration.includes('private.agroflow_criar_recebimento_da_portaria'),
+  'Banco deve criar o recebimento na mesma transacao da Portaria',
+);
+assert.ok(
+  atomicFlowMigration.includes("new.status := 'ENVIADO_RECEBIMENTO'"),
+  'Backend deve direcionar a entrada marcada diretamente ao recebimento',
+);
+assert.ok(
+  atomicFlowMigration.includes("new.status := 'AGUARDANDO_LABORATORIO'"),
+  'Backend deve manter o fluxo laboratorial quando a opcao estiver desmarcada',
+);
+assert.ok(
+  atomicFlowMigration.includes('r.portaria_id = new.id')
+    && atomicFlowMigration.includes('r.balanca_id is distinct from new.balanca_id'),
+  'Idempotencia deve usar portaria_id e rejeitar vinculo de outra unidade',
+);
+assert.ok(
+  atomicFlowMigration.includes('r.id is distinct from new.id')
+    && atomicFlowMigration.includes('r.portaria_id is distinct from new.portaria_id'),
+  'Validacao deve ignorar o proprio recebimento e a propria origem',
+);
+assert.ok(
+  atomicFlowMigration.includes('r.balanca_id = new.balanca_id')
+    && atomicFlowMigration.includes('agroflow_nf_serie_normalizada(r.nf_serie) = new_serie'),
+  'Duplicidade real deve exigir a mesma unidade e a mesma serie',
+);
+assert.ok(
+  atomicFlowMigration.includes('on conflict (recebimento_id, ordem) do nothing'),
+  'Item inicial do recebimento deve ser criado de forma idempotente',
+);
+assert.ok(
+  !/\bdelete\s+from\b/i.test(atomicFlowMigration)
+    && !/\btruncate\b/i.test(atomicFlowMigration),
+  'Migration atomica nao pode excluir dados existentes',
+);
 
 assert.ok(page.includes('const shouldFinalizePending = Boolean('), 'Salvamento deve concluir qualquer pendencia de balanca valida');
 assert.ok(

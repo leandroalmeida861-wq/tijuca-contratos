@@ -140,6 +140,7 @@ const defaultRecebimento = {
   tipo_veiculo: '',
   qtd_eixos: '',
   nf_numero: '',
+  nf_serie: '',
   nf_chave_acesso: '',
   peso_bruto: '',
   tara: '',
@@ -605,15 +606,6 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     if (!unidadeId) throw new Error('UNIDADE_NAO_RESOLVIDA');
 
     const existing = await findRecebimentoByPortariaId(row.id);
-    const duplicate = await findDuplicateRecebimentoNotaFornecedor({
-      fornecedor_id: row.fornecedor_id,
-      nf_numero: row.numero_nf,
-      excludeId: existing?.id,
-    });
-    if (duplicate && duplicate.portaria_id !== row.id) {
-      throw new Error('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
-    }
-
     if (existing?.id) {
       if (existing.balanca_id !== unidadeId) throw new Error('UNIDADE_DIVERGENTE');
       await updatePortariaEntrada(row.id, {
@@ -622,6 +614,17 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         dispensa_laboratorio: true,
       });
       return existing;
+    }
+
+    const duplicate = await findDuplicateRecebimentoNotaFornecedor({
+      fornecedor_id: row.fornecedor_id,
+      nf_numero: row.numero_nf,
+      nf_serie: row.serie_nf,
+      balanca_id: unidadeId,
+      excludePortariaId: row.id,
+    });
+    if (duplicate) {
+      throw new Error('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
     }
 
     const payload = {
@@ -636,6 +639,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       tipo_veiculo: row.tipo_veiculo,
       qtd_eixos: row.qtd_eixos,
       nf_numero: row.numero_nf,
+      nf_serie: row.serie_nf,
       quantidade_nota: row.peso_nf_kg,
       unidade_nota: row.unidade_nota || 'KG',
       peso_nf: normalizarQuantidadeParaKg(row.peso_nf_kg, row.unidade_nota || 'KG', 60) ?? row.peso_nf_kg,
@@ -727,16 +731,6 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       if (!unidadeId) throw new Error('UNIDADE_NAO_RESOLVIDA');
 
       const existing = await findRecebimentoByPortariaId(row.id);
-      const duplicate = await findDuplicateRecebimentoNotaFornecedor({
-        fornecedor_id: row.fornecedor_id,
-        nf_numero: row.numero_nf,
-        excludeId: existing?.id,
-      });
-      if (duplicate && duplicate.portaria_id !== row.id) {
-        setError('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
-        return false;
-      }
-
       const payload = {
         portaria_id: row.id,
         data: row.data_entrada,
@@ -749,6 +743,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         tipo_veiculo: row.tipo_veiculo,
         qtd_eixos: row.qtd_eixos,
         nf_numero: row.numero_nf,
+        nf_serie: row.serie_nf,
         quantidade_nota: row.peso_nf_kg,
         unidade_nota: row.unidade_nota || 'KG',
         peso_nf: normalizarQuantidadeParaKg(row.peso_nf_kg, row.unidade_nota || 'KG', 60) ?? row.peso_nf_kg,
@@ -760,6 +755,17 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       if (existing?.id) {
         if (existing.balanca_id !== unidadeId) throw new Error('UNIDADE_DIVERGENTE');
       } else {
+        const duplicate = await findDuplicateRecebimentoNotaFornecedor({
+          fornecedor_id: row.fornecedor_id,
+          nf_numero: row.numero_nf,
+          nf_serie: row.serie_nf,
+          balanca_id: unidadeId,
+          excludePortariaId: row.id,
+        });
+        if (duplicate) {
+          setError('NF duplicada para este fornecedor. Edite o recebimento existente ou confira o numero da NF.');
+          return false;
+        }
         await createRecebimento(payload);
       }
       await updatePortariaEntrada(row.id, {
@@ -1004,7 +1010,10 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
     try {
       await deleteRecebimento(row.id);
       if (row.portaria_id) {
-        await updatePortariaEntrada(row.portaria_id, { status: 'AGUARDANDO_LABORATORIO' });
+        await updatePortariaEntrada(row.portaria_id, {
+          balanca_id: row.balanca_id,
+          status: 'AGUARDANDO_LABORATORIO',
+        });
       }
       setMessage('Recebimento excluído com sucesso.');
       await reload();
@@ -1430,7 +1439,10 @@ function RecebimentoForm({ row, rows = [], options, unidade, balanca, can, onClo
       const duplicate = await findDuplicateRecebimentoNotaFornecedor({
         fornecedor_id: payload.fornecedor_id,
         nf_numero: payload.nf_numero,
+        nf_serie: payload.nf_serie,
+        balanca_id: payload.balanca_id,
         excludeId: row?.id,
+        excludePortariaId: row?.portaria_id,
       });
       if (duplicate) {
         const supplierName = duplicate.fornecedor?.nome || 'este fornecedor';
@@ -2082,7 +2094,10 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
       setMessage('');
       await deleteRecebimento(row.id);
       if (row.portaria_id) {
-        await updatePortariaEntrada(row.portaria_id, { status: 'AGUARDANDO_LABORATORIO' });
+        await updatePortariaEntrada(row.portaria_id, {
+          balanca_id: row.balanca_id,
+          status: 'AGUARDANDO_LABORATORIO',
+        });
       }
       setMessage('Liberacao do laboratorio excluida com sucesso.');
       if (editingLabId === row.id) cancelLabEdit();
@@ -3980,6 +3995,7 @@ function validateRecebimentoForm(form) {
 function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
   const nfDigits = normalizeNfNumber(payload.nf_numero);
   if (!nfDigits || !payload.fornecedor_id) return null;
+  const nfSerie = normalizeName(payload.nf_serie);
 
   const selectedSupplier = (options.fornecedores || []).find((item) => item.id === payload.fornecedor_id);
   const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
@@ -3989,6 +4005,7 @@ function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
     if (row.id === editingId) return false;
     if (String(row.status || '').toLowerCase() === 'cancelada') return false;
     if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
+    if (normalizeName(row.nf_serie) !== nfSerie) return false;
     if (row.fornecedor_id && row.fornecedor_id === payload.fornecedor_id) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
