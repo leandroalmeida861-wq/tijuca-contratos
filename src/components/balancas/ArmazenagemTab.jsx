@@ -121,6 +121,12 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
   const incluirSemUnidade = Boolean(escopo?.incluirSemUnidade);
 
   const load = useCallback(async ({ silent = false } = {}) => {
+    // Sem a unidade resolvida a consulta sairia sem filtro e traria dados de
+    // outras unidades. Melhor seguir carregando ate o escopo chegar.
+    if (!balancaId) {
+      setLoading(true);
+      return;
+    }
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {

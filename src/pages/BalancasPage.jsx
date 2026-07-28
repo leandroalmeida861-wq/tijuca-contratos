@@ -274,6 +274,23 @@ export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
     if (activeTab !== 'armazenagem' && !generalDataLoaded.current) load();
   }, [activeTab]);
 
+  // A aba Armazenagem carrega os proprios dados e nao dispara o load() geral.
+  // Mesmo assim a unidade precisa estar resolvida: sem ela o escopo fica vazio
+  // e a consulta traria lancamentos de todas as unidades.
+  useEffect(() => {
+    if (balancaUnidade) return undefined;
+    let cancelado = false;
+    listLookup('balancas')
+      .then((balancas) => {
+        if (cancelado) return;
+        const balanca = encontrarBalancaDaUnidade(unidade, balancas);
+        if (balanca) setBalancaUnidade(balanca);
+        else setError(erroUnidadeNaoEncontrada(unidade));
+      })
+      .catch(() => { /* o load() principal ja reporta falhas de carga */ });
+    return () => { cancelado = true; };
+  }, [unidade, balancaUnidade]);
+
   useSupabaseRealtimeRefresh(balancasRealtimeTables, () => {
     if (activeTab !== 'armazenagem') load(filters, { silent: true });
   }, {
