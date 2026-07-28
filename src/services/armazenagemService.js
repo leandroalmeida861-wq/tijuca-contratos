@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase.js';
 import { classifyRequestError } from '../lib/reliableFetch.js';
-import { listRecebimentos } from './balancasService.js';
+import { listRecebimentos, requireUnidadeScope } from './balancasService.js';
 import {
   isRecebimentoFinalizadoParaArmazenagem,
   mergeRecebimentosArmazenagens,
@@ -17,7 +17,7 @@ export {
 
 const ARMAZENAGEM_SELECT = `
   *,
-  recebimento:recebimentos(
+  recebimento:recebimentos!inner(
     id,
     data,
     nf_numero,
@@ -54,16 +54,17 @@ const ARMAZENAGEM_SELECT = `
 `;
 
 export async function listArmazenagemData(filters = {}, escopo = {}) {
+  requireUnidadeScope(escopo);
   const [recebimentos, armazenagens, fechamentos, exclusoes] = await Promise.all([
     listRecebimentos(escopo),
-    listArmazenagens(filters),
-    listFechamentosArmazenagem(filters.ano),
+    listArmazenagens(filters, escopo),
+    listFechamentosArmazenagem(filters.ano, escopo),
     listExclusoesFechamento(escopo),
   ]);
 
   return {
     recebimentos: recebimentos.filter(isRecebimentoFinalizadoParaArmazenagem),
-    armazenagens: filtrarArmazenagensPorUnidade(armazenagens, escopo),
+    armazenagens,
     fechamentos,
     exclusoes,
   };
@@ -71,16 +72,15 @@ export async function listArmazenagemData(filters = {}, escopo = {}) {
 
 /** Recebimentos retirados do fechamento mensal da unidade. */
 export async function listExclusoesFechamento(escopo = {}) {
+  requireUnidadeScope(escopo);
   let query = supabase
     .from('armazenagem_fechamento_exclusoes')
     .select('*')
     .eq('ativo', true);
 
-  if (escopo.balancaId) {
-    query = escopo.incluirSemUnidade
-      ? query.or(`balanca_id.eq.${escopo.balancaId},balanca_id.is.null`)
-      : query.eq('balanca_id', escopo.balancaId);
-  }
+  query = escopo.incluirSemUnidade
+    ? query.or(`balanca_id.eq.${escopo.balancaId},balanca_id.is.null`)
+    : query.eq('balanca_id', escopo.balancaId);
 
   const { data, error } = await query;
   if (error && isMissingExclusoesTable(error)) return [];
@@ -151,19 +151,12 @@ function isMissingExclusoesTable(error) {
  * recebimento vinculado. Como o vinculo so existe no join, o recorte e feito
  * aqui para que nenhum registro de outra unidade chegue a tela.
  */
-function filtrarArmazenagensPorUnidade(armazenagens = [], escopo = {}) {
-  if (!escopo.balancaId) return armazenagens;
-  return (armazenagens || []).filter((row) => {
-    const balancaId = row?.recebimento?.balanca_id || null;
-    if (balancaId === escopo.balancaId) return true;
-    return Boolean(escopo.incluirSemUnidade) && !balancaId;
-  });
-}
-
-export async function listArmazenagens(filters = {}) {
+export async function listArmazenagens(filters = {}, escopo = {}) {
+  requireUnidadeScope(escopo);
   let query = supabase
     .from('armazenagens_materia_prima')
     .select(ARMAZENAGEM_SELECT)
+    .eq('recebimento.balanca_id', escopo.balancaId)
     .order('data_armazenagem', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -187,10 +180,12 @@ export async function listArmazenagens(filters = {}) {
   return (data || []).map(normalizeArmazenagem);
 }
 
-export async function listFechamentosArmazenagem(ano) {
+export async function listFechamentosArmazenagem(ano, escopo = {}) {
+  requireUnidadeScope(escopo);
   let query = supabase
     .from('fechamentos_armazenagem')
     .select('*')
+    .eq('balanca_id', escopo.balancaId)
     .order('ano', { ascending: false })
     .order('mes', { ascending: true });
   if (ano) query = query.eq('ano', Number(ano));
@@ -252,10 +247,12 @@ export async function cancelarArmazenagem(id, motivo) {
   if (error) throw error;
 }
 
-export async function fecharMesArmazenagem({ ano, mes, autorizarPendencias = false, justificativa = '' }) {
+export async function fecharMesArmazenagem({ ano, mes, balancaId, autorizarPendencias = false, justificativa = '' }) {
+  requireUnidadeScope({ balancaId });
   const { data, error } = await supabase.rpc('agroflow_armazenagem_fechar_mes', {
     p_ano: Number(ano),
     p_mes: Number(mes),
+    p_balanca_id: balancaId,
     p_autorizar_pendencias: Boolean(autorizarPendencias),
     p_justificativa: justificativa || null,
   });
@@ -263,10 +260,12 @@ export async function fecharMesArmazenagem({ ano, mes, autorizarPendencias = fal
   return data;
 }
 
-export async function reabrirMesArmazenagem({ ano, mes, justificativa }) {
+export async function reabrirMesArmazenagem({ ano, mes, balancaId, justificativa }) {
+  requireUnidadeScope({ balancaId });
   const { error } = await supabase.rpc('agroflow_armazenagem_reabrir_mes', {
     p_ano: Number(ano),
     p_mes: Number(mes),
+    p_balanca_id: balancaId,
     p_justificativa: justificativa,
   });
   if (error) throw error;
