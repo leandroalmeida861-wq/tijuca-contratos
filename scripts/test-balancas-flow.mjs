@@ -45,6 +45,9 @@ assert.equal(isLaboratorioPendenteBalanca({ ...complete, dispensa_laboratorio: f
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
 const service = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 const migration = await readFile(new URL('../supabase/portaria-dispensa-laboratorio.sql', import.meta.url), 'utf8');
+const unitMigration = await readFile(new URL('../supabase/portaria-exigir-unidade.sql', import.meta.url), 'utf8');
+const iguatuTriggerMigration = await readFile(new URL('../supabase/portaria-corrigir-trigger-iguatu.sql', import.meta.url), 'utf8');
+const rlsUnitMigration = await readFile(new URL('../supabase/portaria-corrigir-rls-unidade.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -53,6 +56,53 @@ assert.ok(
 assert.ok(
   page.includes("row.status !== 'AGUARDANDO_LABORATORIO'"),
   'Entrada ja encaminhada nao pode ser enviada novamente ao laboratorio',
+);
+assert.ok(
+  (page.match(/balanca_id: unidadeId/g) || []).length >= 4,
+  'Todas as transicoes da Portaria devem enviar a unidade resolvida pela rota',
+);
+assert.ok(
+  page.includes("if (existing.balanca_id !== unidadeId) throw new Error('UNIDADE_DIVERGENTE')"),
+  'Reenvio nao pode reutilizar recebimento de outra unidade',
+);
+assert.ok(
+  page.includes("await updatePortariaEntrada(row.id, {\n        balanca_id: unidadeId,"),
+  'Mudanca de status da Portaria deve manter o balanca_id',
+);
+assert.ok(
+  service.includes(".eq('id', id)\n    .eq('balanca_id', balancaId)"),
+  'Updates devem ser limitados simultaneamente pelo registro e pela unidade',
+);
+assert.ok(
+  service.includes('Nao foi possivel identificar a unidade desta Portaria.'),
+  'Erro tecnico de unidade deve ser traduzido para uma mensagem clara',
+);
+assert.ok(
+  unitMigration.includes('check (balanca_id is not null) not valid'),
+  'Banco deve bloquear novos lancamentos sem unidade sem alterar o legado',
+);
+assert.ok(
+  !unitMigration.includes('delete from')
+    && !unitMigration.includes('truncate')
+    && !unitMigration.includes('update public.'),
+  'Migration de unidade obrigatoria nao pode alterar ou excluir dados',
+);
+assert.ok(
+  iguatuTriggerMigration.includes("to_jsonb(new)->>'laboratorio_id'"),
+  'Trigger compartilhado deve consultar laboratorio_id sem quebrar a Portaria de Iguatu',
+);
+assert.ok(
+  iguatuTriggerMigration.includes("public.agroflow_unidade_codigo(new.balanca_id) <> 'iguatu'"),
+  'Correcao deve preservar a regra existente de Iguatu sem laboratorio',
+);
+assert.ok(
+  (rlsUnitMigration.match(/as restrictive/g) || []).length === 2,
+  'RLS deve exigir permissao de menu e permissao da unidade em Portaria e Recebimentos',
+);
+assert.ok(
+  rlsUnitMigration.includes('unidade_portaria_entradas')
+    && rlsUnitMigration.includes('unidade_recebimentos'),
+  'RLS restritiva deve proteger as duas tabelas do fluxo da Portaria',
 );
 assert.ok(
   page.includes('Enviar para Laborat'),

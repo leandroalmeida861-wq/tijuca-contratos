@@ -211,11 +211,12 @@ export async function createPortariaEntrada(payload) {
 export async function updatePortariaEntrada(id, payload) {
   requireRecordId(id, 'entrada da Portaria');
   const cleanedPayload = cleanPayload(payload);
-  requirePayloadUnidade(cleanedPayload);
+  const balancaId = requirePayloadUnidade(cleanedPayload);
   const { data, error } = await supabase
     .from('portaria_entradas')
     .update(cleanedPayload)
     .eq('id', id)
+    .eq('balanca_id', balancaId)
     .select(PORTARIA_SELECT)
     .single();
   const fallbackPayload = stripMissingPortariaOptionalColumns(error, cleanedPayload);
@@ -224,6 +225,7 @@ export async function updatePortariaEntrada(id, payload) {
       .from('portaria_entradas')
       .update(fallbackPayload)
       .eq('id', id)
+      .eq('balanca_id', balancaId)
       .select(PORTARIA_SELECT)
       .single();
     if (fallback.error) throw fallback.error;
@@ -327,11 +329,23 @@ export async function updateRecebimento(id, payload) {
   requireRecordId(id, 'recebimento');
   const { itens, header } = prepareRecebimentoForSave(payload);
   const cleanedPayload = cleanPayload(header);
-  requirePayloadUnidade(cleanedPayload);
-  const { data, error } = await supabase.from('recebimentos').update(cleanedPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
+  const balancaId = requirePayloadUnidade(cleanedPayload);
+  const { data, error } = await supabase
+    .from('recebimentos')
+    .update(cleanedPayload)
+    .eq('id', id)
+    .eq('balanca_id', balancaId)
+    .select(RECEBIMENTO_SELECT)
+    .single();
   const fallbackPayload = stripMissingOptionalColumns(error, cleanedPayload);
   if (error && fallbackPayload) {
-    const fallback = await supabase.from('recebimentos').update(fallbackPayload).eq('id', id).select(RECEBIMENTO_SELECT).single();
+    const fallback = await supabase
+      .from('recebimentos')
+      .update(fallbackPayload)
+      .eq('id', id)
+      .eq('balanca_id', balancaId)
+      .select(RECEBIMENTO_SELECT)
+      .single();
     if (fallback.error) throw fallback.error;
     return saveRecebimentoItensAndReload(id, itens);
   }
@@ -534,6 +548,12 @@ export function toUserError(error) {
   }
   if (requestError === 'server') {
     return 'O servidor de dados esta temporariamente indisponivel. Aguarde um momento e tente novamente.';
+  }
+  if (lower.includes('unidade_obrigatoria') || lower.includes('unidade_nao_resolvida')) {
+    return 'Nao foi possivel identificar a unidade desta Portaria. Recarregue a pagina pela unidade correta e tente novamente.';
+  }
+  if (lower.includes('unidade_divergente')) {
+    return 'O registro vinculado pertence a outra unidade. A operacao foi bloqueada para evitar lancamento na balanca errada.';
   }
   if (lower.includes('row-level security') || lower.includes('permission')) {
     return 'Acesso negado. Como corrigir: confira se seu perfil tem permissão no menu Balanças.';
