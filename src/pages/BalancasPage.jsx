@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import {
   Bar,
@@ -72,6 +72,16 @@ import {
   isRecebimentoFinalizadoBalanca,
 } from '../lib/balancasFlow.js';
 import ArmazenagemTab from '../components/balancas/ArmazenagemTab.jsx';
+import {
+  UNIDADE_ABAS,
+  UNIDADE_PADRAO,
+  abasDaUnidade,
+  encontrarBalancaDaUnidade,
+  erroUnidadeNaoEncontrada,
+  escopoDaUnidade,
+  primeiraAbaDaUnidade,
+  rotaDaAba,
+} from '../config/unidades.js';
 
 const UMIDADE_LIMITE = 14;
 const SCORE_WEIGHTS = {
@@ -99,25 +109,13 @@ const balancasRealtimeTables = [
   'fechamentos_armazenagem',
 ];
 
-const tabs = [
-  { key: 'dashboard', label: 'Dashboard', menu: 'balancas' },
-  { key: 'portaria', label: 'Portaria', menu: 'balancas_portaria' },
-  { key: 'laboratorio', label: 'Aprovacao Laboratorio', menu: 'balancas_laboratorio' },
-  { key: 'recebimentos', label: 'Recebimentos', menu: 'balancas_recebimentos' },
-  { key: 'armazenagem', label: 'Armazenagem M.P.', menu: 'balancas_armazenagem' },
-  { key: 'relatorios', label: 'Relatorios', menu: 'balancas_relatorios' },
-];
-
-const BALANCAS_SUB_PERMISSION_MENUS = tabs
+const BALANCAS_SUB_PERMISSION_MENUS = abasDaUnidade(UNIDADE_PADRAO)
   .filter((tab) => tab.menu !== 'balancas')
   .map((tab) => tab.menu);
-
-const tabKeys = new Set([...tabs.map((tab) => tab.key), 'cadastros']);
 
 const defaultFilters = {
   dataInicial: '',
   dataFinal: '',
-  balancaId: '',
   fornecedorId: '',
   produtoId: '',
   laboratorioId: '',
@@ -200,15 +198,25 @@ const defaultLaboratorioForm = {
   observacao: '',
 };
 
-export default function BalancasPage() {
+export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
   const { can, permissions } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
+  const modoQuery = unidade.modoRota === 'query';
+  const tabs = useMemo(() => abasDaUnidade(unidade), [unidade]);
+  const tabKeys = useMemo(
+    () => new Set([...tabs.map((tab) => tab.key), ...(unidade.temCadastros ? ['cadastros'] : [])]),
+    [tabs, unidade],
+  );
+  const abaInicial = primeiraAbaDaUnidade(unidade).key;
+  const tabParam = modoQuery ? searchParams.get('tab') : null;
   const cadastroParam = searchParams.get('cadastro');
-  const [activeTab, setActiveTab] = useState(tabKeys.has(tabParam) ? tabParam : 'dashboard');
+  const [queryTab, setQueryTab] = useState(tabKeys.has(tabParam) ? tabParam : abaInicial);
+  const activeTab = modoQuery ? queryTab : (tabKeys.has(aba) ? aba : abaInicial);
   const [rows, setRows] = useState([]);
   const [portariaRows, setPortariaRows] = useState([]);
   const [options, setOptions] = useState(emptyOptions());
+  const [balancaUnidade, setBalancaUnidade] = useState(null);
   const [filters, setFilters] = useState(defaultFilters);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -216,6 +224,7 @@ export default function BalancasPage() {
   const generalDataLoaded = useRef(false);
   const canTab = (tabKey, action = 'visualizar') => canBalancasTab(can, permissions, tabKey, action);
   const visibleTabs = tabs.filter((tab) => canTab(tab.key, 'visualizar'));
+  const escopo = escopoDaUnidade(unidade, balancaUnidade);
 
   async function load(customFilters = filters, { silent = false } = {}) {
     if (!silent) {
@@ -223,17 +232,30 @@ export default function BalancasPage() {
       setError('');
     }
     try {
-      const nextRowsPromise = listRecebimentos(customFilters);
+      // A unidade e resolvida antes de qualquer consulta: nenhum dado e
+      // carregado sem o recorte da balanca correspondente.
+      const nextOptions = await loadBalancasOptions();
+      setOptions(nextOptions);
+
+      const balanca = encontrarBalancaDaUnidade(unidade, nextOptions.balancas);
+      setBalancaUnidade(balanca);
+      if (!balanca) {
+        setRows([]);
+        setPortariaRows([]);
+        if (!silent) setError(erroUnidadeNaoEncontrada(unidade));
+        return;
+      }
+
+      const escopoUnidade = escopoDaUnidade(unidade, balanca);
+      const nextRowsPromise = listRecebimentos({ ...customFilters, ...escopoUnidade });
       const portariaRecebimentosPromise = hasActiveBalancasFilters(customFilters)
-        ? listRecebimentos({ origemPortaria: 'com_portaria' })
+        ? listRecebimentos({ origemPortaria: 'com_portaria', ...escopoUnidade })
         : nextRowsPromise;
-      const [nextOptions, nextRows, nextPortariaRows, portariaRecebimentos] = await Promise.all([
-        loadBalancasOptions(),
+      const [nextRows, nextPortariaRows, portariaRecebimentos] = await Promise.all([
         nextRowsPromise,
-        listPortariaEntradas(),
+        listPortariaEntradas(escopoUnidade),
         portariaRecebimentosPromise,
       ]);
-      setOptions(nextOptions);
       setRows(attachPortariaRows(nextRows, nextPortariaRows));
       setPortariaRows(attachRecebimentosToPortarias(nextPortariaRows, portariaRecebimentos));
       generalDataLoaded.current = true;
@@ -255,30 +277,38 @@ export default function BalancasPage() {
   });
 
   useEffect(() => {
+    if (!modoQuery) return;
     if (tabKeys.has(tabParam) && (tabParam === 'cadastros' || canTab(tabParam, 'visualizar'))) {
-      setActiveTab(tabParam);
+      setQueryTab(tabParam);
     }
-  }, [tabParam, permissions]);
+  }, [modoQuery, tabParam, permissions]);
 
   useEffect(() => {
     if (activeTab === 'cadastros') return;
     if (canTab(activeTab, 'visualizar')) return;
     const fallback = visibleTabs[0]?.key;
-    if (fallback) {
-      setActiveTab(fallback);
-      setSearchParams(fallback === 'dashboard' ? {} : { tab: fallback });
+    if (!fallback) return;
+    if (modoQuery) {
+      setQueryTab(fallback);
+      setSearchParams(fallback === abaInicial ? {} : { tab: fallback });
+      return;
     }
+    navigate(rotaDaAba(unidade, fallback), { replace: true });
   }, [activeTab, permissions]);
 
   function selectTab(tabKey) {
-    if (!canTab(tabKey, 'visualizar')) return;
-    setActiveTab(tabKey);
+    if (tabKey !== 'cadastros' && !canTab(tabKey, 'visualizar')) return;
     if (tabKey !== 'relatorios' && filters.origemPortaria) {
       const nextFilters = { ...filters, origemPortaria: '' };
       setFilters(nextFilters);
       load(nextFilters);
     }
-    setSearchParams(tabKey === 'dashboard' ? {} : { tab: tabKey });
+    if (!modoQuery) {
+      navigate(rotaDaAba(unidade, tabKey));
+      return;
+    }
+    setQueryTab(tabKey);
+    setSearchParams(tabKey === abaInicial ? {} : { tab: tabKey });
   }
 
   function selectCadastro(cadastroKey) {
@@ -302,10 +332,8 @@ export default function BalancasPage() {
   return (
     <div className="grid gap-5">
       <header>
-        <h1 className="text-2xl font-extrabold text-slate-950">Balanças</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">
-          Recebimento, pesagem, conferência de NF-e, laboratório e relatórios integrados ao AgroFlow.
-        </p>
+        <h1 className="text-2xl font-extrabold text-slate-950">{unidade.nome}</h1>
+        <p className="mt-1 text-sm font-medium text-slate-500">{unidade.descricao}</p>
       </header>
 
       <div className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-panel">
@@ -328,10 +356,10 @@ export default function BalancasPage() {
       {error && activeTab !== 'armazenagem' && <Alert tone="error" text={error} />}
 
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
-      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} unidade={unidade} balanca={balancaUnidade} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} unidade={unidade} balanca={balancaUnidade} can={scopedBalancasCan(can, permissions, 'recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'armazenagem' && <ArmazenagemTab can={scopedBalancasCan(can, permissions, 'armazenagem')} />}
+      {activeTab === 'armazenagem' && <ArmazenagemTab can={scopedBalancasCan(can, permissions, 'armazenagem')} escopo={escopo} />}
       {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
       {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={scopedBalancasCan(can, permissions, 'relatorios')} />}
     </div>
@@ -417,7 +445,7 @@ function comparePortariaOperationalDateTimeDesc(a, b) {
 }
 
 function balancasTabMenu(tabKey) {
-  return tabs.find((tab) => tab.key === tabKey)?.menu || 'balancas';
+  return UNIDADE_ABAS[tabKey]?.menu || 'balancas';
 }
 
 function canBalancasTab(can, permissions, tabKey, action = 'visualizar') {
@@ -505,11 +533,20 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
   );
 }
 
-function PortariaTab({ rows, options, can, loading, reload, setError, setMessage }) {
+function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, setError, setMessage }) {
+  const balancaId = balanca?.id || '';
+  const semLaboratorio = Boolean(unidade?.dispensaLaboratorio);
+  const novaEntrada = () => ({
+    ...defaultPortariaForm,
+    balanca_id: balancaId,
+    dispensa_laboratorio: semLaboratorio,
+    data_entrada: fortalezaDateIso(),
+    hora_entrada: fortalezaTime(),
+  });
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [form, setForm] = useState(defaultPortariaForm);
+  const [form, setForm] = useState(novaEntrada);
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [sendingToLabId, setSendingToLabId] = useState(null);
@@ -520,14 +557,14 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
 
   function openNew() {
     setEditing(null);
-    setForm({ ...defaultPortariaForm, data_entrada: fortalezaDateIso(), hora_entrada: fortalezaTime() });
+    setForm(novaEntrada());
     setFieldErrors({});
     setFormOpen(true);
   }
 
   function openEdit(row) {
     setEditing(row);
-    setForm(portariaRowToForm(row));
+    setForm({ ...portariaRowToForm(row), balanca_id: balancaId || row.balanca_id || '' });
     setFieldErrors({});
     setFormOpen(true);
   }
@@ -579,7 +616,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
     const payload = {
       portaria_id: row.id,
       data: row.data_entrada,
-      balanca_id: row.balanca_id,
+      balanca_id: balancaId || row.balanca_id,
       veiculo_id: row.veiculo_id,
       motorista_id: row.motorista_id,
       transportadora_id: row.transportadora_id,
@@ -615,7 +652,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
 
     setSaving(true);
     try {
-      const payload = normalizePortariaPayload(form);
+      const payload = normalizePortariaPayload(form, { balancaId, semLaboratorio });
       const existing = editing?.id ? await findRecebimentoByPortariaId(editing.id) : null;
       if (editing?.id && Boolean(editing.dispensa_laboratorio) !== Boolean(payload.dispensa_laboratorio) && existing) {
         setError('Esta entrada ja possui lancamento vinculado. Cancele ou exclua o lancamento antes de alterar o fluxo de laboratorio.');
@@ -632,7 +669,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       }
       setFormOpen(false);
       setEditing(null);
-      setForm({ ...defaultPortariaForm, data_entrada: fortalezaDateIso(), hora_entrada: fortalezaTime() });
+      setForm(novaEntrada());
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -685,7 +722,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
       const payload = {
         portaria_id: row.id,
         data: row.data_entrada,
-        balanca_id: row.balanca_id,
+        balanca_id: balancaId || row.balanca_id,
         veiculo_id: row.veiculo_id,
         motorista_id: row.motorista_id,
         transportadora_id: row.transportadora_id,
@@ -740,7 +777,7 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Input label="Data de entrada" type="date" value={form.data_entrada} onChange={(value) => updateField('data_entrada', value)} error={fieldErrors.data_entrada} />
             <Input label="Hora de entrada" type="time" value={form.hora_entrada} onChange={(value) => updateField('hora_entrada', value)} error={fieldErrors.hora_entrada} />
-            <Select label="Balança" value={form.balanca_id} onChange={(value) => updateField('balanca_id', value)} options={options.balancas} error={fieldErrors.balanca_id} />
+            <Input label="Balança" value={unidade?.nome || balanca?.nome || ''} onChange={() => {}} readOnly error={fieldErrors.balanca_id} />
             <Input label="Placa do veículo" value={form.placa} onChange={(value) => updateField('placa', normalizePlate(value))} error={fieldErrors.placa} />
             <Input label="Veículo" value={form.tipo_veiculo} onChange={() => {}} readOnly error={fieldErrors.veiculo_id} />
             <SearchableSelect label="Motorista" value={form.motorista_id} onChange={(value) => updateField('motorista_id', value)} options={options.motoristas} />
@@ -759,18 +796,20 @@ function PortariaTab({ rows, options, can, loading, reload, setError, setMessage
             <Input label="Tipo de veículo" value={form.tipo_veiculo} onChange={(value) => updateField('tipo_veiculo', value)} />
             <Input label="Quantidade de eixos" type="number" value={form.qtd_eixos} onChange={(value) => updateField('qtd_eixos', value)} />
           </div>
-          <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={Boolean(form.dispensa_laboratorio)}
-              onChange={(event) => updateField('dispensa_laboratorio', event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-tijuca-600 focus:ring-tijuca-500"
-            />
-            <span>
-              <span className="block font-extrabold text-slate-900">Não passa pelo laboratório</span>
-              <span className="block font-medium text-slate-500">Marque esta opção para encaminhar a entrada diretamente para Recebimentos.</span>
-            </span>
-          </label>
+          {!semLaboratorio && (
+            <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={Boolean(form.dispensa_laboratorio)}
+                onChange={(event) => updateField('dispensa_laboratorio', event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-tijuca-600 focus:ring-tijuca-500"
+              />
+              <span>
+                <span className="block font-extrabold text-slate-900">Não passa pelo laboratório</span>
+                <span className="block font-medium text-slate-500">Marque esta opção para encaminhar a entrada diretamente para Recebimentos.</span>
+              </span>
+            </label>
+          )}
           <label className="grid gap-2 text-sm font-semibold text-slate-700">
             Observação
             <textarea value={form.observacao || ''} onChange={(event) => updateField('observacao', event.target.value)} rows={3} className="rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-tijuca-500 focus:ring-4 focus:ring-tijuca-100" />
@@ -908,7 +947,7 @@ function PortariaViewModal({ row, options, canSendToLab, sendingToLab, onSendToL
   );
 }
 
-function RecebimentosTab({ rows, options, can, loading, reload, setError, setMessage }) {
+function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload, setError, setMessage }) {
   const [query, setQuery] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -986,6 +1025,8 @@ function RecebimentosTab({ rows, options, can, loading, reload, setError, setMes
             row={editing}
             rows={rows}
             options={options}
+            unidade={unidade}
+            balanca={balanca}
             can={can}
             onClose={() => setFormOpen(false)}
             onSaved={async () => {
@@ -1197,8 +1238,9 @@ function complementoToForm(complemento) {
   };
 }
 
-function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setError }) {
-  const [form, setForm] = useState(rowToForm(row));
+function RecebimentoForm({ row, rows = [], options, unidade, balanca, can, onClose, onSaved, setError }) {
+  const balancaId = balanca?.id || '';
+  const [form, setForm] = useState(() => ({ ...rowToForm(row), balanca_id: balancaId || row?.balanca_id || '' }));
   const [localOptions, setLocalOptions] = useState(options);
   const [complementos, setComplementos] = useState(row?.complementos || []);
   const [xmlInfo, setXmlInfo] = useState('');
@@ -1216,9 +1258,9 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
   }, [options]);
 
   useEffect(() => {
-    setForm(rowToForm(row));
+    setForm({ ...rowToForm(row), balanca_id: balancaId || row?.balanca_id || '' });
     setComplementos(row?.complementos || []);
-  }, [row]);
+  }, [row, balancaId]);
 
   function updateField(name, value) {
     setFieldErrors((current) => {
@@ -1348,6 +1390,8 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
     try {
       const payload = normalizeRecebimentoPayload({
         ...syncedForm,
+        // A unidade vem sempre da rota, nunca do que foi enviado pelo formulario.
+        balanca_id: balancaId || syncedForm.balanca_id,
       });
       const localDuplicate = findDuplicateRecebimentoRows(rows, payload, row?.id, localOptions);
       if (localDuplicate) {
@@ -1422,7 +1466,7 @@ function RecebimentoForm({ row, rows = [], options, can, onClose, onSaved, setEr
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Input label="Data" type="date" value={form.data} onChange={(value) => updateField('data', value)} required error={fieldErrors.data} />
-        <Select label="Balanca" value={form.balanca_id} onChange={(value) => updateField('balanca_id', value)} options={localOptions.balancas} error={fieldErrors.balanca_id} />
+        <Input label="Balança" value={unidade?.nome || balanca?.nome || ''} onChange={() => {}} readOnly error={fieldErrors.balanca_id} />
         <Select label="Laboratório" value={form.laboratorio_id} onChange={(value) => updateField('laboratorio_id', value)} options={laboratorioOptions} />
         <Input label="Numero da NF" value={form.nf_numero} onChange={(value) => updateField('nf_numero', value)} error={fieldErrors.nf_numero} />
         <SearchableSelect label="Fornecedor" value={form.fornecedor_id} onChange={(value) => updateField('fornecedor_id', value)} options={localOptions.fornecedores} fallbackValue={form.fornecedor_nome_manual} error={fieldErrors.fornecedor_id} />
@@ -3054,7 +3098,6 @@ function Filters({ options, filters, setFilters, onApply, onClear, showPortariaF
     <form onSubmit={onApply} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-2 xl:grid-cols-6">
       <Input label="Data inicial" type="date" value={filters.dataInicial} onChange={(value) => setFilters((current) => ({ ...current, dataInicial: value }))} />
       <Input label="Data final" type="date" value={filters.dataFinal} onChange={(value) => setFilters((current) => ({ ...current, dataFinal: value }))} />
-      <Select label="Balança" value={filters.balancaId} onChange={(value) => setFilters((current) => ({ ...current, balancaId: value }))} options={options.balancas} />
       <Select label="Fornecedor" value={filters.fornecedorId} onChange={(value) => setFilters((current) => ({ ...current, fornecedorId: value }))} options={options.fornecedores} />
       <Select label="Produto" value={filters.produtoId} onChange={(value) => setFilters((current) => ({ ...current, produtoId: value }))} options={options.produtos} />
       <Select label="Laboratório" value={filters.laboratorioId} onChange={(value) => setFilters((current) => ({ ...current, laboratorioId: value }))} options={options.laboratorios} />
@@ -4127,7 +4170,7 @@ function normalizeRecebimentoItemsForPayload(itens = []) {
   }).filter((item) => item.quantidade >= 0);
 }
 
-function normalizePortariaPayload(form) {
+function normalizePortariaPayload(form, { balancaId = '', semLaboratorio = false } = {}) {
   const payload = {
     data_entrada: form.data_entrada,
     hora_entrada: form.hora_entrada,
@@ -4146,10 +4189,13 @@ function normalizePortariaPayload(form) {
     qtd_eixos: nullableNumber(form.qtd_eixos),
     observacao: form.observacao || null,
     status: form.status || 'AGUARDANDO_LABORATORIO',
-    dispensa_laboratorio: Boolean(form.dispensa_laboratorio),
+    // Unidades sem laboratorio nunca geram entrada aguardando aprovacao.
+    dispensa_laboratorio: semLaboratorio || Boolean(form.dispensa_laboratorio),
   };
 
-  if (form.balanca_id) payload.balanca_id = form.balanca_id;
+  // A unidade vem sempre da rota, nunca do que foi enviado pelo formulario.
+  const unidadeId = balancaId || form.balanca_id;
+  if (unidadeId) payload.balanca_id = unidadeId;
 
   return payload;
 }

@@ -143,7 +143,7 @@ export async function listRecebimentos(filters = {}) {
 
   if (filters.dataInicial) query = query.gte('data', filters.dataInicial);
   if (filters.dataFinal) query = query.lte('data', filters.dataFinal);
-  if (filters.balancaId) query = query.eq('balanca_id', filters.balancaId);
+  query = aplicarEscopoUnidade(query, filters);
   if (filters.fornecedorId) query = query.eq('fornecedor_id', filters.fornecedorId);
   if (filters.produtoId) query = query.eq('produto_id', filters.produtoId);
   if (filters.laboratorioId) query = query.eq('laboratorio_id', filters.laboratorioId);
@@ -156,16 +156,32 @@ export async function listRecebimentos(filters = {}) {
   return data || [];
 }
 
-export async function listPortariaEntradas() {
-  const { data, error } = await supabase
+export async function listPortariaEntradas(escopo = {}) {
+  let query = supabase
     .from('portaria_entradas')
     .select(PORTARIA_SELECT)
     .order('data_entrada', { ascending: false })
     .order('hora_entrada', { ascending: false })
     .order('created_at', { ascending: false });
+
+  query = aplicarEscopoUnidade(query, escopo);
+
+  const { data, error } = await query;
   if (error && isMissingPortariaTable(error)) return [];
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Restringe a consulta a unidade (balanca) informada.
+ * `incluirSemUnidade` mantem visiveis os lancamentos historicos que foram
+ * gravados sem `balanca_id` — usado apenas pelo modulo legado de Beberibe.
+ */
+function aplicarEscopoUnidade(query, escopo = {}) {
+  if (!escopo.balancaId) return query;
+  return escopo.incluirSemUnidade
+    ? query.or(`balanca_id.eq.${escopo.balancaId},balanca_id.is.null`)
+    : query.eq('balanca_id', escopo.balancaId);
 }
 
 export async function createPortariaEntrada(payload) {

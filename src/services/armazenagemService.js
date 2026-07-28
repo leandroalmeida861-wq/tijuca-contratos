@@ -53,18 +53,32 @@ const ARMAZENAGEM_SELECT = `
   )
 `;
 
-export async function listArmazenagemData(filters = {}) {
+export async function listArmazenagemData(filters = {}, escopo = {}) {
   const [recebimentos, armazenagens, fechamentos] = await Promise.all([
-    listRecebimentos(),
+    listRecebimentos(escopo),
     listArmazenagens(filters),
     listFechamentosArmazenagem(filters.ano),
   ]);
 
   return {
     recebimentos: recebimentos.filter(isRecebimentoFinalizadoParaArmazenagem),
-    armazenagens,
+    armazenagens: filtrarArmazenagensPorUnidade(armazenagens, escopo),
     fechamentos,
   };
+}
+
+/**
+ * A armazenagem nao possui coluna propria de unidade: ela herda a unidade do
+ * recebimento vinculado. Como o vinculo so existe no join, o recorte e feito
+ * aqui para que nenhum registro de outra unidade chegue a tela.
+ */
+function filtrarArmazenagensPorUnidade(armazenagens = [], escopo = {}) {
+  if (!escopo.balancaId) return armazenagens;
+  return (armazenagens || []).filter((row) => {
+    const balancaId = row?.recebimento?.balanca_id || null;
+    if (balancaId === escopo.balancaId) return true;
+    return Boolean(escopo.incluirSemUnidade) && !balancaId;
+  });
 }
 
 export async function listArmazenagens(filters = {}) {

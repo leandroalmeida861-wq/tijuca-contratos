@@ -86,7 +86,7 @@ const BUTTON_PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 r
 const BUTTON_SECONDARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-extrabold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60';
 const FIELD_CLASS = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-tijuca-500 focus:ring-2 focus:ring-tijuca-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
-export default function ArmazenagemTab({ can }) {
+export default function ArmazenagemTab({ can, escopo }) {
   const { profile } = useAuth();
   const [source, setSource] = useState({ recebimentos: [], armazenagens: [], fechamentos: [] });
   const [filters, setFilters] = useState(INITIAL_FILTERS);
@@ -99,11 +99,14 @@ export default function ArmazenagemTab({ can }) {
   const [closing, setClosing] = useState(false);
   const isAdmin = profile === 'admin';
 
+  const balancaId = escopo?.balancaId || '';
+  const incluirSemUnidade = Boolean(escopo?.incluirSemUnidade);
+
   const load = useCallback(async ({ silent = false } = {}) => {
     if (silent) setRefreshing(true);
     else setLoading(true);
     try {
-      const data = await listArmazenagemData();
+      const data = await listArmazenagemData({}, { balancaId, incluirSemUnidade });
       setSource(data);
       if (!silent) setError('');
     } catch (loadError) {
@@ -112,7 +115,7 @@ export default function ArmazenagemTab({ can }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [balancaId, incluirSemUnidade]);
 
   useEffect(() => {
     load();

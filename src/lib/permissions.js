@@ -9,7 +9,9 @@ export const MENU_DEFINITIONS = [
   { key: 'documentos', label: 'Documentos', path: '/documentos' },
   { key: 'financeiro', label: 'Rel. Financeiro', path: '/rel-financeiro' },
   { key: 'backup', label: 'Backup', path: '/backup' },
-  { key: 'balancas', label: 'Balanças', path: '/balancas' },
+  // Os menus abaixo valem para todas as unidades (Beberibe, Haisa, Estrela e
+  // Iguatu). O recorte por unidade e feito pela rota e pelo escopo das consultas.
+  { key: 'balancas', label: 'Balanças e Armazéns', path: '/balancas' },
   { key: 'balancas_portaria', label: 'Balanças - Portaria', path: '/balancas?tab=portaria' },
   { key: 'balancas_laboratorio', label: 'Balanças - Aprovação Laboratório', path: '/balancas?tab=laboratorio' },
   { key: 'balancas_recebimentos', label: 'Balanças - Recebimentos', path: '/balancas?tab=recebimentos' },

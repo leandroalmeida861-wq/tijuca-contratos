@@ -9,7 +9,6 @@ import {
   LogOut,
   Menu,
   Package,
-  Scale,
   ShieldCheck,
   Truck,
   UserRound,
@@ -19,10 +18,21 @@ import {
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { UNIDADES, rotaInicialDaUnidade } from '../config/unidades.js';
 import { CONTRATOS_GRAOS_TABS } from './ContratosGraosLayout.jsx';
+
+// Cada unidade e um modulo principal do menu, na ordem de config/unidades.js.
+const unidadeNavItems = UNIDADES.map((unidade) => ({
+  to: rotaInicialDaUnidade(unidade),
+  rotaBase: unidade.rotaBase,
+  label: unidade.nome,
+  icon: unidade.icone,
+  menu: unidade.permissaoBase,
+}));
 
 const navItems = [
   { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
+  ...unidadeNavItems,
   {
     label: 'Cadastros',
     icon: Building2,
@@ -36,7 +46,6 @@ const navItems = [
       { to: '/balancas?tab=cadastros&cadastro=laboratorios', label: 'Laborat\u00f3rios', icon: FlaskConical, menu: 'balancas' },
     ],
   },
-  { to: '/balancas', label: 'Balanças', icon: Scale, menu: 'balancas' },
   { to: '/backup', label: 'Backup', icon: Database, menu: 'backup' },
   { to: '/admin/acessos', label: 'Usuários e permissões', icon: ShieldCheck, menu: 'usuarios' },
   { to: '/admin/auditoria', label: 'Auditoria', icon: History, menu: 'auditoria' },
@@ -197,6 +206,9 @@ export default function AppLayout() {
             }
 
             if (!can(item.menu, 'visualizar')) return null;
+            // Modulos de unidade cobrem varias sub-rotas (portaria, recebimentos...),
+            // por isso o estado ativo considera a rota base e nao apenas o link.
+            const unidadeAtiva = item.rotaBase ? isUnidadeAtiva(location, item.rotaBase) : null;
             return (
               <NavLink
                 key={item.to}
@@ -205,7 +217,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   [
                     'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
-                    isActive ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                    (unidadeAtiva ?? isActive) ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
                   ].join(' ')
                 }
               >
@@ -235,6 +247,14 @@ export default function AppLayout() {
       </main>
     </div>
   );
+}
+
+function isUnidadeAtiva(location, rotaBase) {
+  const { pathname, search } = location;
+  if (pathname !== rotaBase && !pathname.startsWith(`${rotaBase}/`)) return false;
+  // Os cadastros compartilhados abrem dentro de /balancas: nesse caso quem fica
+  // destacado e o menu Cadastros, nao o modulo da unidade.
+  return new URLSearchParams(search).get('tab') !== 'cadastros';
 }
 
 function isCadastroPath(pathname, search = '') {

@@ -6,6 +6,8 @@ import AppLayout from './components/AppLayout.jsx';
 import AuthorizedHome from './components/AuthorizedHome.jsx';
 import ContratosGraosLayout from './components/ContratosGraosLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import UnidadeModulo from './components/UnidadeModulo.jsx';
+import { UNIDADES } from './config/unidades.js';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import BackupPage from './pages/BackupPage.jsx';
 import AccessDenied from './pages/AccessDenied.jsx';
@@ -46,6 +48,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="produtos" element={<ProtectedRoute menu="produtos"><ManagementPage type="produtos" /></ProtectedRoute>} />
             <Route path="backup" element={<ProtectedRoute menu="backup"><BackupPage /></ProtectedRoute>} />
             <Route path="balancas" element={<ProtectedRoute menu="balancas"><BalancasPage /></ProtectedRoute>} />
+            {UNIDADES.filter((unidade) => unidade.modoRota === 'path').map((unidade) => (
+              <Route
+                key={unidade.codigo}
+                path={`${unidade.rotaBase.replace(/^\//, '')}/*`}
+                element={<ProtectedRoute menu="balancas"><UnidadeModulo unidade={unidade} /></ProtectedRoute>}
+              />
+            ))}
             <Route path="admin/solicitacoes" element={<ProtectedRoute menu="usuarios"><AdminSolicitacoes /></ProtectedRoute>} />
             <Route path="admin/acessos" element={<ProtectedRoute menu="usuarios"><AdminAccessPage /></ProtectedRoute>} />
             <Route path="admin/auditoria" element={<ProtectedRoute menu="auditoria"><AuditLogsPage /></ProtectedRoute>} />
