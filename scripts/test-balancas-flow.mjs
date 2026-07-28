@@ -49,6 +49,7 @@ const unitMigration = await readFile(new URL('../supabase/portaria-exigir-unidad
 const iguatuTriggerMigration = await readFile(new URL('../supabase/portaria-corrigir-trigger-iguatu.sql', import.meta.url), 'utf8');
 const rlsUnitMigration = await readFile(new URL('../supabase/portaria-corrigir-rls-unidade.sql', import.meta.url), 'utf8');
 const atomicFlowMigration = await readFile(new URL('../supabase/portaria-corrigir-fluxo-atomico.sql', import.meta.url), 'utf8');
+const strictDuplicateMigration = await readFile(new URL('../supabase/recebimentos-bloquear-nf-fornecedor-unidade.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -123,8 +124,8 @@ assert.ok(
   'Consulta de duplicidade deve ser filtrada no banco pela unidade',
 );
 assert.ok(
-  service.includes('normalize(row.nf_serie) !== nfSerie'),
-  'Consulta de duplicidade deve comparar tambem a serie da NF',
+  !service.includes('normalize(row.nf_serie) !== nfSerie'),
+  'Consulta de duplicidade nao pode permitir outra serie para a mesma NF e fornecedor',
 );
 assert.ok(
   service.includes('portaria_id.is.null,portaria_id.neq.'),
@@ -159,7 +160,7 @@ assert.ok(
 assert.ok(
   atomicFlowMigration.includes('r.balanca_id = new.balanca_id')
     && atomicFlowMigration.includes('agroflow_nf_serie_normalizada(r.nf_serie) = new_serie'),
-  'Duplicidade real deve exigir a mesma unidade e a mesma serie',
+  'Migration anterior deve permanecer preservada no historico',
 );
 assert.ok(
   atomicFlowMigration.includes('on conflict (recebimento_id, ordem) do nothing'),
@@ -169,6 +170,31 @@ assert.ok(
   !/\bdelete\s+from\b/i.test(atomicFlowMigration)
     && !/\btruncate\b/i.test(atomicFlowMigration),
   'Migration atomica nao pode excluir dados existentes',
+);
+assert.ok(
+  strictDuplicateMigration.includes('portaria_nf_fornecedor_unidade_unica')
+    && strictDuplicateMigration.includes('balanca_id,\n  fornecedor_id,\n  public.agroflow_nf_numero_normalizado(numero_nf)'),
+  'Portaria deve possuir chave unica por unidade, fornecedor e numero da NF',
+);
+assert.ok(
+  strictDuplicateMigration.includes('recebimentos_fornecedor_nf_unica_idx')
+    && strictDuplicateMigration.includes('public.agroflow_nf_numero_normalizado(nf_numero)'),
+  'Recebimentos deve possuir chave unica por unidade, fornecedor e numero da NF',
+);
+assert.ok(
+  !strictDuplicateMigration.includes('new_serie')
+    && !strictDuplicateMigration.includes('agroflow_nf_serie_normalizada(r.nf_serie)'),
+  'Protecao atual nao pode considerar a serie como permissao para duplicar a NF',
+);
+assert.ok(
+  !/\bdelete\s+from\b/i.test(strictDuplicateMigration)
+    && !/\btruncate\b/i.test(strictDuplicateMigration)
+    && !/\bupdate\s+public\./i.test(strictDuplicateMigration),
+  'Migration de bloqueio nao pode alterar nem excluir dados existentes',
+);
+assert.ok(
+  !page.includes('normalizeName(row.serie_nf) === normalizeName(form.serie_nf)'),
+  'Validacao local da Portaria deve bloquear a mesma NF mesmo com serie diferente',
 );
 
 assert.ok(page.includes('const shouldFinalizePending = Boolean('), 'Salvamento deve concluir qualquer pendencia de balanca valida');

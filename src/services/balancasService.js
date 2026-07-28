@@ -266,14 +266,12 @@ export async function findRecebimentoByPortariaId(portariaId) {
 export async function findDuplicateRecebimentoNotaFornecedor({
   fornecedor_id,
   nf_numero,
-  nf_serie,
   balanca_id,
   excludeId,
   excludePortariaId,
 } = {}) {
   const fornecedorId = fornecedor_id || '';
   const nfDigits = normalizeNfNumber(nf_numero);
-  const nfSerie = normalize(nf_serie);
   const balancaId = requirePayloadUnidade({ balanca_id });
   if (!fornecedorId || !nfDigits) return null;
 
@@ -286,7 +284,7 @@ export async function findDuplicateRecebimentoNotaFornecedor({
 
   let query = supabase
     .from('recebimentos')
-    .select('id,portaria_id,balanca_id,nf_numero,nf_serie,status,fornecedor:fornecedores(id,nome,cnpj)')
+    .select('id,portaria_id,balanca_id,nf_numero,status,fornecedor:fornecedores(id,nome,cnpj)')
     .eq('balanca_id', balancaId)
     .neq('status', 'cancelada');
 
@@ -300,7 +298,6 @@ export async function findDuplicateRecebimentoNotaFornecedor({
 
   return (data || []).find((row) => {
     if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
-    if (normalize(row.nf_serie) !== nfSerie) return false;
     if (row.fornecedor?.id === fornecedorId) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
