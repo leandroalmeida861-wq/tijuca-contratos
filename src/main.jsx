@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppErrorBoundary from './components/AppErrorBoundary.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import AuthorizedHome from './components/AuthorizedHome.jsx';
+import ContratosGraosLayout from './components/ContratosGraosLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import BackupPage from './pages/BackupPage.jsx';
@@ -32,15 +33,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           >
-            <Route index element={<AuthorizedHome />} />
+            <Route element={<ContratosGraosLayout />}>
+              <Route index element={<AuthorizedHome />} />
+              <Route path="contratos" element={<ProtectedRoute menu="contratos"><ManagementPage type="contratos" /></ProtectedRoute>} />
+              <Route path="notas-fiscais" element={<ProtectedRoute menu="notas_fiscais"><ManagementPage type="notas_fiscais" /></ProtectedRoute>} />
+              <Route path="frete" element={<ProtectedRoute menu="fretes"><ManagementPage type="fretes" /></ProtectedRoute>} />
+              <Route path="documentos" element={<ProtectedRoute menu="documentos"><ManagementPage type="documentos" /></ProtectedRoute>} />
+              <Route path="rel-financeiro" element={<ProtectedRoute menu="financeiro"><ManagementPage type="financeiro" /></ProtectedRoute>} />
+            </Route>
             <Route path="fornecedores" element={<ProtectedRoute menu="fornecedores"><ManagementPage type="fornecedores" /></ProtectedRoute>} />
             <Route path="fabricas" element={<ProtectedRoute menu="fabricas"><ManagementPage type="fabricas" /></ProtectedRoute>} />
             <Route path="produtos" element={<ProtectedRoute menu="produtos"><ManagementPage type="produtos" /></ProtectedRoute>} />
-            <Route path="contratos" element={<ProtectedRoute menu="contratos"><ManagementPage type="contratos" /></ProtectedRoute>} />
-            <Route path="notas-fiscais" element={<ProtectedRoute menu="notas_fiscais"><ManagementPage type="notas_fiscais" /></ProtectedRoute>} />
-            <Route path="frete" element={<ProtectedRoute menu="fretes"><ManagementPage type="fretes" /></ProtectedRoute>} />
-            <Route path="documentos" element={<ProtectedRoute menu="documentos"><ManagementPage type="documentos" /></ProtectedRoute>} />
-            <Route path="rel-financeiro" element={<ProtectedRoute menu="financeiro"><ManagementPage type="financeiro" /></ProtectedRoute>} />
             <Route path="backup" element={<ProtectedRoute menu="backup"><BackupPage /></ProtectedRoute>} />
             <Route path="balancas" element={<ProtectedRoute menu="balancas"><BalancasPage /></ProtectedRoute>} />
             <Route path="admin/solicitacoes" element={<ProtectedRoute menu="usuarios"><AdminSolicitacoes /></ProtectedRoute>} />

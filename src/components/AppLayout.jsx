@@ -1,31 +1,28 @@
 import {
-  BarChart3,
   Building2,
   Car,
   ChevronDown,
-  ClipboardList,
   Database,
-  FileArchive,
   Factory,
   FlaskConical,
-  Grid2X2,
   History,
   LogOut,
   Menu,
   Package,
-  Receipt,
   Scale,
   ShieldCheck,
   Truck,
   UserRound,
+  Wheat,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { CONTRATOS_GRAOS_TABS } from './ContratosGraosLayout.jsx';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: Grid2X2, menu: 'dashboard' },
+  { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
   {
     label: 'Cadastros',
     icon: Building2,
@@ -39,12 +36,7 @@ const navItems = [
       { to: '/balancas?tab=cadastros&cadastro=laboratorios', label: 'Laborat\u00f3rios', icon: FlaskConical, menu: 'balancas' },
     ],
   },
-  { to: '/contratos', label: 'Contratos', icon: ClipboardList, menu: 'contratos' },
-  { to: '/notas-fiscais', label: 'Notas Fiscais', icon: Receipt, menu: 'notas_fiscais' },
   { to: '/balancas', label: 'Balanças', icon: Scale, menu: 'balancas' },
-  { to: '/frete', label: 'Frete', icon: Truck, menu: 'fretes' },
-  { to: '/documentos', label: 'Documentos', icon: FileArchive, menu: 'documentos' },
-  { to: '/rel-financeiro', label: 'Rel. Financeiro', icon: BarChart3, menu: 'financeiro' },
   { to: '/backup', label: 'Backup', icon: Database, menu: 'backup' },
   { to: '/admin/acessos', label: 'Usuários e permissões', icon: ShieldCheck, menu: 'usuarios' },
   { to: '/admin/auditoria', label: 'Auditoria', icon: History, menu: 'auditoria' },
@@ -135,6 +127,27 @@ export default function AppLayout() {
 
         <nav className="grid gap-1">
           {navItems.map((item) => {
+            if (item.module) {
+              const visibleTabs = item.module.filter((tab) => can(tab.menu, 'visualizar'));
+              if (!visibleTabs.length) return null;
+              const ModuleIcon = item.icon;
+              const isModuleActive = item.module.some((tab) => location.pathname === tab.to);
+
+              return (
+                <NavLink
+                  key={item.label}
+                  to={visibleTabs[0].to}
+                  className={[
+                    'flex min-h-11 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-semibold transition',
+                    isModuleActive ? 'bg-[#31bf69] text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                  ].join(' ')}
+                >
+                  <ModuleIcon size={18} />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            }
+
             if (item.children) {
               const visibleChildren = item.children.filter((child) => can(child.menu, 'visualizar'));
               if (!visibleChildren.length) return null;
