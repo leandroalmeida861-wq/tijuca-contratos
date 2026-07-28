@@ -59,6 +59,7 @@ import {
   updateRecebimento,
 } from '../services/balancasService.js';
 import { parseNfeRecebimento } from '../lib/nfeRecebimento.js';
+import { unidadeScopedCan } from '../lib/permissions.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../lib/formatters.js';
@@ -199,7 +200,10 @@ const defaultLaboratorioForm = {
 };
 
 export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
-  const { can, permissions } = useAuth();
+  const { can, permissions, podeEditarUnidade } = useAuth();
+  const podeEditarNaUnidade = podeEditarUnidade(unidade.codigo);
+  // Ponto unico onde a permissao do menu e cruzada com a permissao da unidade.
+  const canDaAba = (tabKey) => unidadeScopedCan(scopedBalancasCan(can, permissions, tabKey), podeEditarNaUnidade);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const modoQuery = unidade.modoRota === 'query';
@@ -356,12 +360,12 @@ export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
       {error && activeTab !== 'armazenagem' && <Alert tone="error" text={error} />}
 
       {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
-      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} unidade={unidade} balanca={balancaUnidade} can={scopedBalancasCan(can, permissions, 'portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} unidade={unidade} balanca={balancaUnidade} can={scopedBalancasCan(can, permissions, 'recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={scopedBalancasCan(can, permissions, 'laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'armazenagem' && <ArmazenagemTab can={scopedBalancasCan(can, permissions, 'armazenagem')} escopo={escopo} />}
-      {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={can} setError={setError} setMessage={setMessage} reloadMain={load} />}
-      {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={scopedBalancasCan(can, permissions, 'relatorios')} />}
+      {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={canDaAba('laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
+      {activeTab === 'armazenagem' && <ArmazenagemTab can={canDaAba('armazenagem')} escopo={escopo} />}
+      {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={unidadeScopedCan(can, podeEditarNaUnidade)} setError={setError} setMessage={setMessage} reloadMain={load} />}
+      {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={canDaAba('relatorios')} />}
     </div>
   );
 }
@@ -461,6 +465,7 @@ function scopedBalancasCan(can, permissions, tabKey) {
     return canBalancasTab(can, permissions, tabKey, action);
   };
 }
+
 
 function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {
   const recebimentosBalanca = useMemo(() => rows.filter(isRecebimentoFinalizadoBalanca), [rows]);

@@ -123,11 +123,17 @@ export function AuthProvider({ children }) {
     return Boolean(permissions?.[menu]?.[action]);
   }
 
-  // A lista vem do backend (/api/auth/acesso), que aplica a mesma regra da
-  // funcao agroflow_acessa_unidade() no banco. O navegador so consome.
+  // A lista vem do backend (/api/auth/acesso), que aplica a mesma regra das
+  // funcoes agroflow_acessa_unidade() e agroflow_pode_editar_unidade() no
+  // banco. O navegador so consome; quem barra de verdade sao as policies.
   function podeAcessarUnidade(codigo) {
     if (!codigo) return false;
     return unidades.some((unidade) => unidade.codigo === codigo);
+  }
+
+  function podeEditarUnidade(codigo) {
+    if (!codigo) return false;
+    return unidades.some((unidade) => unidade.codigo === codigo && unidade.editar);
   }
 
   const value = useMemo(
@@ -141,6 +147,7 @@ export function AuthProvider({ children }) {
       can,
       unidades,
       podeAcessarUnidade,
+      podeEditarUnidade,
       access,
       loading,
       signIn,

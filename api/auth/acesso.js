@@ -77,10 +77,14 @@ export default async function handler(request, response) {
 }
 
 /**
- * Unidades que o usuario pode acessar, calculadas no servidor.
- * Reproduz a mesma regra da funcao public.agroflow_acessa_unidade():
+ * Unidades que o usuario pode acessar, com o nivel de acesso de cada uma,
+ * calculadas no servidor. Reproduz a mesma regra das funcoes
+ * public.agroflow_acessa_unidade() e public.agroflow_pode_editar_unidade():
  * Admin ve tudo; a excecao por usuario tem precedencia sobre a regra do
  * perfil; sem regra, nao ha acesso.
+ *
+ * Retorna somente as unidades com visualizar = true, cada uma marcando se o
+ * usuario tambem pode editar nela.
  */
 async function carregarUnidadesPermitidas(supabaseAdmin, profile, authUserId) {
   const { data: balancas, error: balancasError } = await supabaseAdmin
@@ -92,22 +96,38 @@ async function carregarUnidadesPermitidas(supabaseAdmin, profile, authUserId) {
 
   const unidades = balancas || [];
   if (profile.perfil === 'admin') {
-    return unidades.map((unidade) => ({ id: unidade.id, codigo: unidade.codigo, nome: unidade.nome }));
+    return unidades.map((unidade) => ({
+      id: unidade.id,
+      codigo: unidade.codigo,
+      nome: unidade.nome,
+      visualizar: true,
+      editar: true,
+    }));
   }
 
+  const colunas = 'balanca_id,permitido,editar';
   const [porUsuario, porPerfil] = await Promise.all([
-    supabaseAdmin.from('permissoes_unidade').select('balanca_id,permitido').eq('user_id', authUserId),
-    supabaseAdmin.from('permissoes_unidade').select('balanca_id,permitido').eq('perfil', profile.perfil),
+    supabaseAdmin.from('permissoes_unidade').select(colunas).eq('user_id', authUserId),
+    supabaseAdmin.from('permissoes_unidade').select(colunas).eq('perfil', profile.perfil),
   ]);
   if (porUsuario.error) throw porUsuario.error;
   if (porPerfil.error) throw porPerfil.error;
 
-  const doUsuario = new Map((porUsuario.data || []).map((row) => [row.balanca_id, row.permitido]));
-  const doPerfil = new Map((porPerfil.data || []).map((row) => [row.balanca_id, row.permitido]));
+  const doUsuario = new Map((porUsuario.data || []).map((row) => [row.balanca_id, row]));
+  const doPerfil = new Map((porPerfil.data || []).map((row) => [row.balanca_id, row]));
 
   return unidades
-    .filter((unidade) => (
-      doUsuario.has(unidade.id) ? Boolean(doUsuario.get(unidade.id)) : Boolean(doPerfil.get(unidade.id))
-    ))
-    .map((unidade) => ({ id: unidade.id, codigo: unidade.codigo, nome: unidade.nome }));
+    .map((unidade) => {
+      const regra = doUsuario.has(unidade.id) ? doUsuario.get(unidade.id) : doPerfil.get(unidade.id);
+      const editar = Boolean(regra?.editar);
+      return {
+        id: unidade.id,
+        codigo: unidade.codigo,
+        nome: unidade.nome,
+        // Quem edita necessariamente visualiza.
+        visualizar: Boolean(regra?.permitido) || editar,
+        editar,
+      };
+    })
+    .filter((unidade) => unidade.visualizar);
 }

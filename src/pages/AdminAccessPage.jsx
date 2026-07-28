@@ -2,7 +2,7 @@ import { Check, Clock3, Save, ShieldCheck, Trash2, Users, Warehouse, X } from 'l
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { UNIDADES } from '../config/unidades.js';
-import { EDITABLE_ROLE_OPTIONS, MENU_DEFINITIONS, PERMISSION_ACTIONS, ROLE_OPTIONS } from '../lib/permissions.js';
+import { EDITABLE_ROLE_OPTIONS, MENU_DEFINITIONS, PERMISSION_ACTIONS, ROLE_OPTIONS, alternarNivelUnidade } from '../lib/permissions.js';
 import { supabase } from '../lib/supabase.js';
 
 const ADMIN_EMAIL = 'leandroalmeida861@gmail.com';
@@ -35,7 +35,7 @@ export default function AdminAccessPage() {
       supabase.from('profiles').select('*').order('nome'),
       supabase.from('permissoes_menu').select('*').in('perfil', EDITABLE_ROLE_VALUES).order('menu'),
       supabase.from('balancas').select('id,codigo,nome').not('codigo', 'is', null).order('nome'),
-      supabase.from('permissoes_unidade').select('balanca_id,perfil,user_id,permitido'),
+      supabase.from('permissoes_unidade').select('balanca_id,perfil,user_id,permitido,editar'),
       fetch('/api/admin/solicitacoes', {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
@@ -85,22 +85,27 @@ export default function AdminAccessPage() {
     }
     const doUsuario = new Map(
       unidadeRows.filter((row) => row.user_id && row.user_id === usuarioSelecionado.user_id)
-        .map((row) => [row.balanca_id, row.permitido]),
+        .map((row) => [row.balanca_id, row]),
     );
     const doPerfil = new Map(
       unidadeRows.filter((row) => row.perfil && row.perfil === usuarioSelecionado.perfil)
-        .map((row) => [row.balanca_id, row.permitido]),
+        .map((row) => [row.balanca_id, row]),
     );
-    setUnidadeAcessos(Object.fromEntries(unidades.map((unidade) => [
-      unidade.id,
-      usuarioSelecionado.perfil === 'admin'
-        ? true
-        : Boolean(doUsuario.has(unidade.id) ? doUsuario.get(unidade.id) : doPerfil.get(unidade.id)),
-    ])));
+    setUnidadeAcessos(Object.fromEntries(unidades.map((unidade) => {
+      if (usuarioSelecionado.perfil === 'admin') {
+        return [unidade.id, { visualizar: true, editar: true }];
+      }
+      const regra = doUsuario.has(unidade.id) ? doUsuario.get(unidade.id) : doPerfil.get(unidade.id);
+      const editar = Boolean(regra?.editar);
+      return [unidade.id, { visualizar: Boolean(regra?.permitido) || editar, editar }];
+    })));
   }, [usuarioSelecionado, unidadeRows, unidades]);
 
-  function toggleUnidade(balancaId) {
-    setUnidadeAcessos((current) => ({ ...current, [balancaId]: !current[balancaId] }));
+  function toggleUnidade(balancaId, nivel) {
+    setUnidadeAcessos((current) => ({
+      ...current,
+      [balancaId]: alternarNivelUnidade(current[balancaId], nivel),
+    }));
   }
 
   async function saveUnidadeAcessos() {
@@ -114,7 +119,8 @@ export default function AdminAccessPage() {
         p_user_id: usuarioSelecionado.user_id,
         p_unidades: unidades.map((unidade) => ({
           balanca_id: unidade.id,
-          permitido: Boolean(unidadeAcessos[unidade.id]),
+          visualizar: Boolean(unidadeAcessos[unidade.id]?.visualizar),
+          editar: Boolean(unidadeAcessos[unidade.id]?.editar),
         })),
       });
       if (error) throw error;
@@ -126,13 +132,14 @@ export default function AdminAccessPage() {
         old_data: null,
         new_data: unidades.map((unidade) => ({
           unidade: unidade.codigo,
-          permitido: Boolean(unidadeAcessos[unidade.id]),
+          visualizar: Boolean(unidadeAcessos[unidade.id]?.visualizar),
+          editar: Boolean(unidadeAcessos[unidade.id]?.editar),
         })),
       });
 
       const { data, error: reloadError } = await supabase
         .from('permissoes_unidade')
-        .select('balanca_id,perfil,user_id,permitido');
+        .select('balanca_id,perfil,user_id,permitido,editar');
       if (reloadError) throw reloadError;
       setUnidadeRows(data || []);
 
@@ -441,7 +448,10 @@ export default function AdminAccessPage() {
         </div>
 
         <p className="mt-2 text-sm font-medium text-slate-500">
-          Define quais unidades o usuário enxerga no menu e consegue abrir. Sem acesso, a unidade não aparece e a rota também fica bloqueada.
+          <strong className="font-bold text-slate-700">Visualizar</strong>: a unidade aparece no menu e o usuário consulta dados e relatórios.
+          Sem isso, a unidade some do menu e a rota fica bloqueada.{' '}
+          <strong className="font-bold text-slate-700">Editar</strong>: também pode cadastrar, editar, excluir, cancelar e aprovar naquela unidade —
+          desde que o perfil já permita a ação no menu correspondente.
         </p>
 
         {!usuarioSelecionado ? (
@@ -467,7 +477,8 @@ export default function AdminAccessPage() {
                 <thead>
                   <tr className="border-b text-xs uppercase text-slate-500">
                     <th className="p-3 text-left">Unidade</th>
-                    <th className="p-3 text-center">Acessar</th>
+                    <th className="p-3 text-center">Visualizar</th>
+                    <th className="p-3 text-center">Editar</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -481,10 +492,20 @@ export default function AdminAccessPage() {
                         <input
                           type="checkbox"
                           className="h-5 w-5"
-                          checked={Boolean(unidadeAcessos[unidade.id])}
+                          checked={Boolean(unidadeAcessos[unidade.id]?.visualizar)}
                           disabled={usuarioSelecionadoEhAdmin}
-                          onChange={() => toggleUnidade(unidade.id)}
-                          aria-label={`Acesso de ${usuarioSelecionado.nome || usuarioSelecionado.email} a ${nomeExibidoUnidade(unidade)}`}
+                          onChange={() => toggleUnidade(unidade.id, 'visualizar')}
+                          aria-label={`Visualizar ${nomeExibidoUnidade(unidade)}`}
+                        />
+                      </td>
+                      <td className="p-3 text-center">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5"
+                          checked={Boolean(unidadeAcessos[unidade.id]?.editar)}
+                          disabled={usuarioSelecionadoEhAdmin}
+                          onChange={() => toggleUnidade(unidade.id, 'editar')}
+                          aria-label={`Editar ${nomeExibidoUnidade(unidade)}`}
                         />
                       </td>
                     </tr>

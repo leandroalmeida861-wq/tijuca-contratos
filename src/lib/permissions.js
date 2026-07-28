@@ -43,6 +43,40 @@ export const PERMISSION_ACTIONS = [
   'exportar',
 ];
 
+// Acoes que alteram dados. Numa unidade em que o usuario so tem "Visualizar",
+// elas ficam bloqueadas mesmo que o perfil libere a acao no menu.
+// "visualizar" e "exportar" ficam de fora: consultar e exportar relatorios
+// continua permitido a quem so visualiza.
+export const WRITE_ACTIONS = ['cadastrar', 'editar', 'excluir', 'cancelar', 'aprovar'];
+
+/**
+ * Permissao efetiva = permissao do menu E permissao da unidade.
+ * Sem "Editar" na unidade, as acoes de escrita caem mesmo que o perfil as
+ * libere no menu. Consultar e exportar seguem valendo.
+ *
+ * @param {(menu: string, action?: string) => boolean} canDoMenu
+ * @param {boolean} podeEditarNaUnidade
+ */
+export function unidadeScopedCan(canDoMenu, podeEditarNaUnidade) {
+  return (menu, action = 'visualizar') => {
+    if (!canDoMenu(menu, action)) return false;
+    if (podeEditarNaUnidade) return true;
+    return !WRITE_ACTIONS.includes(action);
+  };
+}
+
+/**
+ * Regras da tela "Permissoes por unidade": marcar Editar marca Visualizar;
+ * desmarcar Visualizar desmarca Editar. A mesma regra e reaplicada no banco
+ * pela funcao agroflow_salvar_acessos_unidade.
+ */
+export function alternarNivelUnidade(atual = { visualizar: false, editar: false }, nivel) {
+  const proximo = { ...atual, [nivel]: !atual[nivel] };
+  if (nivel === 'editar' && proximo.editar) proximo.visualizar = true;
+  if (nivel === 'visualizar' && !proximo.visualizar) proximo.editar = false;
+  return proximo;
+}
+
 export const TABLE_MENU = {
   fornecedores: 'fornecedores',
   fabricas: 'fabricas',
