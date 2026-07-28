@@ -18,6 +18,7 @@
  * @typedef {Object} Unidade
  * @property {string} codigo           Codigo interno da unidade.
  * @property {string} nome             Nome exibido no menu e no titulo da pagina.
+ * @property {string} rotulo           Identificacao visual exibida no cabecalho.
  * @property {string} descricao        Subtitulo da pagina.
  * @property {string} rotaBase         Rota principal do modulo.
  * @property {'query'|'path'} modoRota Como as abas sao navegadas.
@@ -35,7 +36,7 @@ export const UNIDADE_ABAS = {
   dashboard: { key: 'dashboard', label: 'Dashboard', segmento: '', menu: 'balancas' },
   portaria: { key: 'portaria', label: 'Portaria', segmento: 'portaria', menu: 'balancas_portaria' },
   laboratorio: { key: 'laboratorio', label: 'Aprovação Laboratório', segmento: 'aprovacao-laboratorio', menu: 'balancas_laboratorio' },
-  recebimentos: { key: 'recebimentos', label: 'Recebimentos', segmento: 'recebimentos', menu: 'balancas_recebimentos' },
+  recebimentos: { key: 'recebimentos', label: 'Recebidos na Balança', segmento: 'recebimentos', menu: 'balancas_recebimentos' },
   armazenagem: { key: 'armazenagem', label: 'Armazenagem M.P.', segmento: 'armazenagem', menu: 'balancas_armazenagem' },
   relatorios: { key: 'relatorios', label: 'Relatórios', segmento: 'relatorios', menu: 'balancas_relatorios' },
 };
@@ -47,6 +48,7 @@ export const UNIDADES = [
   {
     codigo: 'beberibe',
     nome: 'Balança Beberibe',
+    rotulo: 'Unidade Beberibe',
     descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Beberibe.',
     rotaBase: '/balancas',
     modoRota: 'query',
@@ -64,6 +66,7 @@ export const UNIDADES = [
   {
     codigo: 'haisa',
     nome: 'Balança Haisa',
+    rotulo: 'Unidade Haisa',
     descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Haisa.',
     rotaBase: '/balanca-haisa',
     modoRota: 'path',
@@ -79,6 +82,7 @@ export const UNIDADES = [
   {
     codigo: 'estrela',
     nome: 'Balança Estrela',
+    rotulo: 'Unidade Estrela',
     descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Estrela.',
     rotaBase: '/balanca-estrela',
     modoRota: 'path',
@@ -94,6 +98,7 @@ export const UNIDADES = [
   {
     codigo: 'iguatu',
     nome: 'Armazém Iguatu',
+    rotulo: 'Unidade Iguatu',
     descricao: 'Portaria, recebimentos, armazenagem e relatórios da unidade Iguatu.',
     rotaBase: '/armazem-iguatu',
     modoRota: 'path',
