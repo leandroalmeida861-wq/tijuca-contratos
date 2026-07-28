@@ -363,7 +363,7 @@ export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
       {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={canDaAba('laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
-      {activeTab === 'armazenagem' && <ArmazenagemTab can={canDaAba('armazenagem')} escopo={escopo} />}
+      {activeTab === 'armazenagem' && <ArmazenagemTab can={canDaAba('armazenagem')} escopo={escopo} unidade={unidade} />}
       {activeTab === 'cadastros' && <CadastrosTab activeCadastro={cadastroParam} onCadastroChange={selectCadastro} can={unidadeScopedCan(can, podeEditarNaUnidade)} setError={setError} setMessage={setMessage} reloadMain={load} />}
       {activeTab === 'relatorios' && <RelatoriosTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} can={canDaAba('relatorios')} />}
     </div>

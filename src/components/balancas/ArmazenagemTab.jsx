@@ -31,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useSupabaseRealtimeRefresh } from '../../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../../lib/formatters.js';
 import {
+  excluirDoFechamento,
   fecharMesArmazenagem,
   listArmazenagemData,
   mergeRecebimentosArmazenagens,
@@ -38,10 +39,26 @@ import {
   notaItemPesoKg,
   pesoNotaPrincipalRecebimento,
   reabrirMesArmazenagem,
+  restaurarNoFechamento,
   salvarArmazenagem,
   salvarNovaArmazenagem,
   toArmazenagemError,
 } from '../../services/armazenagemService.js';
+import {
+  FECHAMENTO_PRIMEIRO_MES,
+  aplicarExclusoesDeFechamento,
+  competenciaAnteriorAoInicio,
+  linhasDoFechamento,
+  motivoForaDoFechamento,
+  nomeFornecedor,
+  nomeTransportadora,
+  placaDaLinha,
+  resumoFechamento,
+  textoNotasComplementares,
+  totaisPorFornecedor,
+  totaisPorProduto,
+  totaisPorSiloBaia,
+} from '../../lib/fechamentoArmazenagem.js';
 
 const REALTIME_TABLES = [
   'recebimentos',
@@ -51,6 +68,7 @@ const REALTIME_TABLES = [
   'armazenagem_itens',
   'armazenagem_distribuicoes',
   'fechamentos_armazenagem',
+  'armazenagem_fechamento_exclusoes',
 ];
 
 const MONTHS = [
@@ -86,9 +104,9 @@ const BUTTON_PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 r
 const BUTTON_SECONDARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-extrabold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60';
 const FIELD_CLASS = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-tijuca-500 focus:ring-2 focus:ring-tijuca-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500';
 
-export default function ArmazenagemTab({ can, escopo }) {
-  const { profile } = useAuth();
-  const [source, setSource] = useState({ recebimentos: [], armazenagens: [], fechamentos: [] });
+export default function ArmazenagemTab({ can, escopo, unidade }) {
+  const { profile, profileData } = useAuth();
+  const [source, setSource] = useState({ recebimentos: [], armazenagens: [], fechamentos: [], exclusoes: [] });
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(INITIAL_FILTERS);
   const [loading, setLoading] = useState(true);
@@ -127,8 +145,12 @@ export default function ArmazenagemTab({ can, escopo }) {
     pollIntervalMs: 60000,
   });
 
+  // Cada linha ja chega sabendo se esta dentro ou fora do fechamento mensal.
   const rows = useMemo(
-    () => mergeRecebimentosArmazenagens(source.recebimentos, source.armazenagens),
+    () => aplicarExclusoesDeFechamento(
+      mergeRecebimentosArmazenagens(source.recebimentos, source.armazenagens),
+      source.exclusoes,
+    ),
     [source],
   );
   const filteredRows = useMemo(() => filterRows(rows, appliedFilters), [rows, appliedFilters]);
@@ -172,6 +194,57 @@ export default function ArmazenagemTab({ can, escopo }) {
       });
     } catch (openError) {
       setError(toArmazenagemError(openError));
+    }
+  }
+
+  const usuarioAtual = {
+    id: profileData?.user_id || null,
+    nome: profileData?.nome || null,
+    email: profileData?.email || null,
+  };
+
+  /**
+   * Retira a carga do fechamento mensal. O recebimento continua no sistema:
+   * nada e apagado, apenas deixa de somar nos totais do mes.
+   */
+  async function handleExcluirDoFechamento(row) {
+    const nf = row.recebimento?.nf_numero || '-';
+    if (!window.confirm(
+      `Retirar a NF ${nf} do fechamento mensal?\n\nO recebimento continua cadastrado e visível na tela. Ele apenas deixa de somar nos cálculos e relatórios do fechamento.`,
+    )) return;
+
+    const motivo = window.prompt('Informe o motivo para retirar do fechamento:') || '';
+    if (!motivo.trim()) {
+      setError('É obrigatório informar o motivo para retirar o lançamento do fechamento.');
+      return;
+    }
+
+    setError('');
+    try {
+      await excluirDoFechamento({
+        recebimentoId: row.recebimento_id,
+        balancaId: row.recebimento?.balanca_id || escopo?.balancaId || null,
+        motivo,
+        usuario: usuarioAtual,
+      });
+      setMessage(`NF ${nf} retirada do fechamento mensal.`);
+      await load({ silent: true });
+    } catch (excluirError) {
+      setError(toArmazenagemError(excluirError));
+    }
+  }
+
+  async function handleRestaurarNoFechamento(row) {
+    const nf = row.recebimento?.nf_numero || '-';
+    if (!window.confirm(`Incluir novamente a NF ${nf} no fechamento mensal?`)) return;
+
+    setError('');
+    try {
+      await restaurarNoFechamento({ recebimentoId: row.recebimento_id, usuario: usuarioAtual });
+      setMessage(`NF ${nf} incluída novamente no fechamento mensal.`);
+      await load({ silent: true });
+    } catch (restaurarError) {
+      setError(toArmazenagemError(restaurarError));
     }
   }
 
@@ -277,10 +350,10 @@ export default function ArmazenagemTab({ can, escopo }) {
           <div className="flex flex-wrap gap-2">
             {can('balancas', 'exportar') && (
               <>
-                <button type="button" className={BUTTON_SECONDARY} onClick={() => exportExcel(filteredRows)}>
+                <button type="button" className={BUTTON_SECONDARY} onClick={() => exportExcel(filteredRows, unidade)}>
                   <FileSpreadsheet className="h-4 w-4" /> Excel
                 </button>
-                <button type="button" className={BUTTON_SECONDARY} onClick={() => exportPdf(filteredRows, appliedFilters)}>
+                <button type="button" className={BUTTON_SECONDARY} onClick={() => exportPdf(filteredRows, appliedFilters, unidade)}>
                   <Download className="h-4 w-4" /> PDF
                 </button>
               </>
@@ -292,6 +365,8 @@ export default function ArmazenagemTab({ can, escopo }) {
           can={can}
           onView={(row) => openStorage(row, true)}
           onEdit={(row) => openStorage(row, false)}
+          onExcluirFechamento={handleExcluirDoFechamento}
+          onRestaurarFechamento={handleRestaurarNoFechamento}
         />
       </section>
 
@@ -303,7 +378,7 @@ export default function ArmazenagemTab({ can, escopo }) {
         busy={closing}
         onClose={handleCloseMonth}
         onReopen={handleReopenMonth}
-        onDownloadPdf={exportClosedMonthPdf}
+        onDownloadPdf={(month) => exportClosedMonthPdf(month, unidade)}
       />
 
       {modal && (
@@ -410,7 +485,7 @@ function StorageCharts({ charts }) {
   );
 }
 
-function StorageTable({ rows, can, onView, onEdit }) {
+function StorageTable({ rows, can, onView, onEdit, onExcluirFechamento, onRestaurarFechamento }) {
   if (!rows.length) return <Empty text="Nenhum recebimento finalizado encontrado para os filtros atuais." />;
   return (
     <div className="overflow-x-auto">
@@ -425,8 +500,18 @@ function StorageTable({ rows, can, onView, onEdit }) {
             const bays = distributionValues(row, 'baia');
             const saved = hasSavedDistribution(row);
             return (
-              <tr key={row.id || row.recebimento_id} className="border-t border-slate-200 align-top hover:bg-slate-50">
-                <td className="px-3 py-3 whitespace-nowrap">{dateBr(row.data_armazenagem || row.recebimento?.data)}</td>
+              <tr key={row.id || row.recebimento_id} className={`border-t border-slate-200 align-top hover:bg-slate-50 ${row.fora_do_fechamento ? 'bg-slate-50/80 text-slate-500' : ''}`}>
+                <td className="px-3 py-3 whitespace-nowrap">
+                  {dateBr(row.data_armazenagem || row.recebimento?.data)}
+                  {row.fora_do_fechamento && (
+                    <span
+                      className="mt-1 block w-fit rounded bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold uppercase text-slate-700"
+                      title={motivoForaDoFechamento(row)}
+                    >
+                      Fora do fechamento
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-3 font-bold"><StorageInvoiceNumbers recebimento={row.recebimento} /></td>
                 <td className="px-3 py-3 font-semibold">{row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'}</td>
                 <td className="max-w-52 px-3 py-3">{row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '-'}</td>
@@ -444,6 +529,13 @@ function StorageTable({ rows, can, onView, onEdit }) {
                   <div className="flex items-center gap-1">
                     <IconButton title="Visualizar" onClick={() => onView(row)}><Eye className="h-4 w-4" /></IconButton>
                     {(row.id ? can('balancas', 'editar') : (can('balancas', 'cadastrar') || can('balancas', 'editar'))) && row.status !== 'CANCELADO' && <IconButton title={row.id ? 'Editar' : 'Distribuir'} onClick={() => onEdit(row)}><Edit className="h-4 w-4" /></IconButton>}
+                    {(can('balancas', 'editar') || can('balancas', 'cancelar')) && !row.anterior_ao_fechamento && (
+                      row.excluido_do_fechamento ? (
+                        <IconButton title="Incluir novamente no fechamento mensal" onClick={() => onRestaurarFechamento(row)}><RotateCcw className="h-4 w-4" /></IconButton>
+                      ) : (
+                        <IconButton title="Não incluir no fechamento mensal" tone="danger" onClick={() => onExcluirFechamento(row)}><X className="h-4 w-4" /></IconButton>
+                      )
+                    )}
                   </div>
                 </td>
               </tr>
@@ -580,6 +672,7 @@ function MonthlyClosing({ year, rows, can, isAdmin, busy, onClose, onReopen, onD
           <article key={month.mes} className="rounded-lg border border-slate-200 p-3">
             <div className="flex items-start justify-between gap-2"><h3 className="font-extrabold text-slate-900">{month.nome}</h3><span className={`rounded px-2 py-1 text-xs font-extrabold ${month.status === 'FECHADO' ? 'bg-slate-800 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{month.status === 'FECHADO' ? 'Fechado' : 'Aberto'}</span></div>
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs"><Summary label="Cargas" value={month.cargas} /><Summary label="Produtos" value={month.produtos} /><Summary label="Peso NF" value={kg(month.pesoNota)} /><Summary label="Armazenado" value={kg(month.armazenado)} /><Summary label="Saldo" value={kg(month.saldo)} /><Summary label="Silos / Baias" value={`${month.silos} / ${month.baias}`} /></dl>
+            {month.foraDaApuracao && <p className="mt-3 rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Fora da apuração. O fechamento passou a valer a partir de {FECHAMENTO_PRIMEIRO_MES.split('-').reverse().join('/')}; os lançamentos anteriores seguem no sistema.</p>}
             {month.status === 'FECHADO' && <p className="mt-3 text-xs text-slate-500">Fechado por {month.fechamento?.fechado_por_nome || '-'} em {dateTimeBr(month.fechamento?.fechado_em)}</p>}
             <div className={`mt-3 grid gap-2 ${month.status === 'FECHADO' && isAdmin && can('balancas', 'exportar') ? 'grid-cols-2' : ''}`}>
               {month.status !== 'FECHADO' && can('balancas', 'aprovar') && <button type="button" className={`${BUTTON_SECONDARY} w-full`} disabled={busy} onClick={() => onClose(month)}><CalendarCheck className="h-4 w-4" /> Fechar mês</button>}
@@ -800,103 +893,231 @@ function buildCharts(rows) {
 function buildMonthlyClosures(rows, closures, year) {
   return MONTHS.map((name, index) => {
     const month = index + 1;
-    const monthRows = rows.filter((row) => {
-      const date = row.data_armazenagem || row.recebimento?.data || '';
-      return Number(date.slice(0, 4)) === year && Number(date.slice(5, 7)) === month && row.status !== 'CANCELADO';
-    });
-    const metrics = calculateMetrics(monthRows);
-    const products = new Set(monthRows.flatMap((row) => (row.itens || []).map((item) => item.produto_id || item.produto?.nome).filter(Boolean)));
+    // linhasDoFechamento ja descarta cancelados, lancamentos retirados do
+    // fechamento e tudo anterior ao inicio da apuracao.
+    const monthRows = linhasDoFechamento(rows, year, month);
+    const resumo = resumoFechamento(monthRows);
     const closure = closures.find((item) => Number(item.ano) === year && Number(item.mes) === month);
     return {
       ano: year,
       mes: month,
       nome: name,
-      ...metrics,
-      produtos: products.size,
+      pesoNota: resumo.pesoNota,
+      armazenado: resumo.armazenado,
+      saldo: resumo.saldo,
+      cargas: resumo.cargas,
+      silos: resumo.silos,
+      baias: resumo.baias,
+      produtos: resumo.produtos,
       registros: monthRows,
+      foraDaApuracao: competenciaAnteriorAoInicio(year, month),
       fechamento: closure,
       status: closure?.status === 'FECHADO' ? 'FECHADO' : 'ABERTO',
     };
   });
 }
 
-function exportPdf(rows, filters) {
-  const doc = new jsPDF({ orientation: 'landscape' });
-  doc.setFontSize(15); doc.text('AgroFlow - Relatorio de Armazenagem M.P.', 12, 14);
-  doc.setFontSize(8); doc.text(`Periodo/filtros: ${filters.dataInicial || '-'} a ${filters.dataFinal || '-'} | Ano ${filters.ano || 'todos'} | Mes ${filters.mes || 'todos'}`, 12, 21);
-  let y = 31;
-  rows.forEach((row) => {
-    if (y > 190) { doc.addPage(); y = 15; }
-    doc.text(`${dateBr(row.data_armazenagem)} | NF ${row.recebimento?.nf_numero || '-'} | ${productNames(row)} | NF ${kg(row.peso_nota)} | Armazenado ${kg(row.peso_distribuido)} | Saldo ${kg(row.saldo_distribuir)} | Silo ${distributionValues(row, 'silo')} | Baia ${distributionValues(row, 'baia')} | ${statusText(row.status)}`, 12, y, { maxWidth: 270 });
-    y += 10;
-  });
-  doc.setFontSize(10); doc.text(`Peso total da NF: ${kg(sum(rows, 'peso_nota'))} | Total armazenado: ${kg(sum(rows, 'peso_distribuido'))} | Saldo: ${kg(sum(rows, 'saldo_distribuir'))}`, 12, Math.min(y + 4, 198));
-  doc.save('relatorio-armazenagem-mp.pdf');
-}
-
-function exportClosedMonthPdf(month) {
-  if (month.status !== 'FECHADO') return;
-  const prefix = `${month.ano}-${String(month.mes).padStart(2, '0')}`;
-  const rows = (month.registros || []).filter((row) => {
-    const date = row.data_armazenagem || row.recebimento?.data || '';
-    return date.startsWith(prefix) && row.status !== 'CANCELADO';
-  });
-  const doc = new jsPDF({ orientation: 'landscape' });
+/** Escritor de PDF com quebra de pagina automatica, usado pelos dois relatorios. */
+function criarEscritorPdf(doc) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let y = 14;
+  return {
+    texto(text, options = {}) {
+      const { size = 9, bold = false, indent = 12, gap = 5 } = options;
+      doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(String(text ?? '-'), pageWidth - indent - 12);
+      const needed = lines.length * gap;
+      if (y + needed > pageHeight - 12) { doc.addPage(); y = 14; }
+      doc.text(lines, indent, y);
+      y += needed;
+    },
+    espaco(valor = 2) { y += valor; },
+  };
+}
 
-  function addText(text, options = {}) {
-    const { size = 9, bold = false, indent = 12, gap = 5, maxWidth = pageWidth - indent - 12 } = options;
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.setFontSize(size);
-    const lines = doc.splitTextToSize(String(text || '-'), maxWidth);
-    const needed = lines.length * gap;
-    if (y + needed > pageHeight - 12) {
-      doc.addPage();
-      y = 14;
-    }
-    doc.text(lines, indent, y);
-    y += needed;
-  }
+function escreverTotaisPdf(pdf, rows) {
+  pdf.espaco(3);
+  pdf.texto('Totais por produto', { bold: true, gap: 6 });
+  totaisPorProduto(rows).forEach((item) => pdf.texto(
+    `${item.chave} | Cargas: ${item.cargas} | NF: ${kg(item.pesoNota)} | Armazenado: ${kg(item.armazenado)} | Saldo: ${kg(item.saldo)}`,
+    { indent: 18 },
+  ));
 
-  addText('AgroFlow - Relatório Mensal de Armazenagem M.P.', { size: 16, bold: true, gap: 7 });
-  addText(`Período: ${month.nome}/${month.ano} | Situação: Fechado`, { size: 11, bold: true, gap: 6 });
-  addText(`Fechado em: ${dateTimeBr(month.fechamento?.fechado_em)} | Responsável pelo fechamento: ${month.fechamento?.fechado_por_nome || '-'}`);
+  pdf.espaco(3);
+  pdf.texto('Totais por fornecedor', { bold: true, gap: 6 });
+  totaisPorFornecedor(rows).forEach((item) => pdf.texto(
+    `${item.chave} | Cargas: ${item.cargas} | NF: ${kg(item.pesoNota)} | Armazenado: ${kg(item.armazenado)} | Saldo: ${kg(item.saldo)}`,
+    { indent: 18 },
+  ));
+
+  const porSilo = totaisPorSiloBaia(rows);
+  pdf.espaco(3);
+  pdf.texto('Totais por silo e baia', { bold: true, gap: 6 });
+  if (!porSilo.length) pdf.texto('Sem distribuição registrada.', { indent: 18 });
+  porSilo.forEach((item) => pdf.texto(
+    `Silo ${item.silo} | Baia ${item.baia} | Movimentações: ${item.movimentacoes} | Armazenado: ${kg(item.armazenado)}`,
+    { indent: 18 },
+  ));
+
+  const resumo = resumoFechamento(rows);
+  pdf.espaco(3);
+  pdf.texto(
+    `TOTAL GERAL | Cargas: ${resumo.cargas} | Produtos: ${resumo.produtos} | Peso da NF: ${kg(resumo.pesoNota)} | Armazenado: ${kg(resumo.armazenado)} | Saldo: ${kg(resumo.saldo)} | Silos/Baias: ${resumo.silos}/${resumo.baias}`,
+    { bold: true, size: 10, gap: 6 },
+  );
+}
+
+function escreverLinhaPdf(pdf, row, index) {
+  const complementares = textoNotasComplementares(row);
+  const saved = hasSavedDistribution(row);
+  pdf.texto(
+    `${index + 1}. ${dateBr(row.data_armazenagem || row.recebimento?.data)} | NF ${row.recebimento?.nf_numero || '-'}${complementares ? ` | NF compl. ${complementares}` : ''} | ${nomeFornecedor(row)}`,
+    { bold: true },
+  );
+  pdf.texto(
+    `Produto: ${productNames(row)} | Placa: ${placaDaLinha(row) || '-'} | Transportadora: ${nomeTransportadora(row) || '-'}`,
+    { indent: 18 },
+  );
+  pdf.texto(
+    `Peso da NF: ${kg(row.peso_nota)} | Distribuído: ${kg(row.peso_distribuido)} | Saldo: ${kg(row.saldo_distribuir)} | Silo: ${distributionValues(row, 'silo')} | Baia: ${distributionValues(row, 'baia')} | Status: ${statusText(row.status)}`,
+    { indent: 18 },
+  );
+  pdf.texto(
+    `Responsável: ${saved ? row.updated_by_nome || row.created_by_nome || '-' : '-'} | Registro: ${saved ? dateTimeBr(row.updated_at || row.created_at) : '-'} | Fechamento: ${row.fora_do_fechamento ? `FORA (${motivoForaDoFechamento(row)})` : 'Incluído'}`,
+    { indent: 18 },
+  );
+  pdf.espaco();
+}
+
+function exportPdf(rows, filters, unidade) {
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const pdf = criarEscritorPdf(doc);
+  const noFechamento = rows.filter((row) => !row.fora_do_fechamento);
+
+  pdf.texto('AgroFlow - Relatório de Armazenagem M.P.', { size: 15, bold: true, gap: 7 });
+  pdf.texto(`Unidade: ${unidade?.nome || '-'}`, { size: 11, bold: true, gap: 6 });
+  pdf.texto(`Período: ${filters.dataInicial || '-'} a ${filters.dataFinal || '-'} | Ano ${filters.ano || 'todos'} | Mês ${filters.mes || 'todos'}`, { size: 8 });
+  pdf.texto(`Lançamentos: ${rows.length} | No fechamento: ${noFechamento.length} | Fora do fechamento: ${rows.length - noFechamento.length}`, { size: 8 });
+  pdf.espaco(3);
+
+  rows.forEach((row, index) => escreverLinhaPdf(pdf, row, index));
+  if (!rows.length) pdf.texto('Nenhum lançamento para os filtros atuais.', { bold: true });
+
+  escreverTotaisPdf(pdf, noFechamento);
+  doc.save('relatorio-armazenagem-mp.pdf');
+}
+
+function exportClosedMonthPdf(month, unidade) {
+  if (month.status !== 'FECHADO') return;
+  const prefix = `${month.ano}-${String(month.mes).padStart(2, '0')}`;
+  // month.registros ja vem filtrado por linhasDoFechamento: sem cancelados,
+  // sem lancamentos retirados do fechamento e sem periodo fora da apuracao.
+  const rows = month.registros || [];
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const pdf = criarEscritorPdf(doc);
+
+  pdf.texto('AgroFlow - Relatório Mensal de Armazenagem M.P.', { size: 16, bold: true, gap: 7 });
+  pdf.texto(`Unidade: ${unidade?.nome || '-'}`, { size: 11, bold: true, gap: 6 });
+  pdf.texto(`Período: ${month.nome}/${month.ano} | Situação: Fechado`, { size: 11, bold: true, gap: 6 });
+  pdf.texto(`Fechado em: ${dateTimeBr(month.fechamento?.fechado_em)} | Responsável pelo fechamento: ${month.fechamento?.fechado_por_nome || '-'}`);
   if (month.fechamento?.justificativa_pendencias) {
-    addText(`Observação do fechamento: ${month.fechamento.justificativa_pendencias}`);
+    pdf.texto(`Observação do fechamento: ${month.fechamento.justificativa_pendencias}`);
   }
-  addText(`Cargas: ${rows.length} | Produtos: ${month.produtos} | Peso da NF: ${kg(sum(rows, 'peso_nota'))} | Armazenado: ${kg(sum(rows, 'peso_distribuido'))} | Saldo: ${kg(sum(rows, 'saldo_distribuir'))}`, { bold: true, gap: 6 });
-  y += 2;
+  pdf.espaco(2);
 
   rows.forEach((row, index) => {
-    addText(`${index + 1}. ${dateBr(row.data_armazenagem || row.recebimento?.data)} | NF ${row.recebimento?.nf_numero || '-'} | ${row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '-'}`, { bold: true, gap: 5 });
-    addText(`Placa: ${row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '-'} | Transportadora: ${row.recebimento?.transportadora?.nome || row.recebimento?.tipo_veiculo || '-'} | Status: ${statusText(row.status)}`, { indent: 18 });
+    escreverLinhaPdf(pdf, row, index);
     (row.itens || []).forEach((item) => {
-      addText(`Matéria-prima: ${item.produto?.nome || row.recebimento?.produto_nome_manual || '-'} | Peso da NF: ${kg(item.peso_nota)} | Distribuído: ${kg(item.peso_distribuido)} | Saldo: ${kg(item.saldo_distribuir)}`, { indent: 18 });
+      pdf.texto(
+        `Matéria-prima: ${item.produto?.nome || row.recebimento?.produto_nome_manual || '-'} | Peso da NF: ${kg(item.peso_nota)} | Distribuído: ${kg(item.peso_distribuido)} | Saldo: ${kg(item.saldo_distribuir)}`,
+        { indent: 24 },
+      );
       (item.distribuicoes || []).forEach((distribution) => {
-        addText(`Movimentação: ${kg(distribution.peso_armazenado)} | Silo: ${distribution.silo || '-'} | Baia: ${distribution.baia || '-'}${distribution.observacao ? ` | Observação: ${distribution.observacao}` : ''}`, { indent: 24 });
+        pdf.texto(
+          `Movimentação: ${kg(distribution.peso_armazenado)} | Silo: ${distribution.silo || '-'} | Baia: ${distribution.baia || '-'}${distribution.observacao ? ` | Observação: ${distribution.observacao}` : ''}`,
+          { indent: 30 },
+        );
       });
     });
-    if (row.observacao) addText(`Observação geral: ${row.observacao}`, { indent: 18 });
-    addText(`Responsável pelo registro: ${hasSavedDistribution(row) ? row.updated_by_nome || row.created_by_nome || '-' : '-'} | Registro: ${hasSavedDistribution(row) ? dateTimeBr(row.updated_at || row.created_at) : '-'}`, { indent: 18 });
-    y += 2;
+    if (row.observacao) pdf.texto(`Observação geral: ${row.observacao}`, { indent: 24 });
+    pdf.espaco();
   });
 
-  if (!rows.length) addText('Nenhum registro consolidado neste mês.', { bold: true });
+  if (!rows.length) pdf.texto('Nenhum registro consolidado neste mês.', { bold: true });
+
+  escreverTotaisPdf(pdf, rows);
   doc.save(`armazenagem-mp-${prefix}-fechado.pdf`);
 }
 
-function exportExcel(rows) {
-  const data = rows.map((row) => ({
-    Data: dateBr(row.data_armazenagem), NF: row.recebimento?.nf_numero || '', Placa: row.recebimento?.veiculo?.placa || row.recebimento?.veiculo_placa_manual || '',
-    Fornecedor: row.recebimento?.fornecedor?.nome || row.recebimento?.fornecedor_nome_manual || '', Produto: productNames(row),
-    'Peso da NF KG': Number(row.peso_nota || 0), 'Peso distribuido KG': Number(row.peso_distribuido || 0), 'Saldo KG': Number(row.saldo_distribuir || 0),
-    Transportadora: row.recebimento?.transportadora?.nome || row.recebimento?.tipo_veiculo || '', Silo: distributionValues(row, 'silo'), Baia: distributionValues(row, 'baia'),
-    Status: statusText(row.status), Responsavel: row.updated_by_nome || row.created_by_nome || '', Registro: dateTimeBr(row.updated_at || row.created_at),
-  }));
+/** Uma linha por carga (recebimento). Notas complementares nao geram linha. */
+function linhaDeRelatorio(row, unidade) {
+  const saved = hasSavedDistribution(row);
+  return {
+    Unidade: unidade?.nome || '',
+    'Mes/Ano': (row.data_armazenagem || row.recebimento?.data || '').slice(0, 7).split('-').reverse().join('/'),
+    Data: dateBr(row.data_armazenagem || row.recebimento?.data),
+    'NF principal': row.recebimento?.nf_numero || '',
+    'NF complementares': textoNotasComplementares(row),
+    Fornecedor: nomeFornecedor(row),
+    Produto: productNames(row),
+    Placa: placaDaLinha(row),
+    Transportadora: nomeTransportadora(row),
+    'Peso da NF KG': Number(row.peso_nota || 0),
+    'Peso distribuido KG': Number(row.peso_distribuido || 0),
+    'Saldo KG': Number(row.saldo_distribuir || 0),
+    Silo: distributionValues(row, 'silo'),
+    Baia: distributionValues(row, 'baia'),
+    Status: statusText(row.status),
+    Responsavel: saved ? row.updated_by_nome || row.created_by_nome || '' : '',
+    Registro: saved ? dateTimeBr(row.updated_at || row.created_at) : '',
+    Fechamento: row.fora_do_fechamento ? 'Fora do fechamento' : 'Incluído',
+    'Motivo fora do fechamento': motivoForaDoFechamento(row),
+  };
+}
+
+function exportExcel(rows, unidade) {
+  const noFechamento = rows.filter((row) => !row.fora_do_fechamento);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(data), 'Armazenagem MP');
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(rows.map((row) => linhaDeRelatorio(row, unidade))),
+    'Lancamentos',
+  );
+
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(
+    totaisPorProduto(noFechamento).map((item) => ({
+      Produto: item.chave, Cargas: item.cargas, 'Peso da NF KG': item.pesoNota, 'Armazenado KG': item.armazenado, 'Saldo KG': item.saldo,
+    })),
+  ), 'Totais por produto');
+
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(
+    totaisPorFornecedor(noFechamento).map((item) => ({
+      Fornecedor: item.chave, Cargas: item.cargas, 'Peso da NF KG': item.pesoNota, 'Armazenado KG': item.armazenado, 'Saldo KG': item.saldo,
+    })),
+  ), 'Totais por fornecedor');
+
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(
+    totaisPorSiloBaia(noFechamento).map((item) => ({
+      Silo: item.silo, Baia: item.baia, Movimentacoes: item.movimentacoes, 'Armazenado KG': item.armazenado,
+    })),
+  ), 'Totais por silo e baia');
+
+  const resumo = resumoFechamento(noFechamento);
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([{
+    Unidade: unidade?.nome || '',
+    'Cargas no fechamento': resumo.cargas,
+    'Lancamentos fora do fechamento': rows.length - noFechamento.length,
+    Produtos: resumo.produtos,
+    'Peso total da NF KG': resumo.pesoNota,
+    'Total armazenado KG': resumo.armazenado,
+    'Saldo total KG': resumo.saldo,
+    Silos: resumo.silos,
+    Baias: resumo.baias,
+  }]), 'Resumo');
+
   XLSX.writeFile(workbook, 'relatorio-armazenagem-mp.xlsx');
 }
 

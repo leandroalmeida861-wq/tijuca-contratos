@@ -54,17 +54,96 @@ const ARMAZENAGEM_SELECT = `
 `;
 
 export async function listArmazenagemData(filters = {}, escopo = {}) {
-  const [recebimentos, armazenagens, fechamentos] = await Promise.all([
+  const [recebimentos, armazenagens, fechamentos, exclusoes] = await Promise.all([
     listRecebimentos(escopo),
     listArmazenagens(filters),
     listFechamentosArmazenagem(filters.ano),
+    listExclusoesFechamento(escopo),
   ]);
 
   return {
     recebimentos: recebimentos.filter(isRecebimentoFinalizadoParaArmazenagem),
     armazenagens: filtrarArmazenagensPorUnidade(armazenagens, escopo),
     fechamentos,
+    exclusoes,
   };
+}
+
+/** Recebimentos retirados do fechamento mensal da unidade. */
+export async function listExclusoesFechamento(escopo = {}) {
+  let query = supabase
+    .from('armazenagem_fechamento_exclusoes')
+    .select('*')
+    .eq('ativo', true);
+
+  if (escopo.balancaId) {
+    query = escopo.incluirSemUnidade
+      ? query.or(`balanca_id.eq.${escopo.balancaId},balanca_id.is.null`)
+      : query.eq('balanca_id', escopo.balancaId);
+  }
+
+  const { data, error } = await query;
+  if (error && isMissingExclusoesTable(error)) return [];
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Retira um recebimento do fechamento mensal. O recebimento nao e alterado nem
+ * apagado: apenas deixa de compor os totais do mes.
+ */
+export async function excluirDoFechamento({ recebimentoId, balancaId, motivo, usuario }) {
+  const texto = String(motivo || '').trim();
+  if (!texto) throw new Error('Informe o motivo para retirar o lançamento do fechamento.');
+
+  const payload = {
+    recebimento_id: recebimentoId,
+    balanca_id: balancaId || null,
+    ativo: true,
+    motivo: texto,
+    excluido_por: usuario?.id || null,
+    excluido_por_nome: usuario?.nome || usuario?.email || null,
+    excluido_em: new Date().toISOString(),
+    restaurado_por: null,
+    restaurado_por_nome: null,
+    restaurado_em: null,
+    atualizado_em: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from('armazenagem_fechamento_exclusoes')
+    .upsert(payload, { onConflict: 'recebimento_id' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Devolve o lancamento ao fechamento mensal, preservando o historico. */
+export async function restaurarNoFechamento({ recebimentoId, usuario }) {
+  const { data, error } = await supabase
+    .from('armazenagem_fechamento_exclusoes')
+    .update({
+      ativo: false,
+      restaurado_por: usuario?.id || null,
+      restaurado_por_nome: usuario?.nome || usuario?.email || null,
+      restaurado_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('recebimento_id', recebimentoId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+function isMissingExclusoesTable(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('armazenagem_fechamento_exclusoes') && (
+    message.includes('does not exist')
+    || message.includes('could not find')
+    || message.includes('schema cache')
+  );
 }
 
 /**
