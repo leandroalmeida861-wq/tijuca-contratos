@@ -143,7 +143,11 @@ assert.ok(atomicSaveMigration.includes('return public.agroflow_armazenagem_salva
 assert.ok(atomicSaveMigration.includes('revoke all on function public.agroflow_armazenagem_salvar_recebimento'));
 assert.ok(page.includes("key={editing?.id || 'novo-recebimento'}"), 'Formulário deve reiniciar ao trocar de recebimento');
 assert.match(service, /\.update\(cleanedPayload\)\r?\n\s+\.eq\('id', id\)/, 'Portaria deve atualizar pelo ID');
-assert.ok(service.includes(".update(cleanedPayload).eq('id', id)"), 'Recebimento deve atualizar pelo ID');
+assert.match(
+  service,
+  /\.from\('recebimentos'\)\r?\n\s+\.update\(cleanedPayload\)\r?\n\s+\.eq\('id', id\)\r?\n\s+\.eq\('balanca_id', balancaId\)/,
+  'Recebimento deve atualizar pelo ID e pela unidade',
+);
 assert.ok(!service.includes(".update(cleanedPayload).eq('nf_numero'"), 'NF não pode identificar updates');
 assert.ok(!service.includes(".update(cleanedPayload).eq('placa'"), 'Placa não pode identificar updates');
 assert.ok(complementMigration.includes('recebimento_complemento_id uuid'), 'Item da armazenagem deve referenciar o complemento pelo ID');
@@ -153,6 +157,11 @@ assert.ok(directFlowMigration.includes("'ENVIADO_RECEBIMENTO'"), 'Portaria deve 
 assert.ok(!service.includes("status: 'ENVIADO_LABORATORIO'"), 'O serviço não pode converter silenciosamente a dispensa em envio ao laboratório');
 assert.ok(!service.includes("['unidade_nota', 'dispensa_laboratorio']"), 'O marcador de dispensa não pode ser descartado');
 assert.ok(!page.includes('__SEM_LABORATORIO__'), 'Dispensa do laboratório deve existir somente na Portaria');
-assert.ok(page.includes("status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true"), 'Portaria dispensada deve seguir direto para Recebimentos');
+assert.ok(
+  page.includes("status: 'ENVIADO_RECEBIMENTO'")
+    && page.includes('balanca_id: unidadeId')
+    && page.includes('dispensa_laboratorio: true'),
+  'Portaria dispensada deve seguir direto para Recebimentos na propria unidade',
+);
 
 console.log('Testes da Armazenagem M.P. aprovados.');

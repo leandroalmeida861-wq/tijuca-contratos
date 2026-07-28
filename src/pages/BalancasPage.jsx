@@ -617,6 +617,9 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
   }
 
   async function sendDirectToRecebimento(row) {
+    const unidadeId = balancaId || row.balanca_id || '';
+    if (!unidadeId) throw new Error('UNIDADE_NAO_RESOLVIDA');
+
     const existing = await findRecebimentoByPortariaId(row.id);
     const duplicate = await findDuplicateRecebimentoNotaFornecedor({
       fornecedor_id: row.fornecedor_id,
@@ -628,10 +631,9 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     }
 
     if (existing?.id) {
-      const existingPayload = { dispensa_laboratorio: true };
-      if (!isRecebimentoFinalizadoBalanca(existing)) existingPayload.status = 'pendente';
-      await updateRecebimento(existing.id, existingPayload);
+      if (existing.balanca_id !== unidadeId) throw new Error('UNIDADE_DIVERGENTE');
       await updatePortariaEntrada(row.id, {
+        balanca_id: unidadeId,
         status: isRecebimentoFinalizadoBalanca(existing) ? 'RECEBIMENTO_FINALIZADO' : 'ENVIADO_RECEBIMENTO',
         dispensa_laboratorio: true,
       });
@@ -641,7 +643,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     const payload = {
       portaria_id: row.id,
       data: row.data_entrada,
-      balanca_id: balancaId || row.balanca_id,
+      balanca_id: unidadeId,
       veiculo_id: row.veiculo_id,
       motorista_id: row.motorista_id,
       transportadora_id: row.transportadora_id,
@@ -661,7 +663,11 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     };
 
     await createRecebimento(payload);
-    await updatePortariaEntrada(row.id, { status: 'ENVIADO_RECEBIMENTO', dispensa_laboratorio: true });
+    await updatePortariaEntrada(row.id, {
+      balanca_id: unidadeId,
+      status: 'ENVIADO_RECEBIMENTO',
+      dispensa_laboratorio: true,
+    });
     return null;
   }
 
@@ -733,6 +739,9 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     try {
       setError('');
       setMessage('');
+      const unidadeId = balancaId || row.balanca_id || '';
+      if (!unidadeId) throw new Error('UNIDADE_NAO_RESOLVIDA');
+
       const existing = await findRecebimentoByPortariaId(row.id);
       const duplicate = await findDuplicateRecebimentoNotaFornecedor({
         fornecedor_id: row.fornecedor_id,
@@ -747,7 +756,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       const payload = {
         portaria_id: row.id,
         data: row.data_entrada,
-        balanca_id: balancaId || row.balanca_id,
+        balanca_id: unidadeId,
         veiculo_id: row.veiculo_id,
         motorista_id: row.motorista_id,
         transportadora_id: row.transportadora_id,
@@ -764,9 +773,15 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         status: 'pendente',
         observacao: row.observacao,
       };
-      if (existing?.id) await updateRecebimento(existing.id, payload);
-      else await createRecebimento(payload);
-      await updatePortariaEntrada(row.id, { status: 'ENVIADO_LABORATORIO' });
+      if (existing?.id) {
+        if (existing.balanca_id !== unidadeId) throw new Error('UNIDADE_DIVERGENTE');
+      } else {
+        await createRecebimento(payload);
+      }
+      await updatePortariaEntrada(row.id, {
+        balanca_id: unidadeId,
+        status: 'ENVIADO_LABORATORIO',
+      });
       setMessage('Entrada disponibilizada para Aprovação Laboratório.');
       await reload();
       return true;
