@@ -619,7 +619,6 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     const duplicate = await findDuplicateRecebimentoNotaFornecedor({
       fornecedor_id: row.fornecedor_id,
       nf_numero: row.numero_nf,
-      nf_serie: row.serie_nf,
       balanca_id: unidadeId,
       excludePortariaId: row.id,
     });
@@ -758,7 +757,6 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         const duplicate = await findDuplicateRecebimentoNotaFornecedor({
           fornecedor_id: row.fornecedor_id,
           nf_numero: row.numero_nf,
-          nf_serie: row.serie_nf,
           balanca_id: unidadeId,
           excludePortariaId: row.id,
         });
@@ -1439,7 +1437,6 @@ function RecebimentoForm({ row, rows = [], options, unidade, balanca, can, onClo
       const duplicate = await findDuplicateRecebimentoNotaFornecedor({
         fornecedor_id: payload.fornecedor_id,
         nf_numero: payload.nf_numero,
-        nf_serie: payload.nf_serie,
         balanca_id: payload.balanca_id,
         excludeId: row?.id,
         excludePortariaId: row?.portaria_id,
@@ -3995,7 +3992,6 @@ function validateRecebimentoForm(form) {
 function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
   const nfDigits = normalizeNfNumber(payload.nf_numero);
   if (!nfDigits || !payload.fornecedor_id) return null;
-  const nfSerie = normalizeName(payload.nf_serie);
 
   const selectedSupplier = (options.fornecedores || []).find((item) => item.id === payload.fornecedor_id);
   const selectedSupplierDoc = onlyDigits(selectedSupplier?.cnpj);
@@ -4005,7 +4001,6 @@ function findDuplicateRecebimentoRows(rows, payload, editingId, options = {}) {
     if (row.id === editingId) return false;
     if (String(row.status || '').toLowerCase() === 'cancelada') return false;
     if (normalizeNfNumber(row.nf_numero) !== nfDigits) return false;
-    if (normalizeName(row.nf_serie) !== nfSerie) return false;
     if (row.fornecedor_id && row.fornecedor_id === payload.fornecedor_id) return true;
 
     const rowSupplierDoc = onlyDigits(row.fornecedor?.cnpj);
@@ -4045,12 +4040,10 @@ function validatePortariaForm(form, rows, editingId) {
   const duplicate = rows.some((row) => row.id !== editingId
     && row.fornecedor_id === form.fornecedor_id
     && normalizeNfNumber(row.numero_nf) === normalizeNfNumber(form.numero_nf)
-    && normalizeName(row.serie_nf) === normalizeName(form.serie_nf)
     && row.status !== 'CANCELADA');
   if (duplicate) {
     fields.numero_nf = 'NF duplicada';
-    fields.serie_nf = 'NF duplicada';
-    missing.push('NF ja cadastrada para este fornecedor e serie');
+    missing.push('NF ja cadastrada para este fornecedor nesta unidade');
   }
 
   if (!missing.length) return { fields: {}, message: '' };
