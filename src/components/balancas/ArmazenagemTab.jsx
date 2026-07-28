@@ -495,7 +495,7 @@ function StorageTable({ rows, can, onView, onEdit, onExcluirFechamento, onRestau
   if (!rows.length) return <Empty text="Nenhum recebimento finalizado encontrado para os filtros atuais." />;
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1540px] w-full text-left text-sm">
+      <table className="min-w-[1540px] w-full text-left text-sm tabela-acoes-fixa">
         <thead className="bg-slate-50 text-xs uppercase text-slate-500">
           <tr>{['Data', 'NF', 'Placa', 'Fornecedor', 'Produto', 'Peso da NF', 'Distribuído', 'Saldo', 'Transporte', 'Silo', 'Baia', 'Status', 'Responsável', 'Registro', 'Ações'].map((item) => <th key={item} className="px-3 py-3">{item}</th>)}</tr>
         </thead>

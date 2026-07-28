@@ -80,7 +80,7 @@ export default function AppLayout() {
   }, [menuOpen]);
 
   return (
-    <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_1fr]">
+    <div className="min-h-screen bg-[#f6f8fa] text-slate-900 lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm lg:hidden">
         <div className="flex min-w-0 items-center gap-3">
           <img src="/agroflow-symbol.png" alt="" className="h-10 w-10 shrink-0 object-contain" />

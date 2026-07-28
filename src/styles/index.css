@@ -23,6 +23,53 @@ textarea {
   font: inherit;
 }
 
+/*
+ * Responsividade
+ * --------------------------------------------------------------------------
+ * Um conteudo largo (tabela, grafico) dentro de um grid/flex estica a coluna,
+ * porque itens de grid e flex tem min-width: auto por padrao. O resultado e a
+ * pagina inteira rolando na horizontal e a coluna Acoes saindo da tela.
+ *
+ * As regras abaixo usam :where(), que tem especificidade zero: qualquer classe
+ * do Tailwind (min-w-[1540px] nas tabelas, por exemplo) continua vencendo.
+ * Ou seja, nada do layout atual muda — apenas o container passa a poder
+ * encolher, deixando a rolagem acontecer dentro dele.
+ */
+:where(main) :where(div, section, article, form, header, nav, aside, dl, ul) {
+  min-width: 0;
+}
+
+/* A rolagem horizontal fica dentro do container, com inercia no toque. */
+:where(.overflow-x-auto) {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/*
+ * Coluna "Acoes" fixa a direita nas tabelas operacionais largas.
+ * Aplicada pela classe .tabela-acoes-fixa no <table>.
+ */
+.tabela-acoes-fixa thead th:last-child,
+.tabela-acoes-fixa tbody td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+
+.tabela-acoes-fixa thead th:last-child {
+  background-color: #f8fafc;
+  z-index: 2;
+}
+
+.tabela-acoes-fixa tbody td:last-child {
+  background-color: #ffffff;
+  box-shadow: -6px 0 6px -6px rgb(15 23 42 / 0.18);
+}
+
+.tabela-acoes-fixa tbody tr:hover td:last-child {
+  background-color: #f8fafc;
+}
+
 @keyframes loadingBar {
   0% {
     transform: translateX(-120%);

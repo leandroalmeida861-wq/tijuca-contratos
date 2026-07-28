@@ -235,7 +235,7 @@ export default function Dashboard() {
         </div>
         <p className="px-3 pt-3 text-xs font-semibold text-slate-500 sm:hidden">Deslize para o lado para ver todas as colunas.</p>
         <div className="max-w-full overflow-x-auto overscroll-x-contain">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm tabela-acoes-fixa">
             <thead className="text-xs font-bold uppercase text-slate-500">
               <tr>
                 {['Contrato', 'Fornecedor', 'Produto', 'Fábrica', 'Execução', 'Vencimento', 'Status', 'Ações'].map((head) => (

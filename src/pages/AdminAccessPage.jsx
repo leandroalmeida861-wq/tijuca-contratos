@@ -279,7 +279,7 @@ export default function AdminAccessPage() {
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">{pendingRequests.length}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm tabela-acoes-fixa">
             <thead>
               <tr className="border-b text-xs uppercase text-slate-500">
                 <th className="p-3">Nome</th>

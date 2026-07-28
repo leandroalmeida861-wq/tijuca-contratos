@@ -848,7 +848,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       )}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-        <table className="min-w-[1180px] w-full text-left text-sm">
+        <table className="min-w-[1180px] w-full text-left text-sm tabela-acoes-fixa">
           <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
               {['Data/Hora', 'Balança', 'Placa', 'Veículo', 'Motorista', 'Fornecedor', 'Produto', 'NF/Série', 'Peso - Quantidade', 'Status', 'Ações'].map((column) => (
@@ -2550,7 +2550,7 @@ function LegacyLaboratorioTab({ rows, options, can, reload, setError, setMessage
         <p className="mt-1 text-sm text-slate-500">Informe ticket, umidade, liberado por e aprove ou reprove com motivo.</p>
       </div>
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-        <table className="w-full min-w-[1180px] text-left text-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm tabela-acoes-fixa">
           <thead className="text-xs font-bold uppercase text-slate-500">
             <tr>
               {['Data', 'Balança', 'Fornecedor', 'Produto', 'Placa', 'Peso líquido', 'Peso - Quantidade', 'Diferença', 'Ticket', 'Umidade', 'Liberado por', 'Motivo', 'Ações'].map((head) => <th key={head} className="border-b px-3 py-3">{head}</th>)}
@@ -2864,7 +2864,7 @@ function RelatorioRecebimentosTable({ rows }) {
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-      <table className="w-full min-w-[2140px] text-left text-sm">
+      <table className="w-full min-w-[2140px] text-left text-sm tabela-acoes-fixa">
         <thead className="text-xs font-bold uppercase text-slate-500">
           <tr>{headers.map((head) => <th key={head} className="border-b px-4 py-3">{head}</th>)}</tr>
         </thead>

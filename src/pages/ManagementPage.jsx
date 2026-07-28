@@ -405,7 +405,7 @@ function ContractsPage() {
       </form>}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
-        <table className="w-full min-w-[1120px] text-left text-sm">
+        <table className="w-full min-w-[1120px] text-left text-sm tabela-acoes-fixa">
           <thead className="text-xs font-bold uppercase text-slate-500">
             <tr>{['Contrato', 'Fornecedor', 'Produto', 'Fábrica', 'Contratado', 'Recebido', 'Saldo', 'Execução', 'Vencimento', 'Status', 'Ações'].map((h) => <th key={h} className="border-b px-4 py-3">{h}</th>)}</tr>
           </thead>
