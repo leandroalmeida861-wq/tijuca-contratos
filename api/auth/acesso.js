@@ -54,11 +54,14 @@ export default async function handler(request, response) {
       .eq('perfil', profile.perfil);
     if (permissionsError) throw permissionsError;
 
+    const unidades = await carregarUnidadesPermitidas(supabaseAdmin, profile, userData.user.id);
+
     return sendJson(response, 200, {
       authorized: true,
       profile: profile.perfil,
       profileData: profile,
       permissions: permissions || [],
+      unidades,
       access: profile,
     });
   } catch (error) {
@@ -71,4 +74,40 @@ export default async function handler(request, response) {
       error: 'Nao foi possivel validar o acesso. Tente novamente.',
     });
   }
+}
+
+/**
+ * Unidades que o usuario pode acessar, calculadas no servidor.
+ * Reproduz a mesma regra da funcao public.agroflow_acessa_unidade():
+ * Admin ve tudo; a excecao por usuario tem precedencia sobre a regra do
+ * perfil; sem regra, nao ha acesso.
+ */
+async function carregarUnidadesPermitidas(supabaseAdmin, profile, authUserId) {
+  const { data: balancas, error: balancasError } = await supabaseAdmin
+    .from('balancas')
+    .select('id,codigo,nome')
+    .not('codigo', 'is', null)
+    .order('nome');
+  if (balancasError) throw balancasError;
+
+  const unidades = balancas || [];
+  if (profile.perfil === 'admin') {
+    return unidades.map((unidade) => ({ id: unidade.id, codigo: unidade.codigo, nome: unidade.nome }));
+  }
+
+  const [porUsuario, porPerfil] = await Promise.all([
+    supabaseAdmin.from('permissoes_unidade').select('balanca_id,permitido').eq('user_id', authUserId),
+    supabaseAdmin.from('permissoes_unidade').select('balanca_id,permitido').eq('perfil', profile.perfil),
+  ]);
+  if (porUsuario.error) throw porUsuario.error;
+  if (porPerfil.error) throw porPerfil.error;
+
+  const doUsuario = new Map((porUsuario.data || []).map((row) => [row.balanca_id, row.permitido]));
+  const doPerfil = new Map((porPerfil.data || []).map((row) => [row.balanca_id, row.permitido]));
+
+  return unidades
+    .filter((unidade) => (
+      doUsuario.has(unidade.id) ? Boolean(doUsuario.get(unidade.id)) : Boolean(doPerfil.get(unidade.id))
+    ))
+    .map((unidade) => ({ id: unidade.id, codigo: unidade.codigo, nome: unidade.nome }));
 }

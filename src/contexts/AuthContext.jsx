@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [permissions, setPermissions] = useState({});
+  const [unidades, setUnidades] = useState([]);
   const [access, setAccess] = useState(null);
   const [loading, setLoading] = useState(true);
   const authorizationRequestRef = useRef(0);
@@ -24,6 +25,7 @@ export function AuthProvider({ children }) {
       setProfile(null);
       setProfileData(null);
       setPermissions({});
+      setUnidades([]);
       setAccess(null);
       setLoading(false);
       return undefined;
@@ -102,6 +104,7 @@ export function AuthProvider({ children }) {
     setProfile(null);
     setProfileData(null);
     setPermissions({});
+    setUnidades([]);
     setAccess(null);
     if (supabase) await supabase.auth.signOut({ scope: 'local' });
   }
@@ -111,12 +114,20 @@ export function AuthProvider({ children }) {
     setProfile(authorization?.profile || null);
     setProfileData(authorization?.profileData || null);
     setPermissions(authorization?.permissions || {});
+    setUnidades(authorization?.unidades || []);
     setAccess(authorization?.access || null);
   }
 
   function can(menu, action = 'visualizar') {
     if (profile === 'admin') return true;
     return Boolean(permissions?.[menu]?.[action]);
+  }
+
+  // A lista vem do backend (/api/auth/acesso), que aplica a mesma regra da
+  // funcao agroflow_acessa_unidade() no banco. O navegador so consome.
+  function podeAcessarUnidade(codigo) {
+    if (!codigo) return false;
+    return unidades.some((unidade) => unidade.codigo === codigo);
   }
 
   const value = useMemo(
@@ -128,13 +139,15 @@ export function AuthProvider({ children }) {
       profileData,
       permissions,
       can,
+      unidades,
+      podeAcessarUnidade,
       access,
       loading,
       signIn,
       signOut,
       configured: isSupabaseConfigured,
     }),
-    [session, authorized, profile, profileData, permissions, access, loading],
+    [session, authorized, profile, profileData, permissions, unidades, access, loading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -166,6 +179,7 @@ async function loadAuthorization(email, accessToken) {
           profile: payload.profile,
           profileData: payload.profileData,
           permissions: permissionsToMap(payload.permissions || []),
+          unidades: payload.unidades || [],
           access: payload.access,
         };
       }

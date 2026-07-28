@@ -1,6 +1,7 @@
-import { Check, Clock3, Save, ShieldCheck, Trash2, Users, X } from 'lucide-react';
+import { Check, Clock3, Save, ShieldCheck, Trash2, Users, Warehouse, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { UNIDADES } from '../config/unidades.js';
 import { EDITABLE_ROLE_OPTIONS, MENU_DEFINITIONS, PERMISSION_ACTIONS, ROLE_OPTIONS } from '../lib/permissions.js';
 import { supabase } from '../lib/supabase.js';
 
@@ -14,6 +15,11 @@ export default function AdminAccessPage() {
   const [requestRoles, setRequestRoles] = useState({});
   const [permissionRows, setPermissionRows] = useState([]);
   const [selectedRole, setSelectedRole] = useState('gestor');
+  const [unidades, setUnidades] = useState([]);
+  const [unidadeRows, setUnidadeRows] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [unidadeAcessos, setUnidadeAcessos] = useState({});
+  const [savingUnidades, setSavingUnidades] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
@@ -25,19 +31,25 @@ export default function AdminAccessPage() {
     const accessToken = sessionData?.session?.access_token;
     if (!accessToken) throw new Error('Sessao expirada. Entre novamente no AgroFlow.');
 
-    const [profileResult, permissionResult, requestResponse] = await Promise.all([
+    const [profileResult, permissionResult, unidadeResult, unidadeAcessoResult, requestResponse] = await Promise.all([
       supabase.from('profiles').select('*').order('nome'),
       supabase.from('permissoes_menu').select('*').in('perfil', EDITABLE_ROLE_VALUES).order('menu'),
+      supabase.from('balancas').select('id,codigo,nome').not('codigo', 'is', null).order('nome'),
+      supabase.from('permissoes_unidade').select('balanca_id,perfil,user_id,permitido'),
       fetch('/api/admin/solicitacoes', {
         headers: { Authorization: `Bearer ${accessToken}` },
       }),
     ]);
     if (profileResult.error) throw profileResult.error;
     if (permissionResult.error) throw permissionResult.error;
+    if (unidadeResult.error) throw unidadeResult.error;
+    if (unidadeAcessoResult.error) throw unidadeAcessoResult.error;
     const requestPayload = await requestResponse.json().catch(() => ({}));
     if (!requestResponse.ok) throw new Error(requestPayload.error || 'Nao foi possivel carregar os pedidos pendentes.');
     setProfiles(profileResult.data || []);
     setPermissionRows(ensurePermissionRows(permissionResult.data || []));
+    setUnidades(ordenarUnidades(unidadeResult.data || []));
+    setUnidadeRows(unidadeAcessoResult.data || []);
     setPendingRequests(requestPayload.requests || []);
     setRequestRoles((current) => Object.fromEntries(
       (requestPayload.requests || []).map((item) => [item.id, current[item.id] || 'operador']),
@@ -56,6 +68,81 @@ export default function AdminAccessPage() {
     () => Object.fromEntries(permissionRows.filter((row) => row.perfil === selectedRole).map((row) => [row.menu, row])),
     [permissionRows, selectedRole],
   );
+
+  const usuarioSelecionado = useMemo(
+    () => profiles.find((row) => row.id === selectedUserId) || null,
+    [profiles, selectedUserId],
+  );
+
+  const usuarioSelecionadoEhAdmin = usuarioSelecionado?.perfil === 'admin';
+
+  // Reproduz a regra da funcao agroflow_acessa_unidade(): a excecao por usuario
+  // tem precedencia sobre a regra do perfil; sem regra, nao ha acesso.
+  useEffect(() => {
+    if (!usuarioSelecionado) {
+      setUnidadeAcessos({});
+      return;
+    }
+    const doUsuario = new Map(
+      unidadeRows.filter((row) => row.user_id && row.user_id === usuarioSelecionado.user_id)
+        .map((row) => [row.balanca_id, row.permitido]),
+    );
+    const doPerfil = new Map(
+      unidadeRows.filter((row) => row.perfil && row.perfil === usuarioSelecionado.perfil)
+        .map((row) => [row.balanca_id, row.permitido]),
+    );
+    setUnidadeAcessos(Object.fromEntries(unidades.map((unidade) => [
+      unidade.id,
+      usuarioSelecionado.perfil === 'admin'
+        ? true
+        : Boolean(doUsuario.has(unidade.id) ? doUsuario.get(unidade.id) : doPerfil.get(unidade.id)),
+    ])));
+  }, [usuarioSelecionado, unidadeRows, unidades]);
+
+  function toggleUnidade(balancaId) {
+    setUnidadeAcessos((current) => ({ ...current, [balancaId]: !current[balancaId] }));
+  }
+
+  async function saveUnidadeAcessos() {
+    if (!usuarioSelecionado) return;
+    setMessage('');
+    setSavingUnidades(true);
+    try {
+      // A funcao no banco grava tudo em uma unica instrucao (atomica), confere
+      // se quem chamou e Admin e nao toca em nenhum outro usuario.
+      const { error } = await supabase.rpc('agroflow_salvar_acessos_unidade', {
+        p_user_id: usuarioSelecionado.user_id,
+        p_unidades: unidades.map((unidade) => ({
+          balanca_id: unidade.id,
+          permitido: Boolean(unidadeAcessos[unidade.id]),
+        })),
+      });
+      if (error) throw error;
+
+      await supabase.rpc('agroflow_auditar', {
+        action_name: 'alterar_acessos_unidade',
+        table_name: 'permissoes_unidade',
+        record_id: usuarioSelecionado.id,
+        old_data: null,
+        new_data: unidades.map((unidade) => ({
+          unidade: unidade.codigo,
+          permitido: Boolean(unidadeAcessos[unidade.id]),
+        })),
+      });
+
+      const { data, error: reloadError } = await supabase
+        .from('permissoes_unidade')
+        .select('balanca_id,perfil,user_id,permitido');
+      if (reloadError) throw reloadError;
+      setUnidadeRows(data || []);
+
+      setMessage(`Acessos às unidades salvos para ${usuarioSelecionado.nome || usuarioSelecionado.email}. O usuário verá a mudança no próximo acesso ao sistema.`);
+    } catch (error) {
+      setMessage(error.message || 'Não foi possível salvar os acessos às unidades.');
+    } finally {
+      setSavingUnidades(false);
+    }
+  }
 
   async function updateProfile(row, changes) {
     setMessage('');
@@ -336,8 +423,109 @@ export default function AdminAccessPage() {
           </table>
         </div>
       </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2"><Warehouse size={18} /><h2 className="font-extrabold">Permissões por unidade</h2></div>
+          <select
+            value={selectedUserId}
+            onChange={(event) => setSelectedUserId(event.target.value)}
+            className="h-10 w-full rounded-md border border-slate-300 px-3 sm:w-auto"
+            aria-label="Selecionar usuário"
+          >
+            <option value="">Selecionar usuário</option>
+            {profiles.map((row) => (
+              <option key={row.id} value={row.id}>{row.nome || row.email}</option>
+            ))}
+          </select>
+        </div>
+
+        <p className="mt-2 text-sm font-medium text-slate-500">
+          Define quais unidades o usuário enxerga no menu e consegue abrir. Sem acesso, a unidade não aparece e a rota também fica bloqueada.
+        </p>
+
+        {!usuarioSelecionado ? (
+          <p className="mt-4 rounded-md bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+            Selecione um usuário para ver e alterar os acessos às unidades.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-3">
+              <p><span className="block text-xs font-extrabold uppercase tracking-wide text-slate-500">Nome</span><span className="font-bold text-slate-800">{usuarioSelecionado.nome || '-'}</span></p>
+              <p><span className="block text-xs font-extrabold uppercase tracking-wide text-slate-500">E-mail</span><span className="break-words font-bold text-slate-800">{usuarioSelecionado.email}</span></p>
+              <p><span className="block text-xs font-extrabold uppercase tracking-wide text-slate-500">Perfil</span><span className="font-bold text-slate-800">{rotuloPerfil(usuarioSelecionado.perfil)}</span></p>
+            </div>
+
+            {usuarioSelecionadoEhAdmin && (
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                O perfil Admin acessa todas as unidades e não pode ser restringido.
+              </p>
+            )}
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[320px] text-sm">
+                <thead>
+                  <tr className="border-b text-xs uppercase text-slate-500">
+                    <th className="p-3 text-left">Unidade</th>
+                    <th className="p-3 text-center">Acessar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unidades.map((unidade) => (
+                    <tr key={unidade.id} className="border-b last:border-0">
+                      <td className="p-3">
+                        <span className="font-semibold text-slate-800">{nomeExibidoUnidade(unidade)}</span>
+                        <span className="block text-xs font-medium text-slate-500">{unidade.nome}</span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5"
+                          checked={Boolean(unidadeAcessos[unidade.id])}
+                          disabled={usuarioSelecionadoEhAdmin}
+                          onChange={() => toggleUnidade(unidade.id)}
+                          aria-label={`Acesso de ${usuarioSelecionado.nome || usuarioSelecionado.email} a ${nomeExibidoUnidade(unidade)}`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!unidades.length && <p className="p-5 text-sm text-slate-500">Nenhuma unidade cadastrada.</p>}
+            </div>
+
+            <button
+              type="button"
+              onClick={saveUnidadeAcessos}
+              disabled={usuarioSelecionadoEhAdmin || savingUnidades || !unidades.length}
+              className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              <Save size={16} /> {savingUnidades ? 'Salvando...' : 'Salvar acessos às unidades'}
+            </button>
+          </>
+        )}
+      </section>
     </div>
   );
+}
+
+function nomeExibidoUnidade(unidade) {
+  return UNIDADES.find((item) => item.codigo === unidade.codigo)?.nome || unidade.nome;
+}
+
+function rotuloPerfil(perfil) {
+  return ROLE_OPTIONS.find((role) => role.value === perfil)?.label || perfil || '-';
+}
+
+// Mantem a mesma ordem do menu lateral; unidades sem modulo vao para o fim.
+function ordenarUnidades(rows = []) {
+  const ordem = UNIDADES.map((unidade) => unidade.codigo);
+  return [...rows].sort((a, b) => {
+    const indiceA = ordem.indexOf(a.codigo);
+    const indiceB = ordem.indexOf(b.codigo);
+    if (indiceA !== indiceB) return (indiceA < 0 ? ordem.length : indiceA) - (indiceB < 0 ? ordem.length : indiceB);
+    return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+  });
 }
 
 function formatRequestDate(value) {

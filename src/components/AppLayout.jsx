@@ -25,6 +25,7 @@ import { CONTRATOS_GRAOS_TABS } from './ContratosGraosLayout.jsx';
 const unidadeNavItems = UNIDADES.map((unidade) => ({
   to: rotaInicialDaUnidade(unidade),
   rotaBase: unidade.rotaBase,
+  unidadeCodigo: unidade.codigo,
   label: unidade.nome,
   icon: unidade.icone,
   menu: unidade.permissaoBase,
@@ -52,7 +53,7 @@ const navItems = [
 ];
 
 export default function AppLayout() {
-  const { signOut, can, profileData } = useAuth();
+  const { signOut, can, podeAcessarUnidade, profileData } = useAuth();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [cadastrosOpen, setCadastrosOpen] = useState(() =>
@@ -206,6 +207,9 @@ export default function AppLayout() {
             }
 
             if (!can(item.menu, 'visualizar')) return null;
+            // Para entrar em uma unidade sao necessarias as duas permissoes:
+            // visualizar o modulo (acima) e ter acesso aquela unidade.
+            if (item.unidadeCodigo && !podeAcessarUnidade(item.unidadeCodigo)) return null;
             // Modulos de unidade cobrem varias sub-rotas (portaria, recebimentos...),
             // por isso o estado ativo considera a rota base e nao apenas o link.
             const unidadeAtiva = item.rotaBase ? isUnidadeAtiva(location, item.rotaBase) : null;

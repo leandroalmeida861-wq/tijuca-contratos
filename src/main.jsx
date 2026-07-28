@@ -7,14 +7,13 @@ import AuthorizedHome from './components/AuthorizedHome.jsx';
 import ContratosGraosLayout from './components/ContratosGraosLayout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import UnidadeModulo from './components/UnidadeModulo.jsx';
-import { UNIDADES } from './config/unidades.js';
+import { UNIDADES, UNIDADE_PADRAO } from './config/unidades.js';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import BackupPage from './pages/BackupPage.jsx';
 import AccessDenied from './pages/AccessDenied.jsx';
 import AdminAccessPage from './pages/AdminAccessPage.jsx';
 import AdminSolicitacoes from './pages/AdminSolicitacoes.jsx';
 import AuditLogsPage from './pages/AuditLogsPage.jsx';
-import BalancasPage from './pages/BalancasPage.jsx';
 import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
 import './styles/index.css';
@@ -47,7 +46,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="fabricas" element={<ProtectedRoute menu="fabricas"><ManagementPage type="fabricas" /></ProtectedRoute>} />
             <Route path="produtos" element={<ProtectedRoute menu="produtos"><ManagementPage type="produtos" /></ProtectedRoute>} />
             <Route path="backup" element={<ProtectedRoute menu="backup"><BackupPage /></ProtectedRoute>} />
-            <Route path="balancas" element={<ProtectedRoute menu="balancas"><BalancasPage /></ProtectedRoute>} />
+            <Route path="balancas" element={<ProtectedRoute menu="balancas"><UnidadeModulo unidade={UNIDADE_PADRAO} /></ProtectedRoute>} />
             {UNIDADES.filter((unidade) => unidade.modoRota === 'path').map((unidade) => (
               <Route
                 key={unidade.codigo}
