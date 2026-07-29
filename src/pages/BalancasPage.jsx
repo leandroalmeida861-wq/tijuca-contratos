@@ -93,6 +93,7 @@ const SCORE_WEIGHTS = {
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
+const EMPTY_OPERATIONAL_SEARCH = Object.freeze({ nfe: '', fornecedor: '' });
 const balancasRealtimeTables = [
   'balancas',
   'fornecedores',
@@ -560,10 +561,20 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [sendingToLabId, setSendingToLabId] = useState(null);
+  const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
   const canCreate = can('balancas', 'cadastrar');
   const canEdit = can('balancas', 'editar');
   const canDelete = can('balancas', 'excluir') || can('balancas', 'cancelar');
   const canSendToLab = can('balancas', 'aprovar') || canCreate;
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    const displayRow = portariaDisplayRow(row);
+    return matchesOperationalSearch(
+      displayRow.numero_nf,
+      displayRow.fornecedor_nome_sincronizado || displayRow.fornecedor?.nome,
+      searchFilters.nfe,
+      searchFilters.fornecedor,
+    );
+  }), [rows, searchFilters.nfe, searchFilters.fornecedor]);
 
   function openNew() {
     setEditing(null);
@@ -804,6 +815,13 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         )}
       </div>
 
+      <OperationalSearchFilters
+        value={searchFilters}
+        onChange={setSearchFilters}
+        resultCount={filteredRows.length}
+        totalCount={rows.length}
+      />
+
       {formOpen && (
         <form onSubmit={submit} noValidate className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -869,7 +887,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
           <tbody>
             {loading ? (
               <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Carregando portaria...</td></tr>
-            ) : rows.length ? rows.map((row) => {
+            ) : filteredRows.length ? filteredRows.map((row) => {
               const displayRow = portariaDisplayRow(row);
               return (
               <tr key={row.id} className="border-b last:border-0">
@@ -899,7 +917,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
               </tr>
               );
             }) : (
-              <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada cadastrada.</td></tr>
+              <tr><td colSpan={11} className="px-3 py-8 text-center font-semibold text-slate-500">Nenhuma entrada encontrada para os filtros informados.</td></tr>
             )}
           </tbody>
         </table>
@@ -980,15 +998,24 @@ function PortariaViewModal({ row, options, canSendToLab, sendingToLab, onSendToL
 }
 
 function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload, setError, setMessage }) {
-  const [query, setQuery] = useState('');
+  const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const formRef = useRef(null);
 
-  const filtered = sortRecebimentoRows(filterRecebimentos(rows, query));
-  const directForScale = sortPendingScaleRows(rows.filter(isDiretoPendenteBalanca));
-  const releasedForScale = sortPendingScaleRows(rows.filter(isLaboratorioPendenteBalanca));
+  const matchingRows = useMemo(
+    () => rows.filter((row) => matchesOperationalSearch(
+      row.nf_numero,
+      fornecedorNome(row, ''),
+      searchFilters.nfe,
+      searchFilters.fornecedor,
+    )),
+    [rows, searchFilters.nfe, searchFilters.fornecedor],
+  );
+  const filtered = sortRecebimentoRows(matchingRows);
+  const directForScale = sortPendingScaleRows(matchingRows.filter(isDiretoPendenteBalanca));
+  const releasedForScale = sortPendingScaleRows(matchingRows.filter(isLaboratorioPendenteBalanca));
 
   function newForm() {
     setEditing(null);
@@ -1026,6 +1053,18 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
 
   return (
     <div className="grid gap-4">
+      <OperationalSearchFilters
+        value={searchFilters}
+        onChange={setSearchFilters}
+        resultCount={matchingRows.length}
+        totalCount={rows.length}
+        action={can('balancas', 'cadastrar') ? (
+          <button type="button" onClick={newForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700">
+            <Plus size={17} /> Novo recebimento
+          </button>
+        ) : null}
+      />
+
       <PendingScaleSection
         rows={directForScale}
         title="Direto para Recebimentos - Pendente finalizar recebimento"
@@ -1040,18 +1079,6 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
         canEdit={can('balancas', 'editar')}
         onEdit={edit}
       />
-
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:flex-row md:items-center md:justify-between">
-        <label className="flex h-11 min-w-0 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-500 md:min-w-80">
-          <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full outline-none" placeholder="Buscar NF, fornecedor, produto ou placa..." />
-        </label>
-        {can('balancas', 'cadastrar') && (
-          <button type="button" onClick={newForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-tijuca-600 px-4 text-sm font-extrabold text-white hover:bg-tijuca-700">
-            <Plus size={17} /> Novo recebimento
-          </button>
-        )}
-      </div>
 
       {formOpen && (
         <div ref={formRef} className="scroll-mt-4">
@@ -1994,6 +2021,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [labForm, setLabForm] = useState(defaultLaboratorioForm);
   const [editingLabId, setEditingLabId] = useState(null);
   const [savingLab, setSavingLab] = useState(false);
+  const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
   const canView = can('balancas', 'visualizar');
   const canCreate = can('balancas', 'cadastrar');
   const canEdit = can('balancas', 'editar');
@@ -2002,9 +2030,18 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const canCancel = can('balancas', 'cancelar');
   const canExport = can('balancas', 'exportar');
   const canManageManualRelease = canCreate || canEdit;
-  const laboratorioRows = rows.filter((row) => !hasDispensaLaboratorio(row));
-  const pending = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'pendente'));
-  const analyzed = sortRecebimentoRows(laboratorioRows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
+  const laboratorioRows = useMemo(() => rows.filter((row) => !hasDispensaLaboratorio(row)), [rows]);
+  const matchingRows = useMemo(
+    () => laboratorioRows.filter((row) => matchesOperationalSearch(
+      row.nf_numero,
+      fornecedorNome(row, ''),
+      searchFilters.nfe,
+      searchFilters.fornecedor,
+    )),
+    [laboratorioRows, searchFilters.nfe, searchFilters.fornecedor],
+  );
+  const pending = sortRecebimentoRows(matchingRows.filter((row) => row.status === 'pendente'));
+  const analyzed = sortRecebimentoRows(matchingRows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
 
   function updateEdit(id, field, value) {
     setEdits((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
@@ -2193,6 +2230,13 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
           Primeiro faca a analise do laboratorio. Depois de aprovada, a carga fica liberada para seguir o fluxo de balanca e pode gerar a etiqueta em PDF.
         </p>
       </div>
+
+      <OperationalSearchFilters
+        value={searchFilters}
+        onChange={setSearchFilters}
+        resultCount={matchingRows.length}
+        totalCount={laboratorioRows.length}
+      />
 
       {canManageManualRelease ? <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
@@ -3131,6 +3175,82 @@ function PlateTag({ value }) {
     <span className="inline-flex min-w-[82px] justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs font-extrabold uppercase tracking-wide text-slate-800 shadow-sm">
       {plate}
     </span>
+  );
+}
+
+function OperationalSearchFilters({ value, onChange, resultCount, totalCount, action = null }) {
+  const hasFilters = Boolean(value.nfe.trim() || value.fornecedor.trim());
+
+  function updateFilter(field, fieldValue) {
+    onChange((current) => ({ ...current, [field]: fieldValue }));
+  }
+
+  return (
+    <section
+      aria-label="Filtros de busca por NF-e e fornecedor"
+      className="rounded-xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-sky-50 p-4 shadow-panel"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
+            <Search size={21} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">Filtros de busca</h2>
+            <p className="text-xs font-semibold text-slate-500">Localize rapidamente por NF-e ou fornecedor.</p>
+          </div>
+        </div>
+        {action}
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="grid gap-1.5 text-sm font-extrabold text-slate-700">
+          Número da NF-e
+          <span className="flex h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-sm transition focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-100">
+            <Search size={17} className="shrink-0 text-emerald-600" aria-hidden="true" />
+            <input
+              type="search"
+              inputMode="numeric"
+              autoComplete="off"
+              value={value.nfe}
+              onChange={(event) => updateFilter('nfe', event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400"
+              placeholder="Digite o número da NF-e"
+            />
+          </span>
+        </label>
+
+        <label className="grid gap-1.5 text-sm font-extrabold text-slate-700">
+          Fornecedor
+          <span className="flex h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-sm transition focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-100">
+            <Search size={17} className="shrink-0 text-emerald-600" aria-hidden="true" />
+            <input
+              type="search"
+              autoComplete="off"
+              value={value.fornecedor}
+              onChange={(event) => updateFilter('fornecedor', event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400"
+              placeholder="Digite o nome do fornecedor"
+            />
+          </span>
+        </label>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold text-slate-500">
+          Exibindo <span className="text-emerald-700">{resultCount}</span> de {totalCount} registro(s)
+        </p>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => onChange(EMPTY_OPERATIONAL_SEARCH)}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-extrabold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800"
+          >
+            <RotateCcw size={14} aria-hidden="true" /> Limpar filtros
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -4696,16 +4816,20 @@ function normalizeNfNumber(value) {
   return digits.replace(/^0+/, '') || '0';
 }
 
-function filterRecebimentos(rows, query) {
-  const term = query.toLowerCase().trim();
-  if (!term) return rows;
-  return rows.filter((row) => [
-    row.nf_numero,
-    fornecedorNome(row, ''),
-    produtoNome(row, ''),
-    placaVeiculo(row, ''),
-    row.balanca?.nome,
-  ].filter(Boolean).some((value) => String(value).toLowerCase().includes(term)));
+function matchesOperationalSearch(nfe, fornecedor, nfeQuery, fornecedorQuery) {
+  const nfeTerm = normalizeOperationalSearch(nfeQuery);
+  const fornecedorTerm = normalizeOperationalSearch(fornecedorQuery);
+  const matchesNfe = !nfeTerm || normalizeOperationalSearch(nfe).includes(nfeTerm);
+  const matchesFornecedor = !fornecedorTerm || normalizeOperationalSearch(fornecedor).includes(fornecedorTerm);
+  return matchesNfe && matchesFornecedor;
+}
+
+function normalizeOperationalSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function fornecedorNome(row, fallback = '-') {
