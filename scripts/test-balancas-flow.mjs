@@ -50,6 +50,9 @@ const iguatuTriggerMigration = await readFile(new URL('../supabase/portaria-corr
 const rlsUnitMigration = await readFile(new URL('../supabase/portaria-corrigir-rls-unidade.sql', import.meta.url), 'utf8');
 const atomicFlowMigration = await readFile(new URL('../supabase/portaria-corrigir-fluxo-atomico.sql', import.meta.url), 'utf8');
 const strictDuplicateMigration = await readFile(new URL('../supabase/recebimentos-bloquear-nf-fornecedor-unidade.sql', import.meta.url), 'utf8');
+const automaticLabMigration = await readFile(new URL('../supabase/portaria-envio-automatico-laboratorio.sql', import.meta.url), 'utf8');
+const synchronizedPortariaMigration = await readFile(new URL('../supabase/portaria-sincronizar-edicao-exclusao.sql', import.meta.url), 'utf8');
+const portariaLookupPermissionsMigration = await readFile(new URL('../supabase/portaria-permitir-cadastro-veiculos-motoristas.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -68,11 +71,11 @@ assert.ok(
   'Reenvio nao pode reutilizar recebimento de outra unidade',
 );
 assert.ok(
-  page.includes("await updatePortariaEntrada(row.id, {\n        balanca_id: unidadeId,"),
+  /await updatePortariaEntrada\(row\.id,\s*\{\s*balanca_id: unidadeId,/.test(page),
   'Mudanca de status da Portaria deve manter o balanca_id',
 );
 assert.ok(
-  service.includes(".eq('id', id)\n    .eq('balanca_id', balancaId)"),
+  /\.eq\('id', id\)\s*\.eq\('balanca_id', balancaId\)/.test(service),
   'Updates devem ser limitados simultaneamente pelo registro e pela unidade',
 );
 assert.ok(
@@ -173,7 +176,7 @@ assert.ok(
 );
 assert.ok(
   strictDuplicateMigration.includes('portaria_nf_fornecedor_unidade_unica')
-    && strictDuplicateMigration.includes('balanca_id,\n  fornecedor_id,\n  public.agroflow_nf_numero_normalizado(numero_nf)'),
+    && /balanca_id,\s*fornecedor_id,\s*public\.agroflow_nf_numero_normalizado\(numero_nf\)/.test(strictDuplicateMigration),
   'Portaria deve possuir chave unica por unidade, fornecedor e numero da NF',
 );
 assert.ok(
@@ -195,6 +198,74 @@ assert.ok(
 assert.ok(
   !page.includes('normalizeName(row.serie_nf) === normalizeName(form.serie_nf)'),
   'Validacao local da Portaria deve bloquear a mesma NF mesmo com serie diferente',
+);
+assert.ok(
+  /elsif tg_op = 'INSERT' then\s*new\.status := 'ENVIADO_LABORATORIO'/.test(automaticLabMigration),
+  'Nova entrada sem dispensa deve ser enviada ao laboratorio na mesma transacao',
+);
+assert.ok(
+  automaticLabMigration.includes("new.status := 'ENVIADO_RECEBIMENTO'"),
+  'Fluxo automatico deve preservar o envio direto quando houver dispensa de laboratorio',
+);
+assert.ok(
+  !/\bdelete\s+from\b/i.test(automaticLabMigration)
+    && !/\btruncate\b/i.test(automaticLabMigration)
+    && !/\bupdate\s+public\./i.test(automaticLabMigration),
+  'Migration de envio automatico nao pode alterar nem excluir registros existentes',
+);
+assert.ok(
+  page.includes('Entrada salva e enviada automaticamente para Aprovação Laboratório.'),
+  'Operador deve receber confirmacao clara do envio automatico ao salvar',
+);
+assert.ok(
+  service.indexOf("String(error?.code || '') === '23505'") < service.indexOf('const requestError = classifyRequestError(error)'),
+  'Erro de NF duplicada deve ser traduzido antes da classificacao generica de servidor',
+);
+assert.ok(
+  /deletePortariaEntrada\(id, balancaId\)/.test(service)
+    && /\.eq\('id', id\)\s*\.eq\('balanca_id', unidadeId\)/.test(service),
+  'Exclusao da Portaria deve exigir simultaneamente o registro e a unidade',
+);
+assert.ok(
+  synchronizedPortariaMigration.includes('new.dispensa_laboratorio = false then')
+    && synchronizedPortariaMigration.includes("status = case")
+    && synchronizedPortariaMigration.includes("then 'pendente'"),
+  'Retorno de entrada direta deve recolocar o mesmo recebimento no laboratorio',
+);
+assert.ok(
+  synchronizedPortariaMigration.includes('where r.portaria_id = old.id')
+    && synchronizedPortariaMigration.includes('and r.balanca_id = old.balanca_id'),
+  'Exclusao sincronizada deve atingir somente o recebimento vinculado da mesma unidade',
+);
+assert.ok(
+  synchronizedPortariaMigration.includes('RECEBIMENTO_JA_ARMAZENADO'),
+  'Edicao e exclusao devem preservar recebimentos ja utilizados na Armazenagem',
+);
+assert.ok(
+  page.includes('Entrada atualizada e enviada novamente para Aprovação Laboratório.'),
+  'Portaria deve confirmar claramente o retorno ao laboratorio',
+);
+assert.ok(
+  /veiculos:\s*\{[\s\S]*?permissionMenu:\s*'balancas_portaria'/.test(service)
+    && /motoristas:\s*\{[\s\S]*?permissionMenu:\s*'balancas_portaria'/.test(service),
+  'Veiculos e motoristas devem usar as permissoes especificas da Portaria',
+);
+assert.ok(
+  page.includes("const permissionMenu = config.permissionMenu || 'balancas'")
+    && page.includes("can(permissionMenu, editing ? 'editar' : 'cadastrar')")
+    && page.includes("can(permissionMenu, 'editar')")
+    && page.includes("can(permissionMenu, 'excluir')"),
+  'Cadastro compartilhado deve respeitar o menu configurado em todas as acoes',
+);
+assert.ok(
+  portariaLookupPermissionsMigration.includes("agroflow_tem_permissao('balancas_portaria', 'cadastrar')")
+    && portariaLookupPermissionsMigration.includes('on public.recebimento_veiculos')
+    && portariaLookupPermissionsMigration.includes('on public.recebimento_motoristas'),
+  'RLS deve permitir os dois cadastros somente conforme a permissao da Portaria',
+);
+assert.ok(
+  !/\b(insert|update|delete)\s+(into|public\.|from)\s+public\.recebimento_(veiculos|motoristas)/i.test(portariaLookupPermissionsMigration),
+  'Migration de permissoes nao pode alterar cadastros existentes',
 );
 
 assert.ok(page.includes('const shouldFinalizePending = Boolean('), 'Salvamento deve concluir qualquer pendencia de balanca valida');

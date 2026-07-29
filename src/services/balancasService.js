@@ -72,6 +72,7 @@ export const lookupTables = {
   veiculos: {
     table: 'recebimento_veiculos',
     label: 'Veículos',
+    permissionMenu: 'balancas_portaria',
     search: ['placa', 'tipo_veiculo'],
     fields: [
       { name: 'placa', label: 'Placa', required: true },
@@ -83,6 +84,7 @@ export const lookupTables = {
   motoristas: {
     table: 'recebimento_motoristas',
     label: 'Motoristas',
+    permissionMenu: 'balancas_portaria',
     search: ['nome', 'cpf', 'telefone'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
@@ -235,10 +237,18 @@ export async function updatePortariaEntrada(id, payload) {
   return data;
 }
 
-export async function deletePortariaEntrada(id) {
+export async function deletePortariaEntrada(id, balancaId) {
   requireRecordId(id, 'entrada da Portaria');
-  const { error } = await supabase.from('portaria_entradas').delete().eq('id', id);
+  const unidadeId = requireUnidadeScope({ balancaId });
+  const { data, error } = await supabase
+    .from('portaria_entradas')
+    .delete()
+    .eq('id', id)
+    .eq('balanca_id', unidadeId)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!data?.id) throw new Error('REGISTRO_NAO_ENCONTRADO_NA_UNIDADE');
 }
 
 export async function getRecebimento(id) {
@@ -531,6 +541,12 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
 export function toUserError(error) {
   const message = String(error?.message || error || '');
   const lower = message.toLowerCase();
+  if (String(error?.code || '') === '23505' && lower.includes('nf duplicada')) {
+    return 'NF duplicada para este fornecedor nesta unidade. Edite o lançamento existente ou confira o número da NF.';
+  }
+  if (lower.includes('recebimento_ja_armazenado')) {
+    return 'Este recebimento já foi utilizado na Armazenagem M.P. e não pode ser alterado ou excluído pela Portaria.';
+  }
   const requestError = classifyRequestError(error);
   if (requestError === 'connection') {
     return 'Falha de conexao com o banco de dados. Verifique sua internet e tente novamente.';
@@ -549,6 +565,9 @@ export function toUserError(error) {
   }
   if (lower.includes('unidade_divergente')) {
     return 'O registro vinculado pertence a outra unidade. A operacao foi bloqueada para evitar lancamento na balanca errada.';
+  }
+  if (lower.includes('registro_nao_encontrado_na_unidade')) {
+    return 'A entrada não foi encontrada nesta unidade. Atualize a página e tente novamente.';
   }
   if (lower.includes('row-level security') || lower.includes('permission')) {
     return 'Acesso negado. Como corrigir: confira se seu perfil tem permissão no menu Balanças.';

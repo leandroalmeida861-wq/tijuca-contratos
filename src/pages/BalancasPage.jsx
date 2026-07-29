@@ -671,11 +671,11 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
     setSaving(true);
     try {
       const payload = normalizePortariaPayload(form, { balancaId, semLaboratorio });
-      const existing = editing?.id ? await findRecebimentoByPortariaId(editing.id) : null;
-      if (editing?.id && Boolean(editing.dispensa_laboratorio) !== Boolean(payload.dispensa_laboratorio) && existing) {
-        setError('Esta entrada ja possui lancamento vinculado. Cancele ou exclua o lancamento antes de alterar o fluxo de laboratorio.');
-        return;
-      }
+      const retornandoAoLaboratorio = Boolean(
+        editing?.id
+        && editing.dispensa_laboratorio
+        && !payload.dispensa_laboratorio,
+      );
       const saved = editing?.id
         ? await updatePortariaEntrada(editing.id, payload)
         : await createPortariaEntrada(payload);
@@ -683,7 +683,11 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         await sendDirectToRecebimento(saved);
         setMessage('Entrada salva e enviada diretamente para Recebimentos.');
       } else {
-        setMessage(editing?.id ? 'Entrada da portaria atualizada com sucesso.' : 'Entrada da portaria cadastrada com sucesso.');
+        setMessage(retornandoAoLaboratorio
+          ? 'Entrada atualizada e enviada novamente para Aprovação Laboratório.'
+          : editing?.id
+            ? 'Entrada da portaria e recebimento vinculado atualizados com sucesso.'
+            : 'Entrada salva e enviada automaticamente para Aprovação Laboratório.');
       }
       setFormOpen(false);
       setEditing(null);
@@ -697,10 +701,10 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
   }
 
   async function remove(row) {
-    if (!window.confirm(`Excluir a entrada da portaria da NF ${row.numero_nf || row.id}?`)) return;
+    if (!window.confirm(`Excluir a entrada da Portaria da NF ${row.numero_nf || row.id}? O registro vinculado no Laboratório e em Recebidos na Balança também será excluído.`)) return;
     try {
-      await deletePortariaEntrada(row.id);
-      setMessage('Entrada da portaria excluida com sucesso.');
+      await deletePortariaEntrada(row.id, balancaId || row.balanca_id);
+      setMessage('Entrada excluída da Portaria, do Laboratório e de Recebidos na Balança.');
       await reload();
     } catch (err) {
       setError(toUserError(err));
@@ -2643,6 +2647,7 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
   const [form, setForm] = useState(defaultLookupForm(config.fields));
   const [editing, setEditing] = useState(null);
   const [query, setQuery] = useState('');
+  const permissionMenu = config.permissionMenu || 'balancas';
 
   async function load() {
     try {
@@ -2698,7 +2703,7 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
 
   return (
     <div className="grid gap-4">
-      {can('balancas', editing ? 'editar' : 'cadastrar') && (
+      {can(permissionMenu, editing ? 'editar' : 'cadastrar') && (
         <form onSubmit={submit} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-panel md:grid-cols-3">
           {config.fields.map((field) => (
             <Input key={field.name} label={field.label} type={field.type} value={form[field.name]} required={field.required} onChange={(value) => setForm((current) => ({ ...current, [field.name]: value }))} />
@@ -2729,8 +2734,8 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
                   {config.columns.map((column) => <td key={column} className="px-4 py-3">{formatGeneric(row[column])}</td>)}
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
-                      {can('balancas', 'editar') && <button type="button" onClick={() => { setEditing(row); setForm(defaultLookupForm(config.fields, row)); }} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"><Edit size={16} /></button>}
-                      {can('balancas', 'excluir') && <button type="button" onClick={() => remove(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>}
+                      {can(permissionMenu, 'editar') && <button type="button" onClick={() => { setEditing(row); setForm(defaultLookupForm(config.fields, row)); }} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"><Edit size={16} /></button>}
+                      {can(permissionMenu, 'excluir') && <button type="button" onClick={() => remove(row)} className="grid h-9 w-9 place-items-center rounded-lg text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>}
                     </div>
                   </td>
                 </tr>
