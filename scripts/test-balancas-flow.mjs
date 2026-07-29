@@ -293,4 +293,38 @@ assert.ok(migration.includes('recebimentos_sincronizar_portaria_finalizada'), 'T
 assert.ok(migration.includes('where id = new.portaria_id'), 'Sincronização deve usar exclusivamente portaria_id');
 assert.ok(!migration.includes('where numero_nf ='), 'NF não pode identificar a Portaria a atualizar');
 
+assert.ok(
+  page.includes('current.diferencaKg = current.kgRecebido - current.kgNota;'),
+  'Dashboard deve calcular diferenca como peso da balanca menos peso da nota',
+);
+assert.ok(
+  page.includes('.filter((item) => Math.abs(Number(item.diferencaKg || 0)) > Number.EPSILON)'),
+  'Dashboard nao deve exibir diferencas zeradas',
+);
+assert.ok(
+  page.includes('.sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg))'),
+  'Dashboard deve ordenar diferencas pelo maior valor absoluto',
+);
+assert.ok(
+  page.includes('percent: totalKg ? (item.kgTotal / totalKg) * 100 : 0'),
+  'Distribuicao por produtos deve calcular percentual pelo peso real em kg',
+);
+assert.ok(
+  page.includes('{formatDashboardKg(kgTotal)} ({formatPercentPt(productPercent)})')
+    && !page.includes('formatPercentPt(percent * 100)'),
+  'Rotulo externo nao pode multiplicar novamente percentual ja calculado',
+);
+assert.ok(
+  page.includes('Balança maior — complementar fornecedor')
+    && page.includes('Nota maior que balança')
+    && page.includes('Diferenças de 0 kg não são exibidas.'),
+  'Grafico de diferencas deve apresentar a legenda operacional completa',
+);
+assert.ok(
+  page.includes('Complementar nota')
+    && page.includes('Não complementar')
+    && page.includes('Revisar nota'),
+  'Grafico de diferencas deve exibir as opcoes solicitadas',
+);
+
 console.log('Testes do fluxo Portaria/Laboratório/Recebimentos aprovados.');

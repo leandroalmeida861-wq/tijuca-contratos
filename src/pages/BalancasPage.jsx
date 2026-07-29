@@ -525,7 +525,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
             <ChartCard title="Distribuição por Produtos">
               <ProductsPieChart data={productsDistribution} />
             </ChartCard>
-            <ChartCard title="DIFERENÇA PESO DA BALANÇA X NOTA">
+            <ChartCard title="DIFERENÇA: PESO DA BALANÇA X NOTA">
               <SupplierDifferenceChart data={supplierDifferences} />
             </ChartCard>
           </section>
@@ -3339,8 +3339,8 @@ function ProductsPieChart({ data }) {
   const isMobile = containerWidth > 0 && containerWidth < 520;
   const isTablet = containerWidth >= 520 && containerWidth < 760;
   const chartHeight = isMobile ? 380 : isTablet ? 440 : 500;
-  const outerRadius = isMobile ? 116 : isTablet ? 138 : 160;
-  const innerRadius = isMobile ? 76 : isTablet ? 94 : 110;
+  const outerRadius = isMobile ? 96 : isTablet ? 138 : 160;
+  const innerRadius = isMobile ? 64 : isTablet ? 94 : 110;
   const chartMargin = isMobile
     ? { top: 18, right: 16, bottom: 18, left: 16 }
     : isTablet
@@ -3365,7 +3365,7 @@ function ProductsPieChart({ data }) {
               activeIndex={activeIndex ?? undefined}
               activeShape={ProductActiveSlice}
               labelLine={false}
-              label={(props) => <ProductDonutLabel {...props} compact={isMobile} />}
+              label={(props) => <ProductDonutLabel {...props} compact={isMobile} totalKg={totalKg} />}
               onMouseEnter={(_, index) => setActiveIndex(index)}
               onMouseLeave={() => setActiveIndex(null)}
               onClick={(slice) => {
@@ -3377,8 +3377,8 @@ function ProductsPieChart({ data }) {
               ))}
             </Pie>
             <Tooltip content={<ProductDonutTooltip />} />
-            <text x="50%" y="47%" textAnchor="middle" className="fill-slate-950 text-xl font-extrabold sm:text-2xl">
-              {formatWeightTotal(totalKg)}
+            <text x="50%" y="47%" textAnchor="middle" className="fill-slate-950 text-base font-extrabold sm:text-2xl">
+              {formatDashboardKg(totalKg)}
             </text>
             <text x="50%" y="54%" textAnchor="middle" className="fill-slate-500 text-xs font-bold">
               volume total
@@ -3400,7 +3400,7 @@ function ProductsPieChart({ data }) {
               <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: productDonutColor(item, index) }} />
               <span className="truncate">{item.name}</span>
             </span>
-            <span className="shrink-0 text-slate-950">{formatWeightShort(item.kgTotal)} · {formatPercentPt(item.percent)}</span>
+            <span className="shrink-0 text-slate-950">{formatDashboardKg(item.kgTotal)} · {formatPercentPt(item.percent)}</span>
           </button>
         ))}
       </div>
@@ -3411,7 +3411,7 @@ function ProductsPieChart({ data }) {
           <div className="grid gap-1 sm:grid-cols-2">
             {(others.items || []).map((item) => (
               <span key={item.name} className="truncate" title={item.name}>
-                {item.name}: {formatWeightShort(item.kgTotal)}
+                {item.name}: {formatDashboardKg(item.kgTotal)}
               </span>
             ))}
           </div>
@@ -3423,17 +3423,21 @@ function ProductsPieChart({ data }) {
 
 function SupplierDifferenceChart({ data }) {
   const [showAll, setShowAll] = useState(false);
-  if (!data.length) return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem dados para exibir.</p>;
-
   const visibleData = showAll ? data : data.slice(0, 10);
-  const chartHeight = Math.max(320, visibleData.length * 42 + 70);
+  const maxDifference = Math.max(...visibleData.map((item) => Math.abs(Number(item.diferencaKg || 0))), 1);
 
   return (
-    <div className="grid min-w-0 gap-3">
+    <div className="grid min-w-0 gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-extrabold text-slate-600">
-        <div className="flex items-center gap-4">
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Sobra</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" /> Falta</span>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+            Balança maior — complementar fornecedor
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
+            Nota maior que balança
+          </span>
         </div>
         {data.length > 10 && (
           <button type="button" onClick={() => setShowAll((current) => !current)} className="rounded-md border border-slate-300 px-3 py-1 font-bold text-slate-700 hover:bg-slate-50">
@@ -3442,34 +3446,63 @@ function SupplierDifferenceChart({ data }) {
         )}
       </div>
 
-      <div className="min-w-0" style={{ height: chartHeight }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={visibleData} layout="vertical" margin={{ top: 8, right: 96, bottom: 8, left: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-            <XAxis
-              type="number"
-              tick={{ fontSize: 11, fontWeight: 700 }}
-              tickFormatter={(value) => formatDifferenceWeight(value)}
-              domain={([dataMin, dataMax]) => [Math.min(dataMin, 0), Math.max(dataMax, 0)]}
-            />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={190}
-              interval={0}
-              tick={<SupplierNameTick />}
-            />
-            <ReferenceLine x={0} stroke="#334155" strokeWidth={1.4} />
-            <Tooltip content={<SupplierDifferenceTooltip />} />
-            <Bar dataKey="diferencaKg" radius={[0, 6, 6, 0]}>
-              {visibleData.map((item) => (
-                <Cell key={item.name} fill={item.diferencaKg < 0 ? '#dc2626' : item.diferencaKg > 0 ? '#2563eb' : '#94a3b8'} />
-              ))}
-              <LabelList dataKey="diferencaKg" content={<SupplierDifferenceValueLabel />} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {visibleData.length ? (
+        <div className="grid gap-2">
+          {visibleData.map((item) => {
+            const difference = Number(item.diferencaKg || 0);
+            const isPositive = difference > 0;
+            const width = Math.max((Math.abs(difference) / maxDifference) * 100, 3);
+
+            return (
+              <article
+                key={item.name}
+                className={`rounded-lg border p-3 ${isPositive ? 'border-blue-100 bg-blue-50/40' : 'border-red-100 bg-red-50/50'}`}
+              >
+                <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(150px,0.9fr)_minmax(150px,1.4fr)_auto] lg:items-center">
+                  <p className="min-w-0 truncate text-xs font-extrabold uppercase text-slate-800" title={item.name}>
+                    {item.name}
+                  </p>
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                    <div className={`flex h-full ${isPositive ? 'justify-start' : 'justify-end'}`}>
+                      <span
+                        className={`h-full rounded-full ${isPositive ? 'bg-blue-600' : 'bg-red-600'}`}
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className={`whitespace-nowrap text-right text-sm font-extrabold ${isPositive ? 'text-blue-700' : 'text-red-600'}`}>
+                    {formatDashboardKg(difference)}
+                  </p>
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-2">
+                  <span className={`text-xs font-extrabold ${isPositive ? 'text-blue-700' : 'text-red-700'}`}>
+                    {isPositive ? 'Falta complemento ao fornecedor' : 'Nota maior que balança'}
+                  </span>
+                  <div className="flex flex-wrap gap-2" aria-label={`Opções para ${item.name}`}>
+                    {isPositive ? (
+                      <>
+                        <span className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-blue-700">Complementar nota</span>
+                        <span className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-extrabold text-slate-600">Não complementar</span>
+                      </>
+                    ) : (
+                      <span className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-700">Revisar nota</span>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="rounded-lg bg-slate-50 py-8 text-center text-sm font-semibold text-slate-500">
+          Nenhuma diferença de peso para exibir.
+        </p>
+      )}
+
+      <p className="inline-flex items-center gap-2 text-xs font-bold text-slate-500">
+        <Info size={14} /> Diferenças de 0 kg não são exibidas.
+      </p>
     </div>
   );
 }
@@ -3581,9 +3614,8 @@ function useElementWidth() {
 }
 
 function ProductDonutLabel(props) {
-  const { cx, cy, midAngle, outerRadius, percent, name, kgTotal, compact } = props;
-  if (percent < 0.03) return null;
-  if (compact && percent < 0.08) return null;
+  const { cx, cy, midAngle, outerRadius, name, kgTotal, totalKg, compact } = props;
+  const productPercent = totalKg > 0 ? (Number(kgTotal || 0) / totalKg) * 100 : 0;
 
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-RADIAN * midAngle);
@@ -3592,8 +3624,11 @@ function ProductDonutLabel(props) {
   const sy = cy + (outerRadius + 6) * sin;
   const mx = cx + (outerRadius + (compact ? 14 : 24)) * cos;
   const my = cy + (outerRadius + (compact ? 14 : 24)) * sin;
-  const ex = mx + (cos >= 0 ? (compact ? 12 : 34) : (compact ? -12 : -34));
-  const textAnchor = cos >= 0 ? 'start' : 'end';
+  const ex = compact
+    ? (cos >= 0 ? (cx * 2) - 8 : 8)
+    : mx + (cos >= 0 ? 34 : -34);
+  const textAnchor = compact ? (cos >= 0 ? 'end' : 'start') : (cos >= 0 ? 'start' : 'end');
+  const textX = compact ? ex : ex + (cos >= 0 ? 4 : -4);
   const labelLimit = compact ? 10 : 18;
   const labelName = String(name || '').length > labelLimit ? `${String(name).slice(0, labelLimit)}...` : name;
   const fontSize = compact ? 9 : 10;
@@ -3602,11 +3637,11 @@ function ProductDonutLabel(props) {
     <g>
       <path d={`M${sx},${sy}L${mx},${my}L${ex},${my}`} fill="none" stroke="#94a3b8" strokeWidth={1.2} />
       <circle cx={sx} cy={sy} r={2} fill="#94a3b8" />
-      <text x={ex + (cos >= 0 ? 4 : -4)} y={my - 3} textAnchor={textAnchor} fill="#0f172a" fontSize={fontSize} fontWeight={800}>
+      <text x={textX} y={my - 3} textAnchor={textAnchor} fill="#0f172a" fontSize={fontSize} fontWeight={800}>
         {labelName}
       </text>
-      <text x={ex + (cos >= 0 ? 4 : -4)} y={my + 10} textAnchor={textAnchor} fill="#64748b" fontSize={fontSize} fontWeight={700}>
-        {formatWeightShort(kgTotal)} ({formatPercentPt(percent * 100)})
+      <text x={textX} y={my + 10} textAnchor={textAnchor} fill="#64748b" fontSize={fontSize} fontWeight={700}>
+        {formatDashboardKg(kgTotal)} ({formatPercentPt(productPercent)})
       </text>
     </g>
   );
@@ -3618,7 +3653,7 @@ function ProductDonutTooltip({ active, payload }) {
   return (
     <div className="max-w-72 rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
       <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">KG exato: {kg(item.kgTotal)}</p>
+      <p className="mt-1 font-semibold text-slate-600">Peso: {formatDashboardKg(item.kgTotal)}</p>
       <p className="font-semibold text-slate-600">Participação: {formatPercentPt(item.percent)}</p>
       <p className="font-semibold text-slate-600">Cargas: {item.cargas}</p>
       {item.isOthers && Boolean(item.items?.length) && (
@@ -3742,50 +3777,6 @@ function DivergenceBadge({ value }) {
       ? 'bg-amber-50 text-amber-700 ring-amber-200'
       : 'bg-rose-50 text-rose-700 ring-rose-200';
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1 ${className}`}>{formatPercentPt(numeric)}</span>;
-}
-
-function SupplierNameTick({ x, y, payload }) {
-  const fullName = String(payload?.value || '-');
-  const labelText = fullName.length > 25 ? `${fullName.slice(0, 25)}...` : fullName;
-
-  return (
-    <g transform={`translate(${x - 184},${y})`}>
-      <title>{fullName}</title>
-      <text x={0} y={4} textAnchor="start" fill="#334155" fontSize={11} fontWeight={800}>
-        {labelText}
-      </text>
-    </g>
-  );
-}
-
-function SupplierDifferenceValueLabel({ x, y, width, height, value, payload }) {
-  const numeric = Number(value || 0);
-  const percent = Number(payload?.percentualDiferenca || 0);
-  const labelText = `${formatDifferenceWeight(numeric)} (${formatPercentPt(percent)})`;
-  const labelX = numeric >= 0 ? x + width + 8 : x - 8;
-  const textAnchor = numeric >= 0 ? 'start' : 'end';
-  const color = numeric < 0 ? '#dc2626' : numeric > 0 ? '#2563eb' : '#475569';
-
-  return (
-    <text x={labelX} y={y + height / 2 + 4} textAnchor={textAnchor} fill={color} fontSize={11} fontWeight={800}>
-      {labelText}
-    </text>
-  );
-}
-
-function SupplierDifferenceTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const item = payload[0].payload;
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-panel">
-      <p className="font-extrabold text-slate-900">{item.name}</p>
-      <p className="mt-1 font-semibold text-slate-600">Peso de origem: {kg(item.kgNota)}</p>
-      <p className="font-semibold text-slate-600">Peso de destino: {kg(item.kgRecebido)}</p>
-      <p className={item.diferencaKg < 0 ? 'font-extrabold text-rose-700' : item.diferencaKg > 0 ? 'font-extrabold text-blue-700' : 'font-extrabold text-slate-600'}>
-        Diferença: {kg(item.diferencaKg)} ({formatPercentPt(item.percentualDiferenca)})
-      </p>
-    </div>
-  );
 }
 
 function SupplierHumidityNameTick({ x, y, payload }) {
@@ -5177,9 +5168,6 @@ function buildDashboardStatus(aprovadasLaboratorio, recebimentosBalanca, pendent
 }
 
 function buildProductsDistribution(rows) {
-  const total = rows.reduce((sum, row) => sum + Number(row.peso_liquido || 0), 0);
-  if (!total) return [];
-
   const map = new Map();
   rows.forEach((row) => {
     const originalName = produtoNome(row, 'Sem produto');
@@ -5210,10 +5198,11 @@ function buildProductsDistribution(rows) {
   const data = othersTotal > 0
     ? [...main, { name: `Outros (${others.length} produtos)`, kgTotal: othersTotal, cargas: othersCargas, isOthers: true, items: others }]
     : main;
+  const totalKg = data.reduce((sum, item) => sum + Number(item.kgTotal || 0), 0);
 
   return data.map((item) => ({
     ...item,
-    percent: total ? (item.kgTotal / total) * 100 : 0,
+    percent: totalKg ? (item.kgTotal / totalKg) * 100 : 0,
   }));
 }
 
@@ -5222,17 +5211,15 @@ function buildSupplierDifferences(rows) {
 
   rows.forEach((row) => {
     const key = fornecedorGroupKey(row);
-    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), kgNota: 0, kgRecebido: 0, diferencaKg: 0, percentualDiferenca: 0 };
+    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), kgNota: 0, kgRecebido: 0, diferencaKg: 0 };
     current.kgNota += pesoNotaAgregado(row);
     current.kgRecebido += Number(row.peso_liquido || 0);
     current.diferencaKg = current.kgRecebido - current.kgNota;
-    // Percentual sobre o total entregue pelo fornecedor. TODO: se o dataset passar a trazer outro campo oficial de "total entregue", substituir kgRecebido aqui.
-    current.percentualDiferenca = current.kgRecebido ? (current.diferencaKg / current.kgRecebido) * 100 : 0;
     map.set(key, current);
   });
 
   return Array.from(map.values())
-    .filter((item) => item.kgNota || item.kgRecebido || item.diferencaKg)
+    .filter((item) => Math.abs(Number(item.diferencaKg || 0)) > Number.EPSILON)
     .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg));
 }
 
@@ -5351,16 +5338,6 @@ function compactKg(value) {
   return `${Math.round(numeric)}kg`;
 }
 
-function formatDifferenceWeight(value) {
-  const numeric = Number(value || 0);
-  const sign = numeric < 0 ? '-' : '';
-  const absolute = Math.abs(numeric);
-  if (absolute >= 1000) {
-    return `${sign}${(absolute / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}t`;
-  }
-  return `${sign}${Math.round(absolute).toLocaleString('pt-BR')} kg`;
-}
-
 function formatWeightShort(value) {
   const numeric = Number(value || 0);
   if (Math.abs(numeric) >= 1000) {
@@ -5369,12 +5346,11 @@ function formatWeightShort(value) {
   return `${Math.round(numeric).toLocaleString('pt-BR')} kg`;
 }
 
-function formatWeightTotal(value) {
+function formatDashboardKg(value) {
   const numeric = Number(value || 0);
-  if (Math.abs(numeric) >= 1000) {
-    return `${Math.round(numeric / 1000).toLocaleString('pt-BR')}t`;
-  }
-  return `${Math.round(numeric).toLocaleString('pt-BR')} kg`;
+  const rounded = Math.round(numeric);
+  const safeValue = Object.is(rounded, -0) ? 0 : rounded;
+  return `${safeValue.toLocaleString('pt-BR')} kg`;
 }
 
 function formatPercentPt(value) {
