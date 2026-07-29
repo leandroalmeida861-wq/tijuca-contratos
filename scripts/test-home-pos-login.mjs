@@ -42,8 +42,14 @@ assert.ok(
 );
 assert.ok(
   layout.includes('<Outlet />')
-    && !layout.includes('to="/inicio"'),
-  'O menu lateral deve continuar com a estrutura e os destinos atuais.',
+    && layout.includes("{ to: '/inicio', label: 'Início', icon: House, alwaysVisible: true }")
+    && layout.includes("if (!item.alwaysVisible && !can(item.menu, 'visualizar'))"),
+  'O menu lateral deve oferecer retorno a Home sem criar uma permissao nova.',
+);
+assert.ok(
+  home.includes('src="/agroflow-home-silos.png"')
+    && !home.includes('function FarmBackdrop'),
+  'A Home deve usar o fundo fotografico de silos e plantacao.',
 );
 
 console.log('Testes da pagina inicial pos-login aprovados.');

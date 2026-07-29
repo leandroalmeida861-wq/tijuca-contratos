@@ -6,6 +6,7 @@ import {
   Factory,
   FlaskConical,
   History,
+  House,
   LogOut,
   Menu,
   Package,
@@ -32,6 +33,7 @@ const unidadeNavItems = UNIDADES.map((unidade) => ({
 }));
 
 const navItems = [
+  { to: '/inicio', label: 'Início', icon: House, alwaysVisible: true },
   { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
   ...unidadeNavItems,
   {
@@ -206,7 +208,7 @@ export default function AppLayout() {
               );
             }
 
-            if (!can(item.menu, 'visualizar')) return null;
+            if (!item.alwaysVisible && !can(item.menu, 'visualizar')) return null;
             // Para entrar em uma unidade sao necessarias as duas permissoes:
             // visualizar o modulo (acima) e ter acesso aquela unidade.
             if (item.unidadeCodigo && !podeAcessarUnidade(item.unidadeCodigo)) return null;

@@ -109,9 +109,13 @@ export default function HomePage() {
   return (
     <div className="mx-auto grid w-full max-w-[1500px] gap-5 sm:gap-6">
       <section className="relative isolate min-h-[390px] overflow-hidden rounded-3xl border border-slate-800/50 bg-[#071822] text-white shadow-[0_24px_60px_rgba(15,23,42,0.22)] sm:min-h-[430px]">
-        <div className="absolute inset-0 -z-20 bg-[radial-gradient(circle_at_78%_18%,rgba(239,159,39,0.22),transparent_30%),radial-gradient(circle_at_15%_90%,rgba(32,201,151,0.20),transparent_36%),linear-gradient(118deg,#071822_5%,#0b2832_52%,#15372e_100%)]" />
-        <FarmBackdrop />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#071822] via-[#071822]/95 to-[#071822]/25 sm:via-[#071822]/80" />
+        <img
+          src="/agroflow-home-silos.png"
+          alt=""
+          className="absolute inset-0 -z-20 h-full w-full object-cover object-[70%_center] sm:object-center"
+        />
+        <div className="absolute inset-0 -z-10 bg-[#071822]/50 sm:bg-gradient-to-r sm:from-[#071822]/95 sm:via-[#071822]/62 sm:to-[#071822]/10" />
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-2/5 bg-gradient-to-t from-[#06151e]/70 to-transparent" />
 
         <div className="flex min-h-[390px] max-w-3xl flex-col justify-center px-5 py-8 sm:min-h-[430px] sm:px-9 sm:py-10 lg:px-12">
           <div className="flex items-center gap-4 sm:gap-5">
@@ -262,50 +266,4 @@ function formatList(items) {
 
 function getFirstName(value = '') {
   return String(value).trim().split(/\s+/)[0] || '';
-}
-
-function FarmBackdrop() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 900 520"
-      preserveAspectRatio="xMidYMid slice"
-      className="absolute inset-y-0 right-0 -z-10 h-full w-full opacity-55 sm:w-[72%] sm:opacity-75"
-    >
-      <defs>
-        <linearGradient id="homeField" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stopColor="#2a6b48" />
-          <stop offset="1" stopColor="#102e2a" />
-        </linearGradient>
-        <linearGradient id="homeSilo" x1="0" x2="1">
-          <stop offset="0" stopColor="#8aa39a" stopOpacity=".55" />
-          <stop offset=".55" stopColor="#d5d4b8" stopOpacity=".72" />
-          <stop offset="1" stopColor="#647f75" stopOpacity=".5" />
-        </linearGradient>
-      </defs>
-      <path d="M0 395C180 330 350 345 520 385C675 420 790 410 900 360V520H0Z" fill="url(#homeField)" />
-      <path d="M0 445C170 380 350 395 540 440C685 475 800 460 900 420" fill="none" stroke="#56d49c" strokeOpacity=".34" strokeWidth="2" />
-      <g opacity=".82">
-        <path d="M510 145H685" stroke="#9cb5aa" strokeWidth="8" />
-        <path d="M530 145L610 84L688 145" fill="none" stroke="#9cb5aa" strokeWidth="6" />
-        <rect x="538" y="148" width="58" height="213" rx="9" fill="url(#homeSilo)" />
-        <ellipse cx="567" cy="148" rx="29" ry="11" fill="#d3d7c5" fillOpacity=".62" />
-        <path d="M552 136L567 110L582 136" fill="#aebcaf" fillOpacity=".7" />
-        <rect x="607" y="148" width="67" height="213" rx="10" fill="url(#homeSilo)" />
-        <ellipse cx="640.5" cy="148" rx="33.5" ry="12" fill="#d3d7c5" fillOpacity=".65" />
-        <path d="M622 136L640 103L659 136" fill="#aebcaf" fillOpacity=".72" />
-        <rect x="695" y="184" width="84" height="177" rx="10" fill="url(#homeSilo)" />
-        <ellipse cx="737" cy="184" rx="42" ry="14" fill="#d3d7c5" fillOpacity=".62" />
-        <path d="M714 169L737 127L760 169" fill="#aebcaf" fillOpacity=".7" />
-        <path d="M500 361H806" stroke="#6b8d7c" strokeWidth="12" />
-        <path d="M790 91V361M776 91H804M783 123H797M783 157H797M783 191H797M783 225H797" stroke="#9cb5aa" strokeWidth="5" />
-        <path d="M798 106L864 152" stroke="#9cb5aa" strokeWidth="7" />
-      </g>
-      <g fill="#55d39a" opacity=".35">
-        <path d="M190 445c35-74 74-75 115 0c-42-35-77-35-115 0Z" />
-        <path d="M320 438c30-63 64-64 101 0c-36-30-67-30-101 0Z" />
-        <path d="M62 462c25-53 54-53 85 0c-31-26-57-26-85 0Z" />
-      </g>
-    </svg>
-  );
 }
