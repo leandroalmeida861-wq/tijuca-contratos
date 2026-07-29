@@ -1,10 +1,14 @@
 // Login e solicitacao de acesso com senha protegida no backend.
 import {
+  ArrowRight,
+  ChartNoAxesCombined,
   Eye,
   EyeOff,
   Lock,
   Mail,
+  Network,
   Phone,
+  ShieldCheck,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -173,22 +177,24 @@ export default function Login() {
   }
 
   return (
-    <main className="min-h-screen bg-[#eef3f6] px-4 py-6 text-slate-900 sm:px-6 lg:grid lg:place-items-center">
-      <section className="mx-auto grid w-full max-w-6xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)] lg:grid-cols-[1.25fr_1fr]">
+    <main className="min-h-screen bg-[#031f2c] px-3 py-3 text-slate-900 sm:px-6 sm:py-6 lg:grid lg:place-items-center lg:px-8">
+      <section className="mx-auto grid w-full max-w-[1480px] overflow-hidden rounded-[26px] border border-white/20 bg-white shadow-[0_30px_90px_rgba(0,12,20,0.45)] lg:min-h-[800px] lg:grid-cols-[minmax(0,1.4fr)_minmax(420px,1fr)]">
         <LoginHero />
 
-        <aside className="flex items-center justify-center bg-[#f8fafc] p-5 sm:p-8">
-          <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_45px_rgba(15,23,42,0.12)]">
-            <div className="mb-6 text-center">
-              <img src="/agroflow-symbol.png" alt="AgroFlow" className="mx-auto h-16 w-16 object-contain" />
-              <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">{titleForMode(mode)}</h2>
+        <aside className="flex items-center justify-center bg-white px-5 py-8 sm:px-10 sm:py-12 lg:px-12">
+          <section className="w-full max-w-[470px]">
+            <div className="mb-7 text-center">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700 shadow-sm">
+                <ShieldCheck size={34} strokeWidth={1.8} aria-hidden="true" />
+              </div>
+              <h2 className="mt-5 text-3xl font-black tracking-tight text-[#071528]">{titleForMode(mode)}</h2>
               <p className="mt-2 text-sm font-medium leading-5 text-slate-500">
                 {descriptionForMode(mode)}
               </p>
             </div>
 
             {mode !== 'setPassword' && (
-              <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+              <div className="mb-7 grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-100/80 p-1 shadow-inner">
                 <ModeButton active={mode === 'login'} onClick={() => setMode('login')}>Entrar</ModeButton>
                 <ModeButton active={mode === 'request'} onClick={() => setMode('request')}>Solicitar</ModeButton>
               </div>
@@ -208,15 +214,19 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="h-12 rounded-xl bg-gradient-to-r from-[#16895a] to-[#12a7a0] text-sm font-extrabold text-white shadow-lg shadow-emerald-900/15 transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
+                className="group flex h-14 items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#118c58] to-[#15a266] text-sm font-extrabold text-white shadow-[0_12px_24px_rgba(17,140,88,0.22)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-slate-400 disabled:shadow-none"
               >
-                {loading ? 'Processando...' : submitLabel(mode)}
+                <span>{loading ? 'Processando...' : submitLabel(mode)}</span>
+                {!loading && <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />}
               </button>
             </form>
 
-            {message && <p className="mt-4 rounded-xl bg-slate-100 p-3 text-sm font-medium leading-5 text-slate-700">{message}</p>}
+            {message && <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium leading-5 text-slate-700">{message}</p>}
 
-            <p className="mt-6 text-center text-xs font-medium leading-5 text-slate-500">
+            <div className="mt-7 flex items-center gap-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 before:h-px before:flex-1 before:bg-slate-200 after:h-px after:flex-1 after:bg-slate-200">
+              Acesso seguro
+            </div>
+            <p className="mt-4 text-center text-xs font-medium leading-5 text-slate-500">
               {mode === 'request'
                 ? 'Sua senha e protegida e nunca fica visivel para o administrador.'
                 : 'Novo usuario solicita acesso e aguarda a aprovacao do administrador.'}
@@ -254,46 +264,84 @@ export default function Login() {
 }
 
 function LoginHero() {
+  const benefits = [
+    {
+      title: 'Segurança',
+      description: 'Controle de acesso e proteção das informações da operação.',
+      icon: ShieldCheck,
+    },
+    {
+      title: 'Integração',
+      description: 'Contratos, notas fiscais e logística em um único ambiente.',
+      icon: Network,
+    },
+    {
+      title: 'Controle operacional',
+      description: 'Visão completa de custos, saldos e resultados do negócio.',
+      icon: ChartNoAxesCombined,
+    },
+  ];
+
   return (
-    <div className="flex flex-col bg-[#052f42] p-4 text-white sm:p-6 lg:min-h-[700px] lg:p-8">
-      <div className="border-b border-emerald-200/25 pb-5 sm:pb-6">
-        <div className="flex items-center gap-4 sm:gap-5">
+    <div className="relative isolate min-h-[500px] overflow-hidden bg-[#052b39] text-white sm:min-h-[580px] lg:min-h-full">
+      <img
+        src="/images/agroflow-login-silos.webp"
+        alt="Silos metálicos de armazenagem de grãos ao entardecer"
+        className="absolute inset-0 -z-20 h-full w-full object-cover object-center"
+        width="1920"
+        height="1280"
+        fetchPriority="high"
+      />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(2,28,40,0.97)_0%,rgba(3,34,46,0.82)_48%,rgba(3,31,42,0.28)_100%)]" />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(0deg,rgba(1,24,34,0.72)_0%,transparent_55%,rgba(1,24,34,0.28)_100%)]" />
+
+      <div className="flex min-h-full flex-col px-6 py-7 sm:px-10 sm:py-9 lg:px-14 lg:py-12">
+        <div className="flex items-center gap-4">
           <img
             src="/agroflow-symbol.png"
-            alt=""
-            className="h-[76px] w-[76px] shrink-0 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.22)] sm:h-[88px] sm:w-[88px]"
+            alt="Símbolo AgroFlow"
+            className="h-[72px] w-[72px] shrink-0 rounded-2xl border border-emerald-300/30 bg-[#042c3a]/70 object-contain p-1 drop-shadow-[0_10px_20px_rgba(0,0,0,0.3)] sm:h-[82px] sm:w-[82px]"
           />
           <div className="min-w-0">
-            <p className="text-[38px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,0.35)] sm:text-5xl">
+            <p className="text-[36px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,0.35)] sm:text-5xl">
               <span className="text-[#5dcaa5]">Agro</span>
               <span className="text-[#ef9f27]">Flow</span>
             </p>
-            <p className="mt-2 text-[11px] font-black uppercase leading-[1.35] tracking-[0.1em] text-emerald-200 sm:text-sm">
-              GESTÃO INTELIGENTE DO
-              <span className="block">AGRONEGÓCIO</span>
+            <p className="mt-2 text-[10px] font-black uppercase leading-[1.35] tracking-[0.16em] text-emerald-100 sm:text-xs">
+              Gestão Inteligente do Agronegócio
             </p>
           </div>
         </div>
-        <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-cyan-100 sm:text-sm">
-          Controle operacional e financeiro para decisões mais seguras
-        </p>
-      </div>
 
-      <div className="mt-5 max-w-2xl border-l-4 border-emerald-400 pl-4 sm:mt-5">
-        <p className="text-justify text-lg font-black uppercase leading-[1.35] text-white sm:text-xl">
-          Gestão integrada para uma operação mais segura e previsível
-        </p>
-        <p className="mt-2 hyphens-auto text-justify text-sm font-medium leading-6 text-cyan-50 sm:text-base sm:leading-7">
-          Centralize contratos, notas fiscais, fretes e informações financeiras para acompanhar custos, saldos e resultados com muito mais controle.
-        </p>
-      </div>
+        <div className="mt-10 max-w-2xl sm:mt-14 lg:mt-16">
+          <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-[54px]">
+            Gestão integrada.
+            <span className="mt-1 block">Resultados que <span className="text-emerald-400">crescem.</span></span>
+          </h1>
+          <p className="mt-5 max-w-xl text-sm font-medium leading-6 text-slate-100 sm:text-base sm:leading-7">
+            O AgroFlow centraliza contratos, notas fiscais, fretes e informações financeiras para uma operação mais segura, previsível e eficiente.
+          </p>
+        </div>
 
-      <div className="mt-5 flex min-h-0 flex-1 items-center justify-center sm:mt-6">
-        <img
-          src="/agroflow-login-integrado.png"
-          alt="Contratos, notas, fretes e financeiro integrados em um único lugar, com segurança, controle e previsibilidade."
-          className="block h-auto max-h-[470px] w-full object-contain"
-        />
+        <div className="mt-8 hidden max-w-xl sm:block lg:mt-12">
+          <div className="mb-5 flex items-center gap-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Inteligência e controle para o seu negócio</p>
+            <span className="h-px w-12 bg-emerald-400/70" />
+          </div>
+          <div className="grid gap-5">
+            {benefits.map(({ title, description, icon: Icon }) => (
+              <article key={title} className="flex items-center gap-4">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-emerald-400/60 bg-[#07394a]/75 text-white backdrop-blur-sm">
+                  <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-extrabold text-white">{title}</h2>
+                  <p className="mt-1 text-xs font-medium leading-5 text-slate-200">{description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -304,7 +352,7 @@ function ModeButton({ active, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className={`h-10 rounded-lg text-xs font-bold transition sm:text-sm ${active ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+      className={`h-11 rounded-lg border-b-2 text-xs font-extrabold transition sm:text-sm ${active ? 'border-emerald-600 bg-white text-emerald-700 shadow-sm' : 'border-transparent text-slate-500 hover:bg-white/60 hover:text-slate-800'}`}
     >
       {children}
     </button>
@@ -312,6 +360,8 @@ function ModeButton({ active, onClick, children }) {
 }
 
 function LoginFields({ mode, email, setEmail, password, setPassword }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <>
       <Field label="E-mail autorizado" icon={Mail}>
@@ -321,6 +371,7 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
           className="w-full border-0 bg-transparent outline-none"
           type="email"
           autoComplete="off"
+          placeholder="seu@email.com"
           required
         />
       </Field>
@@ -329,12 +380,14 @@ function LoginFields({ mode, email, setEmail, password, setPassword }) {
         <input
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full border-0 bg-transparent outline-none"
-          type="password"
+          className="min-w-0 flex-1 border-0 bg-transparent outline-none"
+          type={showPassword ? 'text' : 'password'}
           autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          placeholder="Digite sua senha"
           minLength={6}
           required
         />
+        <PasswordVisibilityButton visible={showPassword} onClick={() => setShowPassword((current) => !current)} label="senha" />
       </Field>
     </>
   );
@@ -454,7 +507,7 @@ function Field({ label, icon: Icon, children }) {
   return (
     <label className="grid gap-2 text-sm font-semibold text-slate-700">
       {label}
-      <div className="flex h-12 items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 focus-within:border-tijuca-500 focus-within:ring-4 focus-within:ring-tijuca-100">
+      <div className="flex h-14 items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 shadow-sm transition focus-within:border-emerald-600 focus-within:ring-4 focus-within:ring-emerald-100">
         <Icon size={18} className="shrink-0 text-slate-400" />
         {children}
       </div>

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://agroflow-sistema.vercel.app';
 const results = [];
@@ -58,6 +58,26 @@ function testSourceContracts() {
   const envExample = readFileSync('.env.example', 'utf8');
 
   assert('Formulario pede senha e confirmacao', login.includes("form.senha") && login.includes("form.confirmarSenha"));
+  assert(
+    'Login usa fotografia local otimizada',
+    login.includes('/images/agroflow-login-silos.webp')
+      && existsSync('public/images/agroflow-login-silos.webp')
+      && statSync('public/images/agroflow-login-silos.webp').size < 500_000,
+  );
+  assert(
+    'Apresentacao institucional contem os textos e beneficios solicitados',
+    login.includes('Gestão integrada.')
+      && login.includes('Resultados que')
+      && login.includes('Segurança')
+      && login.includes('Integração')
+      && login.includes('Controle operacional'),
+  );
+  assert(
+    'Layout preserva formulario abaixo da apresentacao no celular e lado a lado no desktop',
+    login.includes('lg:grid-cols-[minmax(0,1.4fr)_minmax(420px,1fr)]')
+      && login.indexOf('<LoginHero />') < login.indexOf('<aside'),
+  );
+  assert('Ilustracao antiga nao e mais carregada pelo login', !login.includes('/agroflow-login-integrado.png'));
   assert('Evento Auth nao bloqueia o login com chamadas assincronas', auth.includes("onAuthStateChange((_event, nextSession)") && auth.includes('window.setTimeout(() =>'));
   assert('Respostas antigas de autorizacao sao descartadas', auth.includes('authorizationRequestRef') && auth.includes('requestId === authorizationRequestRef.current'));
   assert('Rotas aguardam a autorizacao terminar', auth.includes('setLoading(true)') && auth.includes('setLoading(false)'));
@@ -71,7 +91,13 @@ function testSourceContracts() {
   assert('Navegacao direta preserva a sessao da aba', supabaseClient.includes("window.name.startsWith(AUTH_TAB_NAME_PREFIX)") && !supabaseClient.includes('navigationType'));
   assert('Recuperacao por e-mail preserva verificador PKCE', supabaseClient.includes("key.endsWith('-code-verifier')") && supabaseClient.includes('SHARED_CODE_VERIFIER_KEY'));
   assert('Logout afeta somente a sessao atual', (auth.match(/signOut\(\{ scope: 'local' \}\)/g) || []).length >= 2);
-  assert('Formulario permite mostrar e ocultar senha', login.includes('PasswordVisibilityButton') && login.includes('EyeOff'));
+  assert(
+    'Formulario permite mostrar e ocultar senha no login e na solicitacao',
+    login.includes("function LoginFields")
+      && login.includes("type={showPassword ? 'text' : 'password'}")
+      && (login.match(/PasswordVisibilityButton/g) || []).length >= 4
+      && login.includes('EyeOff'),
+  );
   assert('Frontend valida minimo de 6 caracteres', login.includes('accessForm.senha.length < 6'));
   assert('Frontend valida senhas iguais', login.includes('accessForm.senha !== accessForm.confirmarSenha'));
   assert(
