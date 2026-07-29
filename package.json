@@ -15,6 +15,7 @@
     "test:rbac": "node scripts/test-rbac.mjs",
     "test:resilience": "node scripts/test-resilience.mjs",
     "test:ui": "node scripts/test-ui-contracts.mjs",
+    "test:home": "node scripts/test-home-pos-login.mjs",
     "test:armazenagem": "node scripts/test-armazenagem.mjs",
     "test:balancas-flow": "node scripts/test-balancas-flow.mjs",
     "test:nfe-recebimento": "node scripts/test-nfe-recebimento.mjs",

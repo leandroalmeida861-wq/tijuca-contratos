@@ -78,7 +78,7 @@ export default function Login() {
     };
   }, []);
 
-  if (user && authorized && mode !== 'setPassword') return <Navigate to="/" replace />;
+  if (user && authorized && mode !== 'setPassword') return <Navigate to="/inicio" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();

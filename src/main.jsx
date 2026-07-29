@@ -14,6 +14,7 @@ import AccessDenied from './pages/AccessDenied.jsx';
 import AdminAccessPage from './pages/AdminAccessPage.jsx';
 import AdminSolicitacoes from './pages/AdminSolicitacoes.jsx';
 import AuditLogsPage from './pages/AuditLogsPage.jsx';
+import HomePage from './pages/HomePage.jsx';
 import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
 import './styles/index.css';
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </ProtectedRoute>
             }
           >
+            <Route path="inicio" element={<HomePage />} />
             <Route element={<ContratosGraosLayout />}>
               <Route index element={<AuthorizedHome />} />
               <Route path="contratos" element={<ProtectedRoute menu="contratos"><ManagementPage type="contratos" /></ProtectedRoute>} />
@@ -58,7 +60,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="admin/acessos" element={<ProtectedRoute menu="usuarios"><AdminAccessPage /></ProtectedRoute>} />
             <Route path="admin/auditoria" element={<ProtectedRoute menu="auditoria"><AuditLogsPage /></ProtectedRoute>} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/inicio" replace />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
