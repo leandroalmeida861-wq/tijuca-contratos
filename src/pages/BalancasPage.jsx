@@ -51,6 +51,7 @@ import {
   listRecebimentos,
   loadBalancasOptions,
   lookupTables,
+  marcarNaoComplementarFornecedor,
   rejectRecebimento,
   toUserError,
   updateLookup,
@@ -203,7 +204,7 @@ const defaultLaboratorioForm = {
 };
 
 export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
-  const { can, permissions, podeEditarUnidade } = useAuth();
+  const { can, permissions, podeEditarUnidade, profile } = useAuth();
   const podeEditarNaUnidade = podeEditarUnidade(unidade.codigo);
   // Ponto unico onde a permissao do menu e cruzada com a permissao da unidade.
   const canDaAba = (tabKey) => unidadeScopedCan(scopedBalancasCan(can, permissions, tabKey), podeEditarNaUnidade);
@@ -365,7 +366,22 @@ export default function BalancasPage({ unidade = UNIDADE_PADRAO, aba }) {
       {message && <Alert tone="success" text={message} />}
       {error && activeTab !== 'armazenagem' && <Alert tone="error" text={error} />}
 
-      {activeTab === 'dashboard' && <DashboardTab rows={rows} options={options} filters={filters} setFilters={setFilters} applyFilters={applyFilters} clearFilters={clearFilters} loading={loading} />}
+      {activeTab === 'dashboard' && (
+        <DashboardTab
+          rows={rows}
+          options={options}
+          filters={filters}
+          setFilters={setFilters}
+          applyFilters={applyFilters}
+          clearFilters={clearFilters}
+          loading={loading}
+          balancaId={balancaUnidade?.id}
+          canDecideComplement={['admin', 'gestor'].includes(profile) && podeEditarNaUnidade}
+          reload={load}
+          setError={setError}
+          setMessage={setMessage}
+        />
+      )}
       {activeTab === 'portaria' && <PortariaTab rows={portariaRows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('portaria')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'recebimentos' && <RecebimentosTab rows={rows} options={options} unidade={unidade} balanca={balancaUnidade} can={canDaAba('recebimentos')} loading={loading} reload={load} setError={setError} setMessage={setMessage} />}
       {activeTab === 'laboratorio' && <LaboratorioTab rows={rows} options={options} can={canDaAba('laboratorio')} reload={load} setError={setError} setMessage={setMessage} />}
@@ -473,7 +489,20 @@ function scopedBalancasCan(can, permissions, tabKey) {
 }
 
 
-function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearFilters, loading }) {
+function DashboardTab({
+  rows,
+  options,
+  filters,
+  setFilters,
+  applyFilters,
+  clearFilters,
+  loading,
+  balancaId,
+  canDecideComplement,
+  reload,
+  setError,
+  setMessage,
+}) {
   const recebimentosBalanca = useMemo(() => rows.filter(isRecebimentoFinalizadoBalanca), [rows]);
   const aprovadasLaboratorio = useMemo(() => rows.filter(isAprovadaLaboratorio), [rows]);
   const pendentesFinalizar = useMemo(() => rows.filter(isLaboratorioPendenteBalanca), [rows]);
@@ -492,6 +521,7 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
   const byStatus = useMemo(() => buildDashboardStatus(aprovadasLaboratorio, recebimentosBalanca, pendentesFinalizar), [aprovadasLaboratorio, pendentesFinalizar, recebimentosBalanca]);
   const productsDistribution = useMemo(() => buildProductsDistribution(recebimentosBalanca), [recebimentosBalanca]);
   const supplierDifferences = useMemo(() => buildSupplierDifferences(recebimentosBalanca), [recebimentosBalanca]);
+  const dailyReceivedVolume = useMemo(() => buildDailyReceivedVolume(recebimentosBalanca), [recebimentosBalanca]);
   const supplierMoisture = useMemo(() => buildSupplierMoisture(aprovadasLaboratorio), [aprovadasLaboratorio]);
   const bestSuppliers = useMemo(() => buildBestSuppliersRanking(recebimentosBalanca), [recebimentosBalanca]);
 
@@ -522,11 +552,23 @@ function DashboardTab({ rows, options, filters, setFilters, applyFilters, clearF
           </section>
 
           <section className="grid gap-5 xl:grid-cols-2">
-            <ChartCard title="Distribuição por Produtos">
-              <ProductsPieChart data={productsDistribution} />
-            </ChartCard>
+            <div className="grid content-start gap-5">
+              <ChartCard title="Distribuição por Produtos">
+                <ProductsPieChart data={productsDistribution} />
+              </ChartCard>
+              <ChartCard title="Volume recebido por dia">
+                <DailyReceivedVolumeChart data={dailyReceivedVolume} />
+              </ChartCard>
+            </div>
             <ChartCard title="DIFERENÇA: PESO DA BALANÇA X NOTA">
-              <SupplierDifferenceChart data={supplierDifferences} />
+              <SupplierDifferenceChart
+                data={supplierDifferences}
+                balancaId={balancaId}
+                canDecide={canDecideComplement}
+                reload={reload}
+                setError={setError}
+                setMessage={setMessage}
+              />
             </ChartCard>
           </section>
 
@@ -3421,10 +3463,85 @@ function ProductsPieChart({ data }) {
   );
 }
 
-function SupplierDifferenceChart({ data }) {
+function DailyReceivedVolumeChart({ data }) {
+  if (!data.length) {
+    return <p className="py-10 text-center text-sm font-semibold text-slate-500">Sem recebimentos finalizados no período.</p>;
+  }
+
+  const totalKg = data.reduce((sum, item) => sum + Number(item.kgTotal || 0), 0);
+  const averageKg = totalKg / data.length;
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg bg-emerald-50 px-4 py-3">
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-emerald-700">Total no período</p>
+          <p className="mt-1 text-lg font-extrabold text-slate-950">{formatDashboardKg(totalKg)}</p>
+        </div>
+        <div className="rounded-lg bg-sky-50 px-4 py-3">
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-sky-700">Média por dia</p>
+          <p className="mt-1 text-lg font-extrabold text-slate-950">{formatDashboardKg(averageKg)}</p>
+        </div>
+      </div>
+
+      <div className="h-64 min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 12, right: 12, bottom: 8, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fontWeight: 700 }} interval="preserveStartEnd" />
+            <YAxis
+              width={72}
+              tick={{ fontSize: 10, fontWeight: 700 }}
+              tickFormatter={(value) => Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+            />
+            <Tooltip content={<DailyReceivedVolumeTooltip />} />
+            <Bar dataKey="kgTotal" name="Volume recebido" fill="#059669" radius={[6, 6, 0, 0]} maxBarSize={42} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-xs font-bold text-slate-500">Valores em kg, considerando somente recebimentos finalizados e os filtros atuais.</p>
+    </div>
+  );
+}
+
+function DailyReceivedVolumeTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-lg">
+      <p className="font-extrabold text-slate-900">{item?.dateLabel || '-'}</p>
+      <p className="mt-1 font-bold text-emerald-700">{formatDashboardKg(item?.kgTotal)}</p>
+      <p className="mt-0.5 text-slate-500">{item?.cargas || 0} carga(s)</p>
+    </div>
+  );
+}
+
+function SupplierDifferenceChart({ data, balancaId, canDecide, reload, setError, setMessage }) {
   const [showAll, setShowAll] = useState(false);
+  const [savingKey, setSavingKey] = useState('');
   const visibleData = showAll ? data : data.slice(0, 10);
   const maxDifference = Math.max(...visibleData.map((item) => Math.abs(Number(item.diferencaKg || 0))), 1);
+
+  async function markNoComplement(item) {
+    if (!canDecide) return;
+    if (!window.confirm(`Confirmar que o fornecedor ${item.name} não terá nota complementar para estas cargas?`)) return;
+
+    setSavingKey(item.key);
+    setError('');
+    setMessage('');
+    try {
+      await marcarNaoComplementarFornecedor({
+        balancaId,
+        recebimentoIds: item.recebimentoIds,
+      });
+      setMessage(`Decisão registrada: ${item.name} não será complementado nestas cargas.`);
+      await reload();
+    } catch (error) {
+      setError(toUserError(error));
+    } finally {
+      setSavingKey('');
+    }
+  }
 
   return (
     <div className="grid min-w-0 gap-4">
@@ -3455,7 +3572,7 @@ function SupplierDifferenceChart({ data }) {
 
             return (
               <article
-                key={item.name}
+                key={item.key}
                 className={`rounded-lg border p-3 ${isPositive ? 'border-blue-100 bg-blue-50/40' : 'border-red-100 bg-red-50/50'}`}
               >
                 <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(150px,0.9fr)_minmax(150px,1.4fr)_auto] lg:items-center">
@@ -3483,7 +3600,16 @@ function SupplierDifferenceChart({ data }) {
                     {isPositive ? (
                       <>
                         <span className="rounded-md border border-blue-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-blue-700">Complementar nota</span>
-                        <span className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-extrabold text-slate-600">Não complementar</span>
+                        {canDecide && (
+                          <button
+                            type="button"
+                            onClick={() => markNoComplement(item)}
+                            disabled={savingKey === item.key}
+                            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-extrabold text-slate-600 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60"
+                          >
+                            {savingKey === item.key ? 'Salvando...' : 'Não complementar'}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <span className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-extrabold text-red-700">Revisar nota</span>
@@ -5210,17 +5336,54 @@ function buildSupplierDifferences(rows) {
   const map = new Map();
 
   rows.forEach((row) => {
+    if (hasNoComplementDecision(row)) return;
     const key = fornecedorGroupKey(row);
-    const current = map.get(key) || { name: fornecedorNome(row, 'Sem fornecedor'), kgNota: 0, kgRecebido: 0, diferencaKg: 0 };
+    const current = map.get(key) || {
+      key,
+      name: fornecedorNome(row, 'Sem fornecedor'),
+      kgNota: 0,
+      kgRecebido: 0,
+      diferencaKg: 0,
+      recebimentoIds: [],
+    };
     current.kgNota += pesoNotaAgregado(row);
     current.kgRecebido += Number(row.peso_liquido || 0);
     current.diferencaKg = current.kgRecebido - current.kgNota;
+    current.recebimentoIds.push(row.id);
     map.set(key, current);
   });
 
   return Array.from(map.values())
     .filter((item) => Math.abs(Number(item.diferencaKg || 0)) > Number.EPSILON)
     .sort((a, b) => Math.abs(b.diferencaKg) - Math.abs(a.diferencaKg));
+}
+
+function hasNoComplementDecision(row) {
+  const decisions = Array.isArray(row?.decisoes_complemento)
+    ? row.decisoes_complemento
+    : [row?.decisoes_complemento].filter(Boolean);
+  return decisions.some((item) => item?.decisao === 'NAO_COMPLEMENTAR');
+}
+
+function buildDailyReceivedVolume(rows) {
+  const map = new Map();
+
+  rows.forEach((row) => {
+    const date = String(row.data || '').slice(0, 10);
+    if (!date) return;
+    const current = map.get(date) || { date, kgTotal: 0, cargas: 0 };
+    current.kgTotal += Number(row.peso_liquido || 0);
+    current.cargas += 1;
+    map.set(date, current);
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((item) => ({
+      ...item,
+      label: dateBr(item.date).slice(0, 5),
+      dateLabel: dateBr(item.date),
+    }));
 }
 
 function buildSupplierMoisture(rows) {

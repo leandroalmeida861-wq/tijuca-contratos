@@ -53,6 +53,7 @@ const strictDuplicateMigration = await readFile(new URL('../supabase/recebimento
 const automaticLabMigration = await readFile(new URL('../supabase/portaria-envio-automatico-laboratorio.sql', import.meta.url), 'utf8');
 const synchronizedPortariaMigration = await readFile(new URL('../supabase/portaria-sincronizar-edicao-exclusao.sql', import.meta.url), 'utf8');
 const portariaLookupPermissionsMigration = await readFile(new URL('../supabase/portaria-permitir-cadastro-veiculos-motoristas.sql', import.meta.url), 'utf8');
+const dashboardDecisionMigration = await readFile(new URL('../supabase/dashboard-nao-complementar-fornecedor.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -325,6 +326,43 @@ assert.ok(
     && page.includes('Não complementar')
     && page.includes('Revisar nota'),
   'Grafico de diferencas deve exibir as opcoes solicitadas',
+);
+assert.ok(
+  page.includes("['admin', 'gestor'].includes(profile) && podeEditarNaUnidade"),
+  'Somente Admin e Gestor com edicao na unidade devem receber a acao Nao complementar',
+);
+assert.ok(
+  page.includes('await marcarNaoComplementarFornecedor({')
+    && page.includes('recebimentoIds: item.recebimentoIds'),
+  'Nao complementar deve persistir a decisao dos recebimentos do fornecedor',
+);
+assert.ok(
+  page.includes('if (hasNoComplementDecision(row)) return;'),
+  'Recebimentos marcados como Nao complementar devem sair do grafico',
+);
+assert.ok(
+  page.includes('function DailyReceivedVolumeChart({ data })')
+    && page.includes('function buildDailyReceivedVolume(rows)'),
+  'Dashboard deve preencher o espaco com o grafico de volume recebido por dia',
+);
+assert.ok(
+  service.includes("supabase.rpc('agroflow_marcar_nao_complementar'")
+    && service.includes('p_balanca_id: unidadeId')
+    && service.includes('p_recebimento_ids: ids'),
+  'Servico deve delegar a decisao ao backend com unidade e recebimentos validados',
+);
+assert.ok(
+  dashboardDecisionMigration.includes("not in ('admin', 'gestor')")
+    && dashboardDecisionMigration.includes('public.agroflow_pode_editar_unidade(p_balanca_id)')
+    && dashboardDecisionMigration.includes('r.balanca_id = p_balanca_id')
+    && dashboardDecisionMigration.includes("r.status = 'aprovada'"),
+  'Backend deve restringir a decisao a Admin/Gestor, unidade autorizada e recebimentos finalizados',
+);
+assert.ok(
+  dashboardDecisionMigration.includes("raise exception 'DIFERENCA_NAO_POSITIVA'")
+    && dashboardDecisionMigration.includes("'nao_complementar_fornecedor'")
+    && dashboardDecisionMigration.includes('insert into public.audit_logs'),
+  'Backend deve validar diferenca positiva e auditar a decisao',
 );
 
 console.log('Testes do fluxo Portaria/Laboratório/Recebimentos aprovados.');

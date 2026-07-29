@@ -45,6 +45,14 @@ const RECEBIMENTO_SELECT = `
     criado_em,
     atualizado_em,
     fornecedor:fornecedores(id,nome,cnpj)
+  ),
+  decisoes_complemento:recebimento_decisoes_complemento(
+    id,
+    recebimento_id,
+    balanca_id,
+    decisao,
+    decidido_por,
+    decidido_em
   )
 `;
 
@@ -157,6 +165,19 @@ export async function listRecebimentos(filters = {}) {
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+export async function marcarNaoComplementarFornecedor({ balancaId, recebimentoIds = [] } = {}) {
+  const unidadeId = requireUnidadeScope({ balancaId });
+  const ids = [...new Set(recebimentoIds.map((id) => requireRecordId(id, 'recebimento')))];
+  if (!ids.length) throw new Error('RECEBIMENTOS_INVALIDOS');
+
+  const { data, error } = await supabase.rpc('agroflow_marcar_nao_complementar', {
+    p_balanca_id: unidadeId,
+    p_recebimento_ids: ids,
+  });
+  if (error) throw error;
+  return Number(data || 0);
 }
 
 export async function listPortariaEntradas(escopo = {}) {
@@ -565,6 +586,18 @@ export function toUserError(error) {
   }
   if (lower.includes('unidade_divergente')) {
     return 'O registro vinculado pertence a outra unidade. A operacao foi bloqueada para evitar lancamento na balanca errada.';
+  }
+  if (lower.includes('somente_admin_gestor')) {
+    return 'Somente usuários Admin ou Gestor podem decidir não complementar o fornecedor.';
+  }
+  if (lower.includes('sem_permissao_unidade') || lower.includes('recebimento_fora_da_unidade')) {
+    return 'A ação foi bloqueada porque o recebimento não pertence a uma unidade que você pode editar.';
+  }
+  if (lower.includes('fornecedor_divergente') || lower.includes('diferenca_nao_positiva')) {
+    return 'Os dados do gráfico mudaram. Atualize o Dashboard e tente novamente.';
+  }
+  if (lower.includes('recebimentos_invalidos')) {
+    return 'Não foi possível identificar os recebimentos deste fornecedor. Atualize o Dashboard e tente novamente.';
   }
   if (lower.includes('registro_nao_encontrado_na_unidade')) {
     return 'A entrada não foi encontrada nesta unidade. Atualize a página e tente novamente.';
