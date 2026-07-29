@@ -51,5 +51,10 @@ assert.ok(
     && !home.includes('function FarmBackdrop'),
   'A Home deve usar o fundo fotografico de silos e plantacao.',
 );
+assert.ok(
+  home.indexOf('Informações e Notícias') > home.indexOf('src="/agroflow-home-silos.png"')
+    && home.indexOf('Módulos liberados para você') > home.indexOf('Informações e Notícias'),
+  'A Home deve exibir noticias entre o banner e os modulos permitidos.',
+);
 
 console.log('Testes da pagina inicial pos-login aprovados.');

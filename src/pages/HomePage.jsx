@@ -6,14 +6,18 @@ import {
   Database,
   History,
   Leaf,
+  Newspaper,
   Scale,
   ShieldCheck,
   Wheat,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CONTRATOS_GRAOS_TABS } from '../components/ContratosGraosLayout.jsx';
+import NewsCard from '../components/noticias/NewsCard.jsx';
 import { UNIDADES, rotaInicialDaUnidade } from '../config/unidades.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { listPublishedNews } from '../services/noticiasService.js';
 
 const CADASTRO_LINKS = [
   { to: '/fornecedores', label: 'Fornecedores', menu: 'fornecedores' },
@@ -105,6 +109,28 @@ export default function HomePage() {
   const { can, podeAcessarUnidade, profileData } = useAuth();
   const shortcuts = buildAllowedShortcuts(can, podeAcessarUnidade);
   const firstName = getFirstName(profileData?.nome || profileData?.email);
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    listPublishedNews({ limit: 4, featuredFirst: true })
+      .then((items) => {
+        if (active) setNews(items);
+      })
+      .catch((error) => {
+        if (active) setNewsError(error.message);
+      })
+      .finally(() => {
+        if (active) setNewsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="mx-auto grid w-full max-w-[1500px] gap-5 sm:gap-6">
@@ -157,6 +183,48 @@ export default function HomePage() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_16px_45px_rgba(15,23,42,0.08)] sm:p-6 lg:p-7">
+        <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
+              <Newspaper aria-hidden="true" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Conteúdo selecionado</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">Informações e Notícias</h2>
+            </div>
+          </div>
+          <Link
+            to="/noticias"
+            className="inline-flex min-h-10 items-center gap-2 self-start rounded-xl px-3 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100 sm:self-auto"
+          >
+            Ver todas as notícias
+            <ArrowRight aria-hidden="true" className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {newsLoading ? (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm font-bold text-slate-500">
+            Carregando notícias...
+          </div>
+        ) : null}
+        {newsError ? (
+          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-5 text-sm font-bold text-amber-900">
+            {newsError}
+          </div>
+        ) : null}
+        {!newsLoading && !newsError && !news.length ? (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm font-bold text-slate-500">
+            Nenhuma notícia publicada no momento.
+          </div>
+        ) : null}
+        {news.length ? (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {news.map((item) => <NewsCard key={item.id} news={item} />)}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_16px_45px_rgba(15,23,42,0.08)] sm:p-6 lg:p-7">
         <div className="flex flex-col gap-2 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Seu ambiente de trabalho</p>
@@ -179,6 +247,10 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <footer className="px-4 pb-2 text-center text-xs font-semibold text-slate-500">
+        AgroFlow © {new Date().getFullYear()} — Gestão inteligente do agronegócio.
+      </footer>
     </div>
   );
 }
