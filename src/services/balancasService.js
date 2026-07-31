@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase.js';
 import { classifyRequestError } from '../lib/reliableFetch.js';
+import * as XLSX from 'xlsx';
 
 const RECEBIMENTO_SELECT = `
   *,
@@ -499,8 +500,8 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'Placa',
     'Peso bruto',
     'Tara',
-    'Peso líquido',
-    'Peso - Quantidade',
+    'Peso de chegada',
+    'Peso da nota',
     'Quantidade NF',
     'Unidade NF',
     'Valor unitario',
@@ -510,7 +511,7 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'Umidade',
     'Diferenca KG',
     'Chave da NF-e complementar',
-    'Observacao complemento',
+    'Observacao',
     'Umidade 01',
     'Umidade 02',
     'Umidade media',
@@ -526,14 +527,14 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     row.nf_numero,
     row.balanca?.nome,
     row.fornecedor?.nome || row.fornecedor_nome_manual,
-    row.produto?.nome || row.produto_nome_manual,
+    row.produto_relatorio || row.produto?.nome || row.produto_nome_manual,
     row.veiculo_placa_manual || row.veiculo?.placa,
     row.peso_bruto,
     row.tara,
-    row.peso_liquido,
-    row.peso_nf,
-    row.quantidade_nota,
-    row.unidade_nota,
+    row.peso_chegada_relatorio ?? row.peso_liquido,
+    row.peso_nota_relatorio ?? row.peso_nf,
+    row.quantidade_produto_exportacao ?? row.quantidade_nota,
+    row.unidade_produto_exportacao ?? row.unidade_nota,
     row.valor_unitario,
     row.valor_principal_relatorio ?? row.valor_total,
     row.valor_complemento_relatorio ?? 0,
@@ -549,6 +550,26 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     row.motivo_reprovacao,
     row.motivo_cancelamento,
   ]);
+  if (body.length) {
+    const totals = rows.reduce((acc, row) => {
+      acc.chegada += Number(row.peso_chegada_relatorio ?? row.peso_liquido ?? 0);
+      acc.nota += Number(row.peso_nota_relatorio ?? row.peso_nf ?? 0);
+      acc.principal += Number(row.valor_principal_relatorio ?? row.valor_total ?? 0);
+      acc.complemento += Number(row.valor_complemento_relatorio ?? 0);
+      acc.agregado += Number(row.valor_agregado_relatorio ?? row.valor_total ?? 0);
+      acc.diferenca += Number(row.diferenca_relatorio ?? row.diferenca_kg ?? 0);
+      return acc;
+    }, { chegada: 0, nota: 0, principal: 0, complemento: 0, agregado: 0, diferenca: 0 });
+    const totalRow = new Array(headers.length).fill('');
+    totalRow[0] = 'TOTAL GERAL';
+    totalRow[11] = totals.chegada;
+    totalRow[12] = totals.nota;
+    totalRow[16] = totals.principal;
+    totalRow[17] = totals.complemento;
+    totalRow[18] = totals.agregado;
+    totalRow[20] = totals.diferenca;
+    body.push(totalRow);
+  }
   const csv = [headers, ...body].map((line) => line.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -559,9 +580,63 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
   URL.revokeObjectURL(url);
 }
 
+export function exportRecebimentosExcel(rows, fileName = 'recebimentos-balancas.xlsx') {
+  const body = rows.map((row) => ({
+    Data: row.data,
+    'Tipo da nota': row.tipo_nota_relatorio || 'Principal',
+    'NF principal': row.nf_principal_relatorio || row.nf_numero,
+    'NF complementar': row.nf_complementar_relatorio || '',
+    Fornecedor: row.fornecedor?.nome || row.fornecedor_nome_manual,
+    Produto: row.produto_relatorio || row.produto?.nome || row.produto_nome_manual,
+    Placa: row.veiculo_placa_manual || row.veiculo?.placa,
+    'Peso de chegada': row.peso_chegada_relatorio ?? row.peso_liquido,
+    'Peso da nota': row.peso_nota_relatorio ?? row.peso_nf,
+    'Quantidade do produto': row.quantidade_produto_exportacao ?? row.quantidade_nota,
+    Unidade: row.unidade_produto_exportacao ?? row.unidade_nota,
+    'Valor unitário': row.valor_unitario,
+    'Valor principal': row.valor_principal_relatorio ?? row.valor_total,
+    'Valor complemento': row.valor_complemento_relatorio ?? 0,
+    'Total agregado': row.valor_agregado_relatorio ?? row.valor_total,
+    Umidade: row.umidade_relatorio ?? row.umidade ?? '',
+    Observacao: row.observacao_complementar_relatorio || '',
+    'Diferença kg': row.diferenca_relatorio ?? row.diferenca_kg,
+  }));
+  if (body.length) {
+    const totals = rows.reduce((acc, row) => {
+      acc.chegada += Number(row.peso_chegada_relatorio ?? row.peso_liquido ?? 0);
+      acc.nota += Number(row.peso_nota_relatorio ?? row.peso_nf ?? 0);
+      acc.principal += Number(row.valor_principal_relatorio ?? row.valor_total ?? 0);
+      acc.complemento += Number(row.valor_complemento_relatorio ?? 0);
+      acc.agregado += Number(row.valor_agregado_relatorio ?? row.valor_total ?? 0);
+      acc.diferenca += Number(row.diferenca_relatorio ?? row.diferenca_kg ?? 0);
+      return acc;
+    }, { chegada: 0, nota: 0, principal: 0, complemento: 0, agregado: 0, diferenca: 0 });
+    body.push({
+      Data: 'TOTAL GERAL',
+      'Peso de chegada': totals.chegada,
+      'Peso da nota': totals.nota,
+      'Valor principal': totals.principal,
+      'Valor complemento': totals.complemento,
+      'Total agregado': totals.agregado,
+      'Diferença kg': totals.diferenca,
+    });
+  }
+  const worksheet = XLSX.utils.json_to_sheet(body.length ? body : [{ Aviso: 'Nenhum recebimento encontrado' }]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Recebimentos');
+  XLSX.writeFile(workbook, fileName);
+}
+
 export function toUserError(error) {
   const message = String(error?.message || error || '');
   const lower = message.toLowerCase();
+  if (lower.includes('nota_fiscal_ja_vinculada')
+    || lower.includes('recebimento_complementos_recebimento_nf_serie_unica')
+    || lower.includes('recebimentos_fornecedor_nf_unica_idx')
+    || lower.includes('recebimentos_nf_chave_unica')
+    || lower.includes('recebimento_notas_complementares_chave_unica')) {
+    return 'Esta nota fiscal já está vinculada a um recebimento nesta unidade. Revise o lançamento existente.';
+  }
   if (String(error?.code || '') === '23505' && lower.includes('nf duplicada')) {
     return 'NF duplicada para este fornecedor nesta unidade. Edite o lançamento existente ou confira o número da NF.';
   }

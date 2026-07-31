@@ -54,6 +54,7 @@ const automaticLabMigration = await readFile(new URL('../supabase/portaria-envio
 const synchronizedPortariaMigration = await readFile(new URL('../supabase/portaria-sincronizar-edicao-exclusao.sql', import.meta.url), 'utf8');
 const portariaLookupPermissionsMigration = await readFile(new URL('../supabase/portaria-permitir-cadastro-veiculos-motoristas.sql', import.meta.url), 'utf8');
 const dashboardDecisionMigration = await readFile(new URL('../supabase/dashboard-nao-complementar-fornecedor.sql', import.meta.url), 'utf8');
+const linkedInvoicesMigration = await readFile(new URL('../supabase/recebimentos-validar-notas-vinculadas.sql', import.meta.url), 'utf8');
 
 assert.ok(
   page.includes("const canSendToLab = can('balancas', 'aprovar') || canCreate"),
@@ -363,6 +364,94 @@ assert.ok(
     && dashboardDecisionMigration.includes("'nao_complementar_fornecedor'")
     && dashboardDecisionMigration.includes('insert into public.audit_logs'),
   'Backend deve validar diferenca positiva e auditar a decisao',
+);
+assert.ok(
+  page.includes("'Qtd. produto', 'Unid.'")
+    && page.includes("['Qtd.', 42]")
+    && page.includes("reportQuantity(row),")
+    && page.includes("reportUnit(row),"),
+  'Tabela e PDF devem exibir a quantidade e a unidade do produto de cada nota',
+);
+assert.ok(
+  page.includes('function buildRecebimentoReportRows(rows, mode)')
+    && page.includes('return rows.map((row) => ({')
+    && !page.includes('return [...principais, ...complementos]')
+    && !page.includes("tipo_nota_relatorio: `Complemento da NF"),
+  'Relatorio deve produzir uma unica linha por recebimento fisico, inclusive no modo detalhado',
+);
+assert.ok(
+  page.includes("nf_complementar_relatorio: (row.complementos || []).map((item) => item.numero_nf)")
+    && page.includes('valor_complemento_relatorio: complementosTotal(row.complementos)')
+    && page.includes('valor_agregado_relatorio: valorTotalAgregado(row)'),
+  'Complementos devem permanecer vinculados na linha principal e somar somente seu valor',
+);
+assert.ok(
+  page.includes("'Placa', 'Peso chegada', 'Peso nota'")
+    && page.includes("['Placa', 38]")
+    && page.includes("['Chegada', 45]")
+    && page.includes("['Peso NF', 45]")
+    && page.includes('peso_chegada_relatorio: Number(row.peso_liquido || 0)')
+    && page.includes('peso_nota_relatorio: pesoNotaAgregado(row)'),
+  'Tela e PDF devem exibir placa, peso de chegada e peso da nota sem repetir a carga',
+);
+assert.ok(
+  page.includes('`Placa: ${placaVeiculo(row)')
+    && page.includes('`Peso da nota: ${kg(pesoNotaAgregado(row))}`')
+    && page.includes('`Peso de chegada: ${kg(row.peso_liquido)}`')
+    && service.includes("Observacao: row.observacao_complementar_relatorio || ''"),
+  'Observacao da tela, CSV, Excel e PDF deve repetir placa, peso da nota e peso de chegada',
+);
+assert.ok(
+  service.includes("totalRow[11] = totals.chegada")
+    && service.includes("totalRow[12] = totals.nota")
+    && service.includes("totalRow[18] = totals.agregado"),
+  'CSV deve totalizar os mesmos pesos e valor agregado da tela e do PDF',
+);
+assert.ok(
+  page.includes('exportRecebimentosExcel(displayRows)')
+    && service.includes('export function exportRecebimentosExcel(rows')
+    && service.includes("XLSX.utils.book_append_sheet(workbook, worksheet, 'Recebimentos')")
+    && service.includes("'Total agregado': totals.agregado"),
+  'Excel deve usar as linhas consolidadas e os mesmos totais da tela, CSV e PDF',
+);
+assert.ok(
+  page.includes('if (difference > 0) doc.setTextColor(29, 78, 216);')
+    && page.includes('else if (difference < 0) doc.setTextColor(190, 18, 60);')
+    && page.includes("if (numeric > 0) return 'font-extrabold text-blue-700';")
+    && page.includes("if (numeric < 0) return 'font-extrabold text-rose-700';"),
+  'Diferenca deve ficar azul quando positiva e vermelha quando negativa na tela e no PDF',
+);
+assert.ok(
+  linkedInvoicesMigration.includes('recebimento_complementos_recebimento_nf_serie_unica')
+    && linkedInvoicesMigration.includes('public.agroflow_nf_numero_normalizado(numero_nf)')
+    && linkedInvoicesMigration.includes('public.agroflow_nf_serie_normalizada(serie)'),
+  'Banco deve impedir repeticao da mesma NF complementar no recebimento por numero e serie',
+);
+assert.ok(
+  linkedInvoicesMigration.includes('private.agroflow_validar_nota_complementar_vinculada')
+    && linkedInvoicesMigration.includes('r.balanca_id = recebimento_pai.balanca_id')
+    && linkedInvoicesMigration.includes('c.id is distinct from new.id')
+    && linkedInvoicesMigration.includes('coalesce(c.fornecedor_id, r.fornecedor_id) = fornecedor_nota'),
+  'Trigger deve validar unidade e fornecedor sem acusar o proprio complemento durante edicao',
+);
+assert.ok(
+  linkedInvoicesMigration.includes('r.balanca_id = new.balanca_id')
+    && linkedInvoicesMigration.includes('public.agroflow_nf_serie_normalizada(c.serie) = new_serie')
+    && linkedInvoicesMigration.includes('new.nf_chave_acesso')
+    && linkedInvoicesMigration.includes('new.chave_nfe'),
+  'NF principal e complementar devem validar unidade, numero, serie e chave no backend',
+);
+assert.ok(
+  linkedInvoicesMigration.includes("raise exception 'NOTA_FISCAL_JA_VINCULADA'")
+    && service.includes('recebimentos_fornecedor_nf_unica_idx')
+    && service.includes('Esta nota fiscal já está vinculada a um recebimento nesta unidade. Revise o lançamento existente.'),
+  'Duplicidade deve produzir a mensagem clara solicitada',
+);
+assert.ok(
+  !/\bdelete\s+from\b/i.test(linkedInvoicesMigration)
+    && !/\btruncate\b/i.test(linkedInvoicesMigration)
+    && !/\bupdate\s+public\./i.test(linkedInvoicesMigration),
+  'Migration de duplicidade nao pode alterar nem excluir dados existentes',
 );
 
 console.log('Testes do fluxo Portaria/Laboratório/Recebimentos aprovados.');
