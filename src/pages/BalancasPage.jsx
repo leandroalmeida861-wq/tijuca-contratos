@@ -44,6 +44,7 @@ import {
   deletePortariaEntrada,
   deleteRecebimento,
   exportRecebimentosCsv,
+  exportRecebimentosExcel,
   findDuplicateRecebimentoNotaFornecedor,
   findRecebimentoByPortariaId,
   listLookup,
@@ -1222,9 +1223,30 @@ function HumidityReadings({ row }) {
 }
 
 function reportQuantity(row) {
-  if ((row.complementos || []).length > 0 && pesoNotaAgregado(row) > 0) return formatWeightPt(pesoNotaAgregado(row));
+  if (row.quantidade_produto_relatorio !== null && row.quantidade_produto_relatorio !== undefined && row.quantidade_produto_relatorio !== '') {
+    return formatWeightPt(row.quantidade_produto_relatorio);
+  }
+  if (Array.isArray(row.itens) && row.itens.length) {
+    return row.itens
+      .slice()
+      .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+      .map((item) => formatWeightPt(item.quantidade))
+      .join(' | ');
+  }
   const quantity = row.quantidade_nota ?? row.peso_nf;
   return quantity === null || quantity === undefined || quantity === '' ? '-' : formatWeightPt(quantity);
+}
+
+function reportUnit(row) {
+  if (row.unidade_produto_relatorio) return String(row.unidade_produto_relatorio).trim().toUpperCase();
+  if (Array.isArray(row.itens) && row.itens.length) {
+    return row.itens
+      .slice()
+      .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))
+      .map((item) => String(item.unidade || row.unidade_nota || 'KG').trim().toUpperCase())
+      .join(' | ');
+  }
+  return String(row.unidade_nota || 'KG').trim().toUpperCase();
 }
 
 function formatCurrencyCell(value, compact = false) {
@@ -2836,80 +2858,16 @@ function LookupCrud({ config, can, setError, setMessage, reloadMain }) {
 }
 
 function buildRecebimentoReportRows(rows, mode) {
-  if (mode === 'principal') {
-    return rows.map((row) => ({
-      ...row,
-      tipo_nota_relatorio: 'Principal',
-      nf_principal_relatorio: row.nf_numero || '-',
-      nf_complementar_relatorio: '-',
-      valor_principal_relatorio: valorPrincipalRecebimento(row),
-      valor_complemento_relatorio: 0,
-      total_complementos_relatorio: complementosTotal(row.complementos),
-      valor_agregado_relatorio: valorPrincipalRecebimento(row),
-      valor_unitario_relatorio: row.valor_unitario,
-      umidade_relatorio: humidityText(row),
-      diferenca_relatorio: diferencaAgregada(row),
-      chave_complementar_relatorio: '-',
-      observacao_complementar_relatorio: '-',
-    }));
-  }
-
-  if (mode === 'detalhado') {
-    return rows.flatMap((row) => {
-      const itens = Array.isArray(row.itens) && row.itens.length ? row.itens : [{
-        id: 'legacy',
-        produto_id: row.produto_id,
-        produto: row.produto,
-        quantidade: row.quantidade_nota ?? row.peso_nf,
-        unidade: row.unidade_nota,
-        valor_unitario: row.valor_unitario,
-        valor_total: row.valor_total,
-      }];
-      const principais = itens.map((item, index) => ({
-        ...row,
-        id: `${row.id}-principal-${item.id || index}`,
-        produto_id: item.produto_id || row.produto_id,
-        produto: item.produto || row.produto,
-        quantidade_nota: item.quantidade ?? row.quantidade_nota,
-        unidade_nota: item.unidade || row.unidade_nota,
-        tipo_nota_relatorio: 'Principal',
-        nf_principal_relatorio: row.nf_numero || '-',
-        nf_complementar_relatorio: '-',
-        valor_principal_relatorio: Number(item.valor_total ?? valorPrincipalRecebimento(row) ?? 0),
-        valor_complemento_relatorio: 0,
-        total_complementos_relatorio: complementosTotal(row.complementos),
-        valor_agregado_relatorio: valorTotalAgregado(row),
-        valor_unitario_relatorio: item.valor_unitario ?? row.valor_unitario,
-        umidade_relatorio: humidityText(row),
-        diferenca_relatorio: diferencaAgregada(row),
-        chave_complementar_relatorio: '-',
-        observacao_complementar_relatorio: '-',
-      }));
-      const complementos = (row.complementos || []).map((item) => ({
-        ...row,
-        id: `${row.id}-comp-${item.id}`,
-        tipo_nota_relatorio: `Complemento da NF ${row.nf_numero || '-'}`,
-        nf_principal_relatorio: row.nf_numero || '-',
-        nf_complementar_relatorio: item.numero_nf || '-',
-        valor_principal_relatorio: valorPrincipalRecebimento(row),
-        valor_complemento_relatorio: Number(item.valor_total || 0),
-        total_complementos_relatorio: complementosTotal(row.complementos),
-        valor_agregado_relatorio: valorTotalAgregado(row),
-        valor_unitario_relatorio: item.valor_unitario ?? row.valor_unitario,
-        umidade_relatorio: humidityText(row),
-        diferenca_relatorio: diferencaAgregada(row),
-        chave_complementar_relatorio: item.chave_nfe || '-',
-        observacao_complementar_relatorio: item.observacao || '-',
-      }));
-      return [...principais, ...complementos];
-    });
-  }
-
   return rows.map((row) => ({
     ...row,
-    tipo_nota_relatorio: 'Principal + complementos',
+    tipo_nota_relatorio: (row.complementos || []).length ? 'Principal + complementos' : 'Principal',
     nf_principal_relatorio: row.nf_numero || '-',
     nf_complementar_relatorio: (row.complementos || []).map((item) => item.numero_nf).filter(Boolean).join(', ') || '-',
+    produto_relatorio: produtoNome(row),
+    quantidade_produto_exportacao: reportQuantity(row),
+    unidade_produto_exportacao: reportUnit(row),
+    peso_chegada_relatorio: Number(row.peso_liquido || 0),
+    peso_nota_relatorio: pesoNotaAgregado(row),
     valor_principal_relatorio: valorPrincipalRecebimento(row),
     valor_complemento_relatorio: complementosTotal(row.complementos),
     total_complementos_relatorio: complementosTotal(row.complementos),
@@ -2917,8 +2875,18 @@ function buildRecebimentoReportRows(rows, mode) {
     valor_unitario_relatorio: row.valor_unitario,
     umidade_relatorio: humidityText(row),
     diferenca_relatorio: diferencaAgregada(row),
-    chave_complementar_relatorio: (row.complementos || []).map((item) => item.chave_nfe).filter(Boolean).join(', ') || '-',
-    observacao_complementar_relatorio: (row.complementos || []).map((item) => item.observacao).filter(Boolean).join(' | ') || '-',
+    chave_complementar_relatorio: mode === 'detalhado'
+      ? (row.complementos || []).map((item) => item.chave_nfe).filter(Boolean).join(', ') || '-'
+      : '-',
+    observacao_complementar_relatorio: [
+      `Placa: ${placaVeiculo(row) || '-'}`,
+      `Peso da nota: ${kg(pesoNotaAgregado(row))}`,
+      `Peso de chegada: ${kg(row.peso_liquido)}`,
+      row.observacao ? `Observacao informada: ${row.observacao}` : '',
+      mode === 'detalhado'
+        ? (row.complementos || []).map((item) => item.observacao).filter(Boolean).map((value) => `Complemento: ${value}`).join(' | ')
+        : '',
+    ].filter(Boolean).join(' | '),
   }));
 }
 
@@ -2927,6 +2895,14 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
   const reportRows = sortReportRows(rows.filter((row) => !isLaboratorioPendenteBalanca(row)));
   const displayRows = buildRecebimentoReportRows(reportRows, reportMode);
   const ignoredRows = rows.length - reportRows.length;
+  const reportTotals = displayRows.reduce((acc, row) => {
+    acc.pesoChegada += Number(row.peso_chegada_relatorio || 0);
+    acc.pesoNota += Number(row.peso_nota_relatorio || 0);
+    acc.valorPrincipal += Number(row.valor_principal_relatorio || 0);
+    acc.valorComplemento += Number(row.valor_complemento_relatorio || 0);
+    acc.totalAgregado += Number(row.valor_agregado_relatorio || 0);
+    return acc;
+  }, { pesoChegada: 0, pesoNota: 0, valorPrincipal: 0, valorComplemento: 0, totalAgregado: 0 });
 
   return (
     <div className="grid gap-4">
@@ -2945,6 +2921,9 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
               <button type="button" onClick={() => exportRecebimentosCsv(displayRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                 <Download size={16} /> Exportar CSV
               </button>
+              <button type="button" onClick={() => exportRecebimentosExcel(displayRows)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-emerald-300 px-4 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+                <Download size={16} /> Exportar Excel
+              </button>
               <button type="button" onClick={() => exportRecebimentosPdf(displayRows, filters)} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800">
                 <Download size={16} /> Baixar PDF
               </button>
@@ -2953,10 +2932,24 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           <Select label="Modelo do relatório" value={reportMode} onChange={setReportMode} options={[
-            { id: 'principal', nome: 'Somente NF principal' },
-            { id: 'consolidado', nome: 'Principal + complementos consolidado' },
-            { id: 'detalhado', nome: 'Detalhado por nota fiscal' },
+            { id: 'consolidado', nome: 'Consolidado por recebimento' },
+            { id: 'detalhado', nome: 'Recebimento com detalhes das NFs' },
           ]} />
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          {[
+            ['Recebimentos', String(displayRows.length)],
+            ['Peso chegada', kg(reportTotals.pesoChegada)],
+            ['Peso da nota', kg(reportTotals.pesoNota)],
+            ['Valor principal', formatCurrencyCell(reportTotals.valorPrincipal)],
+            ['Valor complementar', formatCurrencyCell(reportTotals.valorComplemento)],
+            ['Total agregado', formatCurrencyCell(reportTotals.totalAgregado)],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">{label}</p>
+              <p className="mt-1 text-sm font-extrabold text-slate-900">{value}</p>
+            </div>
+          ))}
         </div>
       </div>
       <RelatorioRecebimentosTable rows={displayRows} />
@@ -2965,7 +2958,7 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
 }
 
 function RelatorioRecebimentosTable({ rows }) {
-  const headers = ['Data', 'Tipo da nota', 'NF principal', 'NF complementar', 'Fornecedor', 'Produto', 'Placa', 'Líquido', 'Qtd. NF', 'Valor unit.', 'Valor principal', 'Valor complemento', 'Total agregado', 'Umidade', 'Diferença', 'Chave complementar', 'Observação'];
+  const headers = ['Data', 'Tipo da nota', 'NF principal', 'NF complementar', 'Fornecedor', 'Produto', 'Placa', 'Peso chegada', 'Peso nota', 'Qtd. produto', 'Unid.', 'Valor unit.', 'Valor principal', 'Valor complemento', 'Total agregado', 'Umidade', 'Diferença', 'Chave complementar', 'Observação'];
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-panel">
@@ -2983,8 +2976,10 @@ function RelatorioRecebimentosTable({ rows }) {
               <td className="px-4 py-3">{fornecedorNome(row)}</td>
               <td className="px-4 py-3">{produtoNome(row)}</td>
               <td className="px-4 py-3"><PlateTag value={placaVeiculo(row)} /></td>
-              <td className="px-4 py-3 font-bold">{kg(row.peso_liquido)}</td>
+              <td className="px-4 py-3 font-bold">{kg(row.peso_chegada_relatorio)}</td>
+              <td className="px-4 py-3 font-bold">{kg(row.peso_nota_relatorio)}</td>
               <td className="px-4 py-3">{reportQuantity(row)}</td>
+              <td className="px-4 py-3 font-semibold">{reportUnit(row)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_unitario_relatorio, true)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_principal_relatorio)}</td>
               <td className="px-4 py-3">{formatCurrencyCell(row.valor_complemento_relatorio)}</td>
@@ -3034,14 +3029,14 @@ function exportRecebimentosPdf(rows, filters = {}) {
   doc.setTextColor(15, 23, 42);
   let y = 82;
   const summary = [
-    ['Registros', String(rows.length)],
-    ['KG liquido', kg(totals.liquido)],
-    ['KG nota', kg(totals.nota)],
-    ['Diferenca', kg(totals.diferenca)],
-    ['Valor agregado', `R$ ${formatMoneyPt(totals.valor, 2)}`],
+    ['Registros', String(rows.length), null],
+    ['KG liquido', kg(totals.liquido), null],
+    ['KG nota', kg(totals.nota), null],
+    ['Diferenca', kg(totals.diferenca), totals.diferenca],
+    ['Valor agregado', `R$ ${formatMoneyPt(totals.valor, 2)}`, null],
   ];
   const cardWidth = (pageWidth - margin * 2 - 32) / 5;
-  summary.forEach(([label, value], index) => {
+  summary.forEach(([label, value, difference], index) => {
     const x = margin + index * (cardWidth + 8);
     doc.setDrawColor(226, 232, 240);
     doc.setFillColor(248, 250, 252);
@@ -3050,23 +3045,31 @@ function exportRecebimentosPdf(rows, filters = {}) {
     doc.setFontSize(8);
     doc.text(label, x + 10, y + 16);
     doc.setFontSize(12);
+    if (difference > 0) doc.setTextColor(29, 78, 216);
+    else if (difference < 0) doc.setTextColor(190, 18, 60);
     doc.text(String(value), x + 10, y + 35, { maxWidth: cardWidth - 20 });
+    doc.setTextColor(15, 23, 42);
   });
 
   y += 72;
   const columns = [
-    ['Data', 54],
-    ['Tipo', 68],
-    ['NF princ.', 52],
-    ['NF comp.', 54],
-    ['Fornecedor', 92],
-    ['Produto', 66],
-    ['Valor unit.', 62],
-    ['Valor princ.', 68],
-    ['Valor comp.', 68],
-    ['Agregado', 68],
-    ['Umidade', 62],
-    ['Dif.', 54],
+    ['Data', 36],
+    ['Tipo', 42],
+    ['NF princ.', 36],
+    ['NF comp.', 40],
+    ['Fornecedor', 58],
+    ['Produto', 52],
+    ['Placa', 38],
+    ['Chegada', 45],
+    ['Peso NF', 45],
+    ['Qtd.', 42],
+    ['Un.', 22],
+    ['Valor unit.', 45],
+    ['Valor princ.', 48],
+    ['Valor comp.', 48],
+    ['Total', 50],
+    ['Umidade', 42],
+    ['Dif.', 42],
   ];
 
   function drawHeader() {
@@ -3086,13 +3089,6 @@ function exportRecebimentosPdf(rows, filters = {}) {
 
   drawHeader();
   rows.forEach((row, index) => {
-    if (y > 520) {
-      doc.addPage();
-      y = 42;
-      drawHeader();
-    }
-    doc.setFillColor(index % 2 ? 255 : 248, index % 2 ? 255 : 250, index % 2 ? 255 : 252);
-    doc.rect(margin, y, pageWidth - margin * 2, 52, 'F');
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     const values = [
@@ -3102,6 +3098,11 @@ function exportRecebimentosPdf(rows, filters = {}) {
       row.nf_complementar_relatorio || '-',
       fornecedorNome(row),
       produtoNome(row),
+      placaVeiculo(row),
+      kg(row.peso_chegada_relatorio),
+      kg(row.peso_nota_relatorio),
+      reportQuantity(row),
+      reportUnit(row),
       formatCurrencyCell(row.valor_unitario_relatorio, true),
       formatCurrencyCell(row.valor_principal_relatorio),
       formatCurrencyCell(row.valor_complemento_relatorio),
@@ -3109,8 +3110,28 @@ function exportRecebimentosPdf(rows, filters = {}) {
       row.umidade_relatorio || '-',
       kg(row.diferenca_relatorio),
     ];
+    const printableValues = values.map((value, valueIndex) => (
+      columns[valueIndex][0] === 'Umidade'
+        ? String(value || '-').replace(/\s\|\s/g, '\n')
+        : String(value || '-')
+    ));
+    const detailParts = [
+      row.chave_complementar_relatorio ? `Chave complementar: ${row.chave_complementar_relatorio}` : '',
+      row.observacao_complementar_relatorio ? `Observacao: ${row.observacao_complementar_relatorio}` : '',
+    ].filter(Boolean);
+    const contentLines = Math.max(...printableValues.map((value, valueIndex) => (
+      doc.splitTextToSize(value, columns[valueIndex][1] - 6).length
+    )), 1);
+    const rowHeight = Math.max(52, 16 + contentLines * 8 + (detailParts.length ? 16 : 0));
+    if (y + rowHeight > doc.internal.pageSize.getHeight() - margin) {
+      doc.addPage();
+      y = 42;
+      drawHeader();
+    }
+    doc.setFillColor(index % 2 ? 255 : 248, index % 2 ? 255 : 250, index % 2 ? 255 : 252);
+    doc.rect(margin, y, pageWidth - margin * 2, rowHeight, 'F');
     let x = margin + 6;
-    values.forEach((value, valueIndex) => {
+    printableValues.forEach((textValue, valueIndex) => {
       const width = columns[valueIndex][1];
       if (columns[valueIndex][0] === 'Dif.') {
         const diff = Number(row.diferenca_relatorio || 0);
@@ -3119,9 +3140,6 @@ function exportRecebimentosPdf(rows, filters = {}) {
         else doc.setTextColor(51, 65, 85);
         doc.setFont('helvetica', 'bold');
       }
-      const textValue = columns[valueIndex][0] === 'Umidade'
-        ? String(value || '-').replace(/\s\|\s/g, '\n')
-        : String(value || '-');
       doc.text(textValue, x, y + 12, { maxWidth: width - 6 });
       if (columns[valueIndex][0] === 'Dif.') {
         doc.setTextColor(15, 23, 42);
@@ -3129,18 +3147,14 @@ function exportRecebimentosPdf(rows, filters = {}) {
       }
       x += width;
     });
-    const detailParts = [
-      row.chave_complementar_relatorio ? `Chave complementar: ${row.chave_complementar_relatorio}` : '',
-      row.observacao_complementar_relatorio ? `Observacao: ${row.observacao_complementar_relatorio}` : '',
-    ].filter(Boolean);
     if (detailParts.length) {
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(71, 85, 105);
-      doc.text(detailParts.join('  |  '), margin + 6, y + 38, { maxWidth: pageWidth - margin * 2 - 12 });
+      doc.text(detailParts.join('  |  '), margin + 6, y + rowHeight - 12, { maxWidth: pageWidth - margin * 2 - 12 });
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'normal');
     }
-    y += 52;
+    y += rowHeight;
   });
 
   doc.save(`relatorio-recebimentos-${todayIso()}.pdf`);
