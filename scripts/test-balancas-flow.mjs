@@ -38,8 +38,8 @@ const labPending = {
   tara: 0,
   dispensa_laboratorio: false,
 };
-assert.equal(isLaboratorioPendenteBalanca(labPending), true, 'AprovaÃ§Ã£o laboratorial incompleta deve aguardar balanÃ§a');
-assert.equal(isRecebimentoFinalizadoBalanca(labPending), false, 'AprovaÃ§Ã£o do laboratÃ³rio nÃ£o Ã© finalizaÃ§Ã£o da balanÃ§a');
+assert.equal(isLaboratorioPendenteBalanca(labPending), true, 'Aprovação laboratorial incompleta deve aguardar balança');
+assert.equal(isRecebimentoFinalizadoBalanca(labPending), false, 'Aprovação do laboratório não é finalização da balança');
 assert.equal(isLaboratorioPendenteBalanca({ ...complete, dispensa_laboratorio: false }), false, 'Carga completa deve sair da fila laboratorial');
 
 const page = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
@@ -232,7 +232,7 @@ assert.ok(
   'Migration de envio automatico nao pode alterar nem excluir registros existentes',
 );
 assert.ok(
-  page.includes('Entrada salva e enviada automaticamente para AprovaÃ§Ã£o LaboratÃ³rio.'),
+  page.includes('Entrada salva e enviada automaticamente para Aprovação Laboratório.'),
   'Operador deve receber confirmacao clara do envio automatico ao salvar',
 );
 assert.ok(
@@ -260,7 +260,7 @@ assert.ok(
   'Edicao e exclusao devem preservar recebimentos ja utilizados na Armazenagem',
 );
 assert.ok(
-  page.includes('Entrada atualizada e enviada novamente para AprovaÃ§Ã£o LaboratÃ³rio.'),
+  page.includes('Entrada atualizada e enviada novamente para Aprovação Laboratório.'),
   'Portaria deve confirmar claramente o retorno ao laboratorio',
 );
 assert.ok(
@@ -301,15 +301,15 @@ assert.ok(page.includes("item?.afeta_peso !== false"), 'Complemento financeiro n
 assert.ok(service.includes('afeta_peso,'), 'Consulta deve carregar o marcador de peso do complemento');
 assert.ok(
   page.includes('|| isDiretoPendenteBalanca(row);'),
-  'Carga direta pendente deve reutilizar a importaÃ§Ã£o XML do formulÃ¡rio de recebimento',
+  'Carga direta pendente deve reutilizar a importação XML do formulário de recebimento',
 );
-assert.ok(page.includes('sortPendingScaleRows'), 'PendÃªncias devem usar ordenaÃ§Ã£o operacional crescente');
-assert.ok(page.toUpperCase().includes('DIRETO PARA RECEBIMENTOS - PENDENTE FINALIZAR RECEBIMENTO'), 'Fila direta deve ter identificaÃ§Ã£o prÃ³pria');
-assert.ok(page.includes("return 'Recebimento finalizado'"), 'Status final deve ter texto prÃ³prio e prioritÃ¡rio');
+assert.ok(page.includes('sortPendingScaleRows'), 'Pendências devem usar ordenação operacional crescente');
+assert.ok(page.toUpperCase().includes('DIRETO PARA RECEBIMENTOS - PENDENTE FINALIZAR RECEBIMENTO'), 'Fila direta deve ter identificação própria');
+assert.ok(page.includes("return 'Recebimento finalizado'"), 'Status final deve ter texto próprio e prioritário');
 assert.ok(migration.includes("'RECEBIMENTO_FINALIZADO'"), 'Portaria deve persistir o status final');
-assert.ok(migration.includes('recebimentos_sincronizar_portaria_finalizada'), 'Trigger deve sincronizar o vÃ­nculo na mesma transaÃ§Ã£o');
-assert.ok(migration.includes('where id = new.portaria_id'), 'SincronizaÃ§Ã£o deve usar exclusivamente portaria_id');
-assert.ok(!migration.includes('where numero_nf ='), 'NF nÃ£o pode identificar a Portaria a atualizar');
+assert.ok(migration.includes('recebimentos_sincronizar_portaria_finalizada'), 'Trigger deve sincronizar o vínculo na mesma transação');
+assert.ok(migration.includes('where id = new.portaria_id'), 'Sincronização deve usar exclusivamente portaria_id');
+assert.ok(!migration.includes('where numero_nf ='), 'NF não pode identificar a Portaria a atualizar');
 
 assert.ok(
   page.includes('current.diferencaKg = current.kgRecebido - current.kgNota;'),
@@ -333,14 +333,14 @@ assert.ok(
   'Rotulo externo nao pode multiplicar novamente percentual ja calculado',
 );
 assert.ok(
-  page.includes('BalanÃ§a maior â€” complementar fornecedor')
-    && page.includes('Nota maior que balanÃ§a')
-    && page.includes('DiferenÃ§as de 0 kg nÃ£o sÃ£o exibidas.'),
+  page.includes('Balança maior — complementar fornecedor')
+    && page.includes('Nota maior que balança')
+    && page.includes('Diferenças de 0 kg não são exibidas.'),
   'Grafico de diferencas deve apresentar a legenda operacional completa',
 );
 assert.ok(
   page.includes('Complementar nota')
-    && page.includes('NÃ£o complementar')
+    && page.includes('Não complementar')
     && page.includes('Revisar nota'),
   'Grafico de diferencas deve exibir as opcoes solicitadas',
 );
@@ -460,7 +460,7 @@ assert.ok(
 assert.ok(
   linkedInvoicesMigration.includes("raise exception 'NOTA_FISCAL_JA_VINCULADA'")
     && service.includes('recebimentos_fornecedor_nf_unica_idx')
-    && service.includes('Esta nota fiscal jÃ¡ estÃ¡ vinculada a um recebimento nesta unidade. Revise o lanÃ§amento existente.'),
+    && service.includes('Esta nota fiscal já está vinculada a um recebimento nesta unidade. Revise o lançamento existente.'),
   'Duplicidade deve produzir a mensagem clara solicitada',
 );
 assert.ok(
@@ -470,4 +470,4 @@ assert.ok(
   'Migration de duplicidade nao pode alterar nem excluir dados existentes',
 );
 
-console.log('Testes do fluxo Portaria/LaboratÃ³rio/Recebimentos aprovados.');
+console.log('Testes do fluxo Portaria/Laboratório/Recebimentos aprovados.');

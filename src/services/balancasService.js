@@ -69,23 +69,23 @@ const PORTARIA_SELECT = `
 export const lookupTables = {
   balancas: {
     table: 'balancas',
-    label: 'BalanÃ§as',
+    label: 'Balanças',
     search: ['nome', 'identificacao', 'localizacao'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
-      { name: 'identificacao', label: 'IdentificaÃ§Ã£o' },
-      { name: 'localizacao', label: 'LocalizaÃ§Ã£o' },
+      { name: 'identificacao', label: 'Identificação' },
+      { name: 'localizacao', label: 'Localização' },
     ],
     columns: ['nome', 'identificacao', 'localizacao', 'ativo'],
   },
   veiculos: {
     table: 'recebimento_veiculos',
-    label: 'VeÃ­culos',
+    label: 'Veículos',
     permissionMenu: 'balancas_portaria',
     search: ['placa', 'tipo_veiculo'],
     fields: [
       { name: 'placa', label: 'Placa', required: true },
-      { name: 'tipo_veiculo', label: 'Tipo de veÃ­culo' },
+      { name: 'tipo_veiculo', label: 'Tipo de veículo' },
       { name: 'qtd_eixos', label: 'Qtd. eixos', type: 'number' },
     ],
     columns: ['placa', 'tipo_veiculo', 'qtd_eixos', 'ativo'],
@@ -115,11 +115,11 @@ export const lookupTables = {
   },
   laboratorios: {
     table: 'recebimento_laboratorios',
-    label: 'LaboratÃ³rios',
+    label: 'Laboratórios',
     search: ['nome', 'responsavel'],
     fields: [
       { name: 'nome', label: 'Nome', required: true },
-      { name: 'responsavel', label: 'ResponsÃ¡vel' },
+      { name: 'responsavel', label: 'Responsável' },
     ],
     columns: ['nome', 'responsavel', 'ativo'],
   },
@@ -201,7 +201,7 @@ export async function listPortariaEntradas(escopo = {}) {
 /**
  * Restringe a consulta a unidade (balanca) informada.
  * `incluirSemUnidade` mantem visiveis os lancamentos historicos que foram
- * gravados sem `balanca_id` â€” usado apenas pelo modulo legado de Beberibe.
+ * gravados sem `balanca_id` — usado apenas pelo modulo legado de Beberibe.
  */
 function aplicarEscopoUnidade(query, escopo = {}) {
   requireUnidadeScope(escopo);
@@ -497,7 +497,7 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'NF principal vinculada',
     'Numero da NF complementar',
     'NF',
-    'BalanÃ§a',
+    'Balança',
     'Fornecedor',
     'Produto',
     'Placa',
@@ -518,8 +518,8 @@ export function exportRecebimentosCsv(rows, fileName = 'recebimentos-balancas.cs
     'Umidade 01',
     'Umidade 02',
     'Umidade media',
-    'DiferenÃ§a %',
-    'Motivo reprovaÃ§Ã£o',
+    'Diferença %',
+    'Motivo reprovação',
     'Motivo cancelamento',
   ];
   const body = rows.map((row) => [
@@ -596,13 +596,13 @@ export function exportRecebimentosExcel(rows, fileName = 'recebimentos-balancas.
     'Peso da nota': row.peso_nota_relatorio ?? row.peso_nf,
     'Quantidade do produto': row.quantidade_produto_exportacao ?? row.quantidade_nota,
     Unidade: row.unidade_produto_exportacao ?? row.unidade_nota,
-    'Valor unitÃ¡rio': row.valor_unitario,
+    'Valor unitário': row.valor_unitario,
     'Valor principal': row.valor_principal_relatorio ?? row.valor_total,
     'Valor complemento': row.valor_complemento_relatorio ?? 0,
     'Total agregado': row.valor_agregado_relatorio ?? row.valor_total,
     Umidade: row.umidade_relatorio ?? row.umidade ?? '',
     Observacao: row.observacao_complementar_relatorio || '',
-    'DiferenÃ§a kg': row.diferenca_relatorio ?? row.diferenca_kg,
+    'Diferença kg': row.diferenca_relatorio ?? row.diferenca_kg,
   }));
   if (body.length) {
     const totals = rows.reduce((acc, row) => {
@@ -621,7 +621,7 @@ export function exportRecebimentosExcel(rows, fileName = 'recebimentos-balancas.
       'Valor principal': totals.principal,
       'Valor complemento': totals.complemento,
       'Total agregado': totals.agregado,
-      'DiferenÃ§a kg': totals.diferenca,
+      'Diferença kg': totals.diferenca,
     });
   }
   const worksheet = XLSX.utils.json_to_sheet(body.length ? body : [{ Aviso: 'Nenhum recebimento encontrado' }]);
@@ -638,13 +638,13 @@ export function toUserError(error) {
     || lower.includes('recebimentos_fornecedor_nf_unica_idx')
     || lower.includes('recebimentos_nf_chave_unica')
     || lower.includes('recebimento_notas_complementares_chave_unica')) {
-    return 'Esta nota fiscal jÃ¡ estÃ¡ vinculada a um recebimento nesta unidade. Revise o lanÃ§amento existente.';
+    return 'Esta nota fiscal já está vinculada a um recebimento nesta unidade. Revise o lançamento existente.';
   }
   if (String(error?.code || '') === '23505' && lower.includes('nf duplicada')) {
-    return 'NF duplicada para este fornecedor nesta unidade. Edite o lanÃ§amento existente ou confira o nÃºmero da NF.';
+    return 'NF duplicada para este fornecedor nesta unidade. Edite o lançamento existente ou confira o número da NF.';
   }
   if (lower.includes('recebimento_ja_armazenado')) {
-    return 'Este recebimento jÃ¡ foi utilizado na Armazenagem M.P. e nÃ£o pode ser alterado ou excluÃ­do pela Portaria.';
+    return 'Este recebimento já foi utilizado na Armazenagem M.P. e não pode ser alterado ou excluído pela Portaria.';
   }
   const requestError = classifyRequestError(error);
   if (requestError === 'connection') {
@@ -666,42 +666,42 @@ export function toUserError(error) {
     return 'O registro vinculado pertence a outra unidade. A operacao foi bloqueada para evitar lancamento na balanca errada.';
   }
   if (lower.includes('somente_admin_gestor')) {
-    return 'Somente usuÃ¡rios Admin ou Gestor podem decidir nÃ£o complementar o fornecedor.';
+    return 'Somente usuários Admin ou Gestor podem decidir não complementar o fornecedor.';
   }
   if (lower.includes('sem_permissao_unidade') || lower.includes('recebimento_fora_da_unidade')) {
-    return 'A aÃ§Ã£o foi bloqueada porque o recebimento nÃ£o pertence a uma unidade que vocÃª pode editar.';
+    return 'A ação foi bloqueada porque o recebimento não pertence a uma unidade que você pode editar.';
   }
   if (lower.includes('fornecedor_divergente') || lower.includes('diferenca_nao_positiva')) {
-    return 'Os dados do grÃ¡fico mudaram. Atualize o Dashboard e tente novamente.';
+    return 'Os dados do gráfico mudaram. Atualize o Dashboard e tente novamente.';
   }
   if (lower.includes('recebimentos_invalidos')) {
-    return 'NÃ£o foi possÃ­vel identificar os recebimentos deste fornecedor. Atualize o Dashboard e tente novamente.';
+    return 'Não foi possível identificar os recebimentos deste fornecedor. Atualize o Dashboard e tente novamente.';
   }
   if (lower.includes('registro_nao_encontrado_na_unidade')) {
-    return 'A entrada nÃ£o foi encontrada nesta unidade. Atualize a pÃ¡gina e tente novamente.';
+    return 'A entrada não foi encontrada nesta unidade. Atualize a página e tente novamente.';
   }
   if (lower.includes('row-level security') || lower.includes('permission')) {
-    return 'Acesso negado. Como corrigir: confira se seu perfil tem permissÃ£o no menu BalanÃ§as.';
+    return 'Acesso negado. Como corrigir: confira se seu perfil tem permissão no menu Balanças.';
   }
   if (lower.includes('recebimento_notas_complementares_chave_unica') || (lower.includes('duplicate') && lower.includes('chave'))) {
     return 'Chave da NF-e complementar duplicada. Como corrigir: confira se esta nota complementar ja foi vinculada a outro recebimento.';
   }
   if (lower.includes('duplicate') || lower.includes('unique')) {
-    return 'Registro duplicado. Como corrigir: confira placa, chave da NF ou cadastro jÃ¡ existente antes de salvar novamente.';
+    return 'Registro duplicado. Como corrigir: confira placa, chave da NF ou cadastro já existente antes de salvar novamente.';
   }
   if (lower.includes('foreign key')) {
-    return 'VÃ­nculo invÃ¡lido. Como corrigir: escolha um cadastro existente de fornecedor, produto, balanÃ§a ou laboratÃ³rio.';
+    return 'Vínculo inválido. Como corrigir: escolha um cadastro existente de fornecedor, produto, balança ou laboratório.';
   }
   if (lower.includes('schema cache') || lower.includes('does not exist') || lower.includes('could not find')) {
-    return 'Banco ainda nÃ£o reconheceu o mÃ³dulo BalanÃ§as. Como corrigir: aplique os SQLs supabase/balancas-modulo-recebimento.sql e supabase/portaria-balancas.sql no Supabase e recarregue o app.';
+    return 'Banco ainda não reconheceu o módulo Balanças. Como corrigir: aplique os SQLs supabase/balancas-modulo-recebimento.sql e supabase/portaria-balancas.sql no Supabase e recarregue o app.';
   }
-  return message || 'NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o. Como corrigir: confira os dados e tente novamente.';
+  return message || 'Não foi possível concluir a operação. Como corrigir: confira os dados e tente novamente.';
 }
 
 function requireRecordId(id, label) {
   const value = String(id || '').trim();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
-    throw new Error(`Identificador invÃ¡lido para ${label}. Recarregue a tela e selecione o registro novamente.`);
+    throw new Error(`Identificador inválido para ${label}. Recarregue a tela e selecione o registro novamente.`);
   }
   return value;
 }
