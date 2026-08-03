@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Truck,
   UserRound,
+  Warehouse,
   Wheat,
   X,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ const navItems = [
   { to: '/inicio', label: 'Início', icon: House, alwaysVisible: true },
   { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
   ...unidadeNavItems,
+  { to: '/central-graos-messejana', label: 'Central de Grãos Messejana', icon: Warehouse, menu: 'oficina_messejana' },
   {
     label: 'Cadastros',
     icon: Building2,

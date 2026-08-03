@@ -20,6 +20,7 @@ import Login from './pages/Login.jsx';
 import ManagementPage from './pages/ManagementPage.jsx';
 import NewsDetailPage from './pages/NewsDetailPage.jsx';
 import NewsListPage from './pages/NewsListPage.jsx';
+import OficinaMessejanaPage from './pages/OficinaMessejanaPage.jsx';
 import './styles/index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -62,6 +63,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 element={<ProtectedRoute menu="balancas"><UnidadeModulo unidade={unidade} /></ProtectedRoute>}
               />
             ))}
+            <Route path="central-graos-messejana" element={<ProtectedRoute menu="oficina_messejana"><OficinaMessejanaPage /></ProtectedRoute>} />
             <Route path="admin/solicitacoes" element={<ProtectedRoute menu="usuarios"><AdminSolicitacoes /></ProtectedRoute>} />
             <Route path="admin/acessos" element={<ProtectedRoute menu="usuarios"><AdminAccessPage /></ProtectedRoute>} />
             <Route path="admin/auditoria" element={<ProtectedRoute menu="auditoria"><AuditLogsPage /></ProtectedRoute>} />

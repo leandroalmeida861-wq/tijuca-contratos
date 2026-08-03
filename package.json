@@ -20,6 +20,7 @@
     "test:armazenagem": "node scripts/test-armazenagem.mjs",
     "test:balancas-flow": "node scripts/test-balancas-flow.mjs",
     "test:period-history": "node scripts/test-period-history.mjs",
+    "test:central-messejana": "node scripts/test-oficina-messejana.mjs",
     "test:nfe-recebimento": "node scripts/test-nfe-recebimento.mjs",
     "test:unidades": "node scripts/test-unidades-isolamento.mjs"
   },
