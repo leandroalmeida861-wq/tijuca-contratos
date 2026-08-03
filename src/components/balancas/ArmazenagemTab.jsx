@@ -28,6 +28,7 @@ import {
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import PeriodHistory, { usePeriodHistory } from './PeriodHistory.jsx';
 import { useSupabaseRealtimeRefresh } from '../../hooks/useSupabaseRealtimeRefresh.js';
 import { dateBr, kg } from '../../lib/formatters.js';
 import {
@@ -99,6 +100,7 @@ const INITIAL_FILTERS = {
   status: '',
   busca: '',
 };
+const getStoragePeriodDate = (row) => row.data_armazenagem || row.recebimento?.data || '';
 
 const BUTTON_PRIMARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-tijuca-600 px-4 text-sm font-extrabold text-white transition hover:bg-tijuca-700 disabled:cursor-not-allowed disabled:opacity-60';
 const BUTTON_SECONDARY = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-extrabold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60';
@@ -159,7 +161,13 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
     ),
     [source],
   );
-  const filteredRows = useMemo(() => filterRows(rows, appliedFilters), [rows, appliedFilters]);
+  const searchActive = hasStorageSearchFilters(appliedFilters);
+  const { period, setPeriod, counts, periodRows } = usePeriodHistory(rows, getStoragePeriodDate, searchActive);
+  const effectiveFilters = useMemo(
+    () => ({ ...appliedFilters, ano: '', mes: '' }),
+    [appliedFilters],
+  );
+  const filteredRows = useMemo(() => filterRows(periodRows, effectiveFilters), [periodRows, effectiveFilters]);
   const activeRows = useMemo(
     () => filteredRows.filter((row) => row.status !== 'CANCELADO'),
     [filteredRows],
@@ -185,6 +193,24 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
     setFilters(INITIAL_FILTERS);
     setAppliedFilters(INITIAL_FILTERS);
     setError('');
+  }
+
+  function selectPeriod(nextPeriod) {
+    setPeriod(nextPeriod);
+    setFilters((current) => ({
+      ...current,
+      ano: String(nextPeriod.year),
+      mes: String(nextPeriod.month),
+      dataInicial: '',
+      dataFinal: '',
+    }));
+    setAppliedFilters((current) => ({
+      ...current,
+      ano: String(nextPeriod.year),
+      mes: String(nextPeriod.month),
+      dataInicial: '',
+      dataFinal: '',
+    }));
   }
 
   async function openStorage(row, readOnly = false) {
@@ -340,6 +366,8 @@ export default function ArmazenagemTab({ can, escopo, unidade }) {
         onClear={clearFilters}
         refreshing={refreshing}
       />
+
+      <PeriodHistory period={period} onChange={selectPeriod} counts={counts} searchActive={searchActive} />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <MetricCard title="Peso da NF no período" value={kg(metrics.pesoNota)} icon={Archive} />
@@ -860,6 +888,13 @@ function filterRows(rows, filters) {
       && (!filters.status || row.status === filters.status)
       && (!filters.busca || contains(all, filters.busca));
   });
+}
+
+function hasStorageSearchFilters(filters) {
+  return [
+    'dataInicial', 'dataFinal', 'nf', 'placa', 'produto', 'fornecedor',
+    'transportadora', 'silo', 'baia', 'status', 'busca',
+  ].some((field) => Boolean(String(filters?.[field] || '').trim()));
 }
 
 function calculateMetrics(rows) {

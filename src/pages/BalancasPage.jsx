@@ -76,6 +76,7 @@ import {
 } from '../lib/balancasFlow.js';
 import ArmazenagemTab from '../components/balancas/ArmazenagemTab.jsx';
 import UnitHeaderNavigation from '../components/balancas/UnitHeaderNavigation.jsx';
+import PeriodHistory, { usePeriodHistory } from '../components/balancas/PeriodHistory.jsx';
 import {
   UNIDADE_ABAS,
   UNIDADE_PADRAO,
@@ -95,7 +96,9 @@ const SCORE_WEIGHTS = {
 };
 const PRODUCT_DONUT_COLORS = ['#0f766e', '#2563eb', '#d97706', '#7c3aed'];
 const PRODUCT_MILHO_COLOR = '#facc15';
-const EMPTY_OPERATIONAL_SEARCH = Object.freeze({ nfe: '', fornecedor: '' });
+const EMPTY_OPERATIONAL_SEARCH = Object.freeze({ nfe: '', fornecedor: '', placa: '', produto: '', motorista: '' });
+const getPortariaPeriodDate = (row) => portariaDisplayRow(row).data_entrada;
+const getRecebimentoPeriodDate = (row) => row.data;
 const balancasRealtimeTables = [
   'balancas',
   'fornecedores',
@@ -605,19 +608,22 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
   const [saving, setSaving] = useState(false);
   const [sendingToLabId, setSendingToLabId] = useState(null);
   const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
+  const searchActive = hasOperationalSearch(searchFilters);
+  const { period, setPeriod, counts, periodRows } = usePeriodHistory(rows, getPortariaPeriodDate, searchActive);
   const canCreate = can('balancas', 'cadastrar');
   const canEdit = can('balancas', 'editar');
   const canDelete = can('balancas', 'excluir') || can('balancas', 'cancelar');
   const canSendToLab = can('balancas', 'aprovar') || canCreate;
-  const filteredRows = useMemo(() => rows.filter((row) => {
+  const filteredRows = useMemo(() => periodRows.filter((row) => {
     const displayRow = portariaDisplayRow(row);
-    return matchesOperationalSearch(
-      displayRow.numero_nf,
-      displayRow.fornecedor_nome_sincronizado || displayRow.fornecedor?.nome,
-      searchFilters.nfe,
-      searchFilters.fornecedor,
-    );
-  }), [rows, searchFilters.nfe, searchFilters.fornecedor]);
+    return matchesOperationalSearch({
+      nfe: displayRow.numero_nf,
+      fornecedor: displayRow.fornecedor_nome_sincronizado || displayRow.fornecedor?.nome,
+      placa: displayRow.placa,
+      produto: displayRow.produto_nome_sincronizado || displayRow.produto?.nome,
+      motorista: displayRow.motorista?.nome,
+    }, searchFilters);
+  }), [periodRows, searchFilters]);
 
   function openNew() {
     setEditing(null);
@@ -867,6 +873,8 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
         totalCount={rows.length}
       />
 
+      <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
+
       {formOpen && (
         <form onSubmit={submit} noValidate className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1044,19 +1052,22 @@ function PortariaViewModal({ row, options, canSendToLab, sendingToLab, onSendToL
 
 function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload, setError, setMessage }) {
   const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
+  const searchActive = hasOperationalSearch(searchFilters);
+  const { period, setPeriod, counts, periodRows } = usePeriodHistory(rows, getRecebimentoPeriodDate, searchActive);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const formRef = useRef(null);
 
   const matchingRows = useMemo(
-    () => rows.filter((row) => matchesOperationalSearch(
-      row.nf_numero,
-      fornecedorNome(row, ''),
-      searchFilters.nfe,
-      searchFilters.fornecedor,
-    )),
-    [rows, searchFilters.nfe, searchFilters.fornecedor],
+    () => periodRows.filter((row) => matchesOperationalSearch({
+      nfe: row.nf_numero,
+      fornecedor: fornecedorNome(row, ''),
+      placa: placaVeiculo(row),
+      produto: produtoNome(row),
+      motorista: row.motorista?.nome,
+    }, searchFilters)),
+    [periodRows, searchFilters],
   );
   const filtered = sortRecebimentoRows(matchingRows);
   const directForScale = sortPendingScaleRows(matchingRows.filter(isDiretoPendenteBalanca));
@@ -1109,6 +1120,8 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
           </button>
         ) : null}
       />
+
+      <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
 
       <PendingScaleSection
         rows={directForScale}
@@ -2088,6 +2101,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [editingLabId, setEditingLabId] = useState(null);
   const [savingLab, setSavingLab] = useState(false);
   const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
+  const searchActive = hasOperationalSearch(searchFilters);
   const canView = can('balancas', 'visualizar');
   const canCreate = can('balancas', 'cadastrar');
   const canEdit = can('balancas', 'editar');
@@ -2097,14 +2111,16 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const canExport = can('balancas', 'exportar');
   const canManageManualRelease = canCreate || canEdit;
   const laboratorioRows = useMemo(() => rows.filter((row) => !hasDispensaLaboratorio(row)), [rows]);
+  const { period, setPeriod, counts, periodRows } = usePeriodHistory(laboratorioRows, getRecebimentoPeriodDate, searchActive);
   const matchingRows = useMemo(
-    () => laboratorioRows.filter((row) => matchesOperationalSearch(
-      row.nf_numero,
-      fornecedorNome(row, ''),
-      searchFilters.nfe,
-      searchFilters.fornecedor,
-    )),
-    [laboratorioRows, searchFilters.nfe, searchFilters.fornecedor],
+    () => periodRows.filter((row) => matchesOperationalSearch({
+      nfe: row.nf_numero,
+      fornecedor: fornecedorNome(row, ''),
+      placa: placaVeiculo(row),
+      produto: produtoNome(row),
+      motorista: row.motorista?.nome,
+    }, searchFilters)),
+    [periodRows, searchFilters],
   );
   const pending = sortRecebimentoRows(matchingRows.filter((row) => row.status === 'pendente'));
   const analyzed = sortRecebimentoRows(matchingRows.filter((row) => row.status === 'aprovada' || row.status === 'reprovada'));
@@ -2303,6 +2319,8 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
         resultCount={matchingRows.length}
         totalCount={laboratorioRows.length}
       />
+
+      <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
 
       {canManageManualRelease ? <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
@@ -2894,9 +2912,23 @@ function buildRecebimentoReportRows(rows, mode) {
 
 function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clearFilters, can }) {
   const [reportMode, setReportMode] = useState('consolidado');
-  const reportRows = sortReportRows(rows.filter((row) => !isLaboratorioPendenteBalanca(row)));
+  const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
+  const eligibleRows = useMemo(() => rows.filter((row) => !isLaboratorioPendenteBalanca(row)), [rows]);
+  const searchActive = hasActiveBalancasFilters(filters) || hasOperationalSearch(searchFilters);
+  const { period, setPeriod, counts, periodRows } = usePeriodHistory(eligibleRows, getRecebimentoPeriodDate, searchActive);
+  const matchingRows = useMemo(
+    () => periodRows.filter((row) => matchesOperationalSearch({
+      nfe: row.nf_numero,
+      fornecedor: fornecedorNome(row, ''),
+      placa: placaVeiculo(row),
+      produto: produtoNome(row),
+      motorista: row.motorista?.nome,
+    }, searchFilters)),
+    [periodRows, searchFilters],
+  );
+  const reportRows = sortReportRows(matchingRows);
   const displayRows = buildRecebimentoReportRows(reportRows, reportMode);
-  const ignoredRows = rows.length - reportRows.length;
+  const ignoredRows = rows.length - eligibleRows.length;
   const reportTotals = displayRows.reduce((acc, row) => {
     acc.pesoChegada += Number(row.peso_chegada_relatorio || 0);
     acc.pesoNota += Number(row.peso_nota_relatorio || 0);
@@ -2909,6 +2941,13 @@ function RelatoriosTab({ rows, options, filters, setFilters, applyFilters, clear
   return (
     <div className="grid gap-4">
       <Filters options={options} filters={filters} setFilters={setFilters} onApply={applyFilters} onClear={clearFilters} showPortariaFilter />
+      <OperationalSearchFilters
+        value={searchFilters}
+        onChange={setSearchFilters}
+        resultCount={reportRows.length}
+        totalCount={eligibleRows.length}
+      />
+      <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -3237,7 +3276,7 @@ function PlateTag({ value }) {
 }
 
 function OperationalSearchFilters({ value, onChange, resultCount, totalCount, action = null }) {
-  const hasFilters = Boolean(value.nfe.trim() || value.fornecedor.trim());
+  const hasFilters = hasOperationalSearch(value);
 
   function updateFilter(field, fieldValue) {
     onChange((current) => ({ ...current, [field]: fieldValue }));
@@ -3245,7 +3284,7 @@ function OperationalSearchFilters({ value, onChange, resultCount, totalCount, ac
 
   return (
     <section
-      aria-label="Filtros de busca por NF-e e fornecedor"
+      aria-label="Filtros de busca global do histórico da unidade"
       className="rounded-xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-sky-50 p-4 shadow-panel"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3255,13 +3294,13 @@ function OperationalSearchFilters({ value, onChange, resultCount, totalCount, ac
           </span>
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">Filtros de busca</h2>
-            <p className="text-xs font-semibold text-slate-500">Localize rapidamente por NF-e ou fornecedor.</p>
+            <p className="text-xs font-semibold text-slate-500">Pesquise em todo o histórico da unidade.</p>
           </div>
         </div>
         {action}
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <label className="grid gap-1.5 text-sm font-extrabold text-slate-700">
           Número da NF-e
           <span className="flex h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-sm transition focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-100">
@@ -3292,6 +3331,27 @@ function OperationalSearchFilters({ value, onChange, resultCount, totalCount, ac
             />
           </span>
         </label>
+
+        {[
+          ['placa', 'Placa', 'Digite a placa'],
+          ['produto', 'Produto', 'Digite o produto'],
+          ['motorista', 'Motorista', 'Digite o motorista'],
+        ].map(([field, label, placeholder]) => (
+          <label key={field} className="grid gap-1.5 text-sm font-extrabold text-slate-700">
+            {label}
+            <span className="flex h-12 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-sm transition focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-100">
+              <Search size={17} className="shrink-0 text-emerald-600" aria-hidden="true" />
+              <input
+                type="search"
+                autoComplete="off"
+                value={value[field]}
+                onChange={(event) => updateFilter(field, event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none placeholder:font-medium placeholder:text-slate-400"
+                placeholder={placeholder}
+              />
+            </span>
+          </label>
+        ))}
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
@@ -4946,12 +5006,15 @@ function normalizeNfSeries(value) {
   return String(value || '').trim().toUpperCase();
 }
 
-function matchesOperationalSearch(nfe, fornecedor, nfeQuery, fornecedorQuery) {
-  const nfeTerm = normalizeOperationalSearch(nfeQuery);
-  const fornecedorTerm = normalizeOperationalSearch(fornecedorQuery);
-  const matchesNfe = !nfeTerm || normalizeOperationalSearch(nfe).includes(nfeTerm);
-  const matchesFornecedor = !fornecedorTerm || normalizeOperationalSearch(fornecedor).includes(fornecedorTerm);
-  return matchesNfe && matchesFornecedor;
+function matchesOperationalSearch(values, filters) {
+  return Object.keys(EMPTY_OPERATIONAL_SEARCH).every((field) => {
+    const term = normalizeOperationalSearch(filters?.[field]);
+    return !term || normalizeOperationalSearch(values?.[field]).includes(term);
+  });
+}
+
+function hasOperationalSearch(filters) {
+  return Object.keys(EMPTY_OPERATIONAL_SEARCH).some((field) => Boolean(normalizeOperationalSearch(filters?.[field])));
 }
 
 function normalizeOperationalSearch(value) {

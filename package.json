@@ -19,6 +19,7 @@
     "test:noticias": "node scripts/test-noticias-home.mjs",
     "test:armazenagem": "node scripts/test-armazenagem.mjs",
     "test:balancas-flow": "node scripts/test-balancas-flow.mjs",
+    "test:period-history": "node scripts/test-period-history.mjs",
     "test:nfe-recebimento": "node scripts/test-nfe-recebimento.mjs",
     "test:unidades": "node scripts/test-unidades-isolamento.mjs"
   },
