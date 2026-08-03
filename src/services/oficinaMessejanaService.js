@@ -6,16 +6,14 @@ const ENTRY_SELECT = '*';
 const EXIT_SELECT = '*';
 
 export async function listOficinaLookups() {
-  const [depositos, fornecedores, produtos] = await Promise.all([
-    supabase.from('oficina_messejana_depositos').select('*,fornecedor:fornecedores(id,nome,cnpj)').order('ativo', { ascending: false }).order('nome'),
-    supabase.from('fornecedores').select('id,nome,cnpj').order('nome').limit(500),
-    supabase.from('produtos').select('id,nome,unidade').order('nome').limit(500),
-  ]);
-  [depositos, fornecedores, produtos].forEach(({ error }) => { if (error) throw error; });
+  const { data, error } = await supabase.rpc('oficina_messejana_opcoes_entrada');
+  if (error) throw error;
   return {
-    depositos: depositos.data || [],
-    fornecedores: fornecedores.data || [],
-    produtos: produtos.data || [],
+    depositos: [],
+    fornecedores: data?.fornecedores || [],
+    produtos: data?.produtos || [],
+    motoristas: data?.motoristas || [],
+    veiculos: data?.veiculos || [],
   };
 }
 
@@ -37,7 +35,6 @@ export async function listEntradas({ page = 1, pageSize = OFICINA_PAGE_SIZE, per
   } else {
     query = applyPeriod(query, 'data_entrada', period);
   }
-  query = applyExactFilter(query, 'deposito_id', filters.depositoId);
   query = applyTextFilter(query, 'fornecedor_nome', filters.fornecedor);
   query = applyTextFilter(query, 'produto_nome', filters.produto);
   query = applyTextFilter(query, 'placa', filters.placa);
@@ -69,7 +66,6 @@ export async function listSaidas({ page = 1, pageSize = OFICINA_PAGE_SIZE, perio
   }
   query = applyTextFilter(query, 'fornecedor_nome', filters.fornecedor);
   query = applyTextFilter(query, 'produto_nome', filters.produto);
-  query = applyExactFilter(query, 'deposito_id', filters.depositoId);
   query = applyTextFilter(query, 'destino', filters.destino);
   query = applyTextFilter(query, 'placa', filters.placa);
   query = applyTextFilter(query, 'motorista', filters.motorista);
@@ -194,6 +190,12 @@ export function oficinaUserError(error) {
   if (message.includes('OFICINA_DEPOSITO_DUPLICADO')) return 'Já existe um depósito com este nome na Central de Grãos Messejana.';
   if (message.includes('OFICINA_FORNECEDOR_INVALIDO')) return 'O fornecedor selecionado não existe ou não pertence à sua empresa.';
   if (message.includes('OFICINA_DEPOSITO_NOME_OBRIGATORIO')) return 'Informe o nome do depósito ou selecione um fornecedor cadastrado.';
+  if (message.includes('OFICINA_FORNECEDOR_OBRIGATORIO')) return 'Selecione um fornecedor já cadastrado.';
+  if (message.includes('OFICINA_PRODUTO_OBRIGATORIO')) return 'Selecione um produto já cadastrado.';
+  if (message.includes('OFICINA_PRODUTO_INVALIDO')) return 'O produto selecionado não existe ou não pertence à sua empresa.';
+  if (message.includes('OFICINA_MOTORISTA_INVALIDO')) return 'O motorista selecionado não existe, está inativo ou pertence a outra empresa.';
+  if (message.includes('OFICINA_VEICULO_INVALIDO')) return 'O veículo selecionado não existe, está inativo ou pertence a outra empresa.';
+  if (message.includes('OFICINA_VALOR_INVALIDO')) return 'Valor unitário e valor total da nota não podem ser negativos.';
   if (message.includes('OFICINA_SALDO_INSUFICIENTE')) return 'O peso informado é maior que o saldo disponível desta entrada.';
   if (message.includes('OFICINA_NF_DUPLICADA')) return 'Esta nota fiscal já foi cadastrada na Central de Grãos Messejana. Revise o lançamento existente.';
   if (message.includes('OFICINA_ENTRADA_CANCELADA')) return 'Não é permitido registrar saída para uma entrada cancelada.';
