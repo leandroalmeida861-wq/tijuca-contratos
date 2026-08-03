@@ -22,6 +22,7 @@ assert.notEqual(duplicateEntryKey({ fornecedor_cnpj: '11.111.111/0001-11', nf_nu
 assert.equal(complementaryNoteChangesWeight(), false);
 
 const migration = readFileSync(new URL('../supabase/migrations/20260803193448_oficina_messejana.sql', import.meta.url), 'utf8');
+const depositMigration = readFileSync(new URL('../supabase/migrations/20260803223500_central_depositos_fornecedores.sql', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../src/pages/OficinaMessejanaPage.jsx', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../src/services/oficinaMessejanaService.js', import.meta.url), 'utf8');
 for (const table of ['oficina_messejana_depositos','oficina_messejana_entradas','oficina_messejana_saidas','oficina_messejana_notas_complementares']) assert.match(migration, new RegExp(`enable row level security;[\\s\\S]*${table}|${table}[\\s\\S]*enable row level security`));
@@ -44,5 +45,13 @@ assert.match(service, /applyTextFilter\(query, 'fornecedor_nome', filters\.forne
 assert.match(service, /applyExactFilter\(query, 'deposito_id', filters\.depositoId\)/);
 assert.match(page, /setPeriod\(currentPeriod\(\)\)/);
 assert.doesNotMatch(page, /Feliana|Nicodemos|Guaraves|Paulo Dalto/);
+assert.match(page, /Depósitos da Central/);
+assert.match(page, /Fornecedor cadastrado \(opcional\)/);
+assert.match(service, /oficina_messejana_salvar_deposito/);
+assert.match(service, /oficina_messejana_excluir_deposito/);
+assert.match(depositMigration, /references public\.fornecedores\(id\) on delete restrict/);
+assert.match(depositMigration, /OFICINA_DEPOSITO_EM_USO/);
+assert.match(depositMigration, /auth\.uid\(\) is not null/);
+assert.match(depositMigration, /revoke all on function public\.oficina_messejana_excluir_deposito/);
 
 console.log('Central de Grãos Messejana: saldo, duplicidade, complemento, paginação, RLS e concorrência verificados.');

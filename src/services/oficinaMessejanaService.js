@@ -7,7 +7,7 @@ const EXIT_SELECT = '*';
 
 export async function listOficinaLookups() {
   const [depositos, fornecedores, produtos] = await Promise.all([
-    supabase.from('oficina_messejana_depositos').select('*').order('ativo', { ascending: false }).order('nome'),
+    supabase.from('oficina_messejana_depositos').select('*,fornecedor:fornecedores(id,nome,cnpj)').order('ativo', { ascending: false }).order('nome'),
     supabase.from('fornecedores').select('id,nome,cnpj').order('nome').limit(500),
     supabase.from('produtos').select('id,nome,unidade').order('nome').limit(500),
   ]);
@@ -149,11 +149,20 @@ export async function saveNotaComplementar(entradaId, data) {
 }
 
 export async function saveDeposito(id, data) {
-  const payload = { nome: String(data.nome || '').trim(), ativo: data.ativo !== false };
-  const query = id
-    ? supabase.from('oficina_messejana_depositos').update({ ...payload, updated_by: (await currentUserId()) }).eq('id', requireUuid(id))
-    : supabase.from('oficina_messejana_depositos').insert(payload);
-  const { error } = await query;
+  const { data: savedId, error } = await supabase.rpc('oficina_messejana_salvar_deposito', {
+    p_deposito_id: id ? requireUuid(id) : null,
+    p_fornecedor_id: data.fornecedor_id ? requireUuid(data.fornecedor_id) : null,
+    p_nome: String(data.nome || '').trim(),
+    p_ativo: data.ativo !== false,
+  });
+  if (error) throw error;
+  return savedId;
+}
+
+export async function deleteDeposito(id) {
+  const { error } = await supabase.rpc('oficina_messejana_excluir_deposito', {
+    p_deposito_id: requireUuid(id),
+  });
   if (error) throw error;
 }
 
@@ -181,6 +190,10 @@ export async function listAllForExport(type, options = {}) {
 
 export function oficinaUserError(error) {
   const message = String(error?.message || error || '');
+  if (message.includes('OFICINA_DEPOSITO_EM_USO')) return 'Este depósito possui entradas vinculadas. Desative-o para preservar o histórico.';
+  if (message.includes('OFICINA_DEPOSITO_DUPLICADO')) return 'Já existe um depósito com este nome na Central de Grãos Messejana.';
+  if (message.includes('OFICINA_FORNECEDOR_INVALIDO')) return 'O fornecedor selecionado não existe ou não pertence à sua empresa.';
+  if (message.includes('OFICINA_DEPOSITO_NOME_OBRIGATORIO')) return 'Informe o nome do depósito ou selecione um fornecedor cadastrado.';
   if (message.includes('OFICINA_SALDO_INSUFICIENTE')) return 'O peso informado é maior que o saldo disponível desta entrada.';
   if (message.includes('OFICINA_NF_DUPLICADA')) return 'Esta nota fiscal já foi cadastrada na Central de Grãos Messejana. Revise o lançamento existente.';
   if (message.includes('OFICINA_ENTRADA_CANCELADA')) return 'Não é permitido registrar saída para uma entrada cancelada.';
@@ -242,9 +255,4 @@ function requireUuid(value) {
     throw new Error('Identificador inválido. Atualize a página e selecione o registro novamente.');
   }
   return id;
-}
-
-async function currentUserId() {
-  const { data } = await supabase.auth.getUser();
-  return data?.user?.id || null;
 }
