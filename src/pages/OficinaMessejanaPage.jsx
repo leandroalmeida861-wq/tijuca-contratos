@@ -1,6 +1,6 @@
 import {
-  BarChart3, Boxes, ClipboardList, Download, Edit3, Eye, FileDown,
-  FileInput, FileOutput, Plus, RefreshCw, Search, Truck, Warehouse, XCircle,
+  BarChart3, Boxes, Check, ClipboardList, Download, Edit3, Eye, FileDown,
+  FileInput, FileOutput, Plus, RefreshCw, Search, Trash2, Truck, Warehouse, XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -11,16 +11,17 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { exportSimplePdf } from '../lib/pdf.js';
 import { currentPeriod } from '../lib/periodHistory.js';
 import {
-  OFICINA_PAGE_SIZE, cancelEntrada, cancelSaida, getEntrada, getOficinaDashboard,
+  OFICINA_PAGE_SIZE, cancelEntrada, cancelSaida, deleteDeposito, getEntrada, getOficinaDashboard,
   listAllForExport, listEntradas, listOficinaLookups, listSaidas, oficinaUserError,
   saveDeposito, saveEntrada, saveNotaComplementar, saveSaida,
 } from '../services/oficinaMessejanaService.js';
 
 const TABS = [
-  { key: 'dashboard', label: 'Dashboard', icon: Boxes, menu: 'oficina_messejana' },
-  { key: 'entradas', label: 'Entrada de Notas', icon: FileInput, menu: 'oficina_messejana_entradas' },
-  { key: 'saidas', label: 'Saída de Notas', icon: FileOutput, menu: 'oficina_messejana_saidas' },
-  { key: 'relatorios', label: 'Relatórios', icon: BarChart3, menu: 'oficina_messejana_relatorios' },
+  { key: 'dashboard', label: 'Dashboard', icon: Boxes, menu: 'oficina_messejana', tone: 'blue' },
+  { key: 'entradas', label: 'Entrada de Notas', icon: FileInput, menu: 'oficina_messejana_entradas', tone: 'teal' },
+  { key: 'saidas', label: 'Saída de Notas', icon: FileOutput, menu: 'oficina_messejana_saidas', tone: 'orange' },
+  { key: 'depositos', label: 'Depósitos da Central', icon: Warehouse, menu: 'oficina_messejana_depositos', tone: 'cyan' },
+  { key: 'relatorios', label: 'Relatórios', icon: BarChart3, menu: 'oficina_messejana_relatorios', tone: 'emerald' },
 ];
 
 const EMPTY_LOOKUPS = { depositos: [], fornecedores: [], produtos: [] };
@@ -118,9 +119,10 @@ export default function OficinaMessejanaPage() {
       {message && <Notice tone="success" text={message} onClose={() => setMessage('')} />}
       {error && <Notice tone="error" text={error} onClose={() => setError('')} />}
       {loading && <div className="flex min-h-48 items-center justify-center rounded-xl border border-slate-200 bg-white"><RefreshCw className="mr-2 animate-spin text-emerald-600" /> Carregando dados...</div>}
-      {!loading && activeTab === 'dashboard' && <Dashboard dashboard={dashboard} period={period} lookups={lookups} can={can} onSaved={async () => { setMessage('Depósito salvo com sucesso.'); await loadLookups(); }} onError={(value) => setError(oficinaUserError(value))} />}
+      {!loading && activeTab === 'dashboard' && <Dashboard dashboard={dashboard} period={period} lookups={lookups} can={() => false} onSaved={loadLookups} onError={(value) => setError(oficinaUserError(value))} />}
       {!loading && activeTab === 'entradas' && <EntriesTab rows={entries} total={entryCount} page={entryPage} onPage={setEntryPage} filters={entryFilters} onFilters={updateEntryFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onNew={() => setModal({ type: 'entry', entry: null })} onView={(row) => setModal({ type: 'view-entry', row })} onEdit={(entry) => setModal({ type: 'entry', entry })} onExit={startExit} onComplement={(entry) => setModal({ type: 'complement', entry })} onCancel={(row) => setModal({ type: 'cancel-entry', row })} />}
       {!loading && activeTab === 'saidas' && <ExitsTab rows={exits} total={exitCount} page={exitPage} onPage={setExitPage} filters={exitFilters} onFilters={updateExitFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onView={(row) => setModal({ type: 'view-exit', row })} onEdit={editExit} onCancel={(row) => setModal({ type: 'cancel-exit', row })} />}
+      {!loading && activeTab === 'depositos' && <DepositsTab lookups={lookups} can={can} onSaved={async (text) => { setMessage(text); await loadLookups(); }} onError={(value) => setError(oficinaUserError(value))} />}
       {!loading && activeTab === 'relatorios' && <ReportsTab dashboard={dashboard} period={period} onPeriod={setPeriod} can={can} onError={(value) => setError(oficinaUserError(value))} />}
       {modal?.type === 'entry' && <EntradaModal entry={modal.entry} lookups={lookups} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveEntry} />}
       {modal?.type === 'exit' && <SaidaModal entry={modal.entry} exit={modal.exit} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveExit} />}
@@ -137,8 +139,16 @@ function Header() {
   return <header className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-r from-white via-white to-emerald-50 p-5 shadow-sm sm:p-7"><div className="relative z-10 flex items-center gap-5"><div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-200"><Warehouse size={34} /></div><div><h1 className="text-2xl font-black text-slate-950 sm:text-4xl">Central de Grãos Messejana</h1><p className="mt-1 max-w-3xl text-sm font-medium text-slate-600 sm:text-base">Controle exclusivo de entradas, saídas e saldos de notas fiscais de grãos nos depósitos de Messejana.</p></div></div><Warehouse className="absolute -bottom-10 right-8 h-40 w-40 text-emerald-100" strokeWidth={1} /></header>;
 }
 
+const TAB_STYLES = {
+  blue: { card: 'border-blue-100 hover:border-blue-300 hover:bg-blue-50/50', active: 'border-blue-200 bg-blue-50/70 ring-blue-100', icon: 'bg-blue-500 shadow-blue-200', line: 'bg-blue-500', check: 'bg-blue-500' },
+  teal: { card: 'border-teal-100 hover:border-teal-300 hover:bg-teal-50/50', active: 'border-teal-200 bg-teal-50/70 ring-teal-100', icon: 'bg-teal-500 shadow-teal-200', line: 'bg-teal-500', check: 'bg-teal-500' },
+  orange: { card: 'border-orange-100 hover:border-orange-300 hover:bg-orange-50/50', active: 'border-orange-200 bg-orange-50/70 ring-orange-100', icon: 'bg-orange-500 shadow-orange-200', line: 'bg-orange-500', check: 'bg-orange-500' },
+  cyan: { card: 'border-cyan-100 hover:border-cyan-300 hover:bg-cyan-50/50', active: 'border-cyan-200 bg-cyan-50/70 ring-cyan-100', icon: 'bg-cyan-600 shadow-cyan-200', line: 'bg-cyan-600', check: 'bg-cyan-600' },
+  emerald: { card: 'border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/50', active: 'border-emerald-200 bg-emerald-50/70 ring-emerald-100', icon: 'bg-emerald-600 shadow-emerald-200', line: 'bg-emerald-600', check: 'bg-emerald-600' },
+};
+
 function TabNavigation({ tabs, active, onSelect }) {
-  return <nav className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 xl:grid-cols-4">{tabs.map((tab) => <button key={tab.key} type="button" onClick={() => onSelect(tab.key)} className={`relative flex min-h-24 items-center justify-center gap-3 rounded-xl border px-4 text-sm font-black transition sm:flex-col ${active === tab.key ? 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-sm' : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'}`}><tab.icon className={`h-8 w-8 ${active === tab.key ? 'text-emerald-600' : 'text-slate-500'}`} />{tab.label}{active === tab.key && <span className="absolute bottom-0 left-3 right-3 h-1 rounded-t bg-emerald-600" />}</button>)}</nav>;
+  return <nav aria-label="Menus da Central de Grãos Messejana" className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm sm:p-3"><div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">{tabs.map((tab) => { const style = TAB_STYLES[tab.tone] || TAB_STYLES.blue; const isActive = active === tab.key; const Icon = tab.icon; return <button key={tab.key} type="button" onClick={() => onSelect(tab.key)} aria-current={isActive ? 'page' : undefined} className={`group relative flex min-h-32 min-w-0 flex-col items-center justify-center overflow-hidden rounded-xl border px-2 py-4 text-center transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 sm:min-h-36 sm:px-3 ${style.card} ${isActive ? `ring-2 ${style.active}` : 'bg-white'}`}><span className={`grid h-11 w-11 place-items-center rounded-xl text-white shadow-md ${style.icon}`}><Icon className="h-6 w-6" strokeWidth={2.2} /></span><span className="mt-3 text-sm font-extrabold leading-snug text-slate-900 sm:text-base">{tab.label}</span>{isActive && <span className={`absolute right-2.5 top-2.5 grid h-5 w-5 place-items-center rounded-full text-white ${style.check}`}><Check className="h-3.5 w-3.5" strokeWidth={3} /><span className="sr-only">Menu selecionado</span></span>}<span className={`absolute inset-x-0 bottom-0 h-1 ${style.line}`} /></button>; })}</div></nav>;
 }
 
 function Dashboard({ dashboard, period, lookups, can, onSaved, onError }) {
@@ -151,6 +161,85 @@ function Dashboard({ dashboard, period, lookups, can, onSaved, onError }) {
     ['Saídas parciais', dashboard.saida_parcial, FileOutput], ['Saídas totais', dashboard.saida_total, FileDown],
   ];
   return <div className="grid gap-4"><SectionTitle title="Dashboard" subtitle={`Indicadores do período ${String(period.month).padStart(2, '0')}/${period.year}.`} /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, Icon]) => <article key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><Icon className="h-7 w-7 text-emerald-600" /><p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value ?? 0}</p></article>)}</div><div className="grid gap-4 xl:grid-cols-2"><SummaryList title="Saldo por produto" rows={dashboard.saldo_por_produto || []} labelKey="produto" valueKey="saldo" /><SummaryList title="Saldo por depósito" rows={dashboard.saldo_por_deposito || []} labelKey="deposito" valueKey="saldo" /></div>{can('oficina_messejana_depositos', 'visualizar') && <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><h2 className="font-black">Depósitos da Central</h2><p className="text-xs text-slate-500">Cadastros armazenados no banco, sem nomes fixos no frontend.</p></div>{can('oficina_messejana_depositos', 'cadastrar') && <button type="button" onClick={() => setDepositForm({ nome: '', ativo: true })} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white"><Plus size={16} /> Novo</button>}</div><div className="divide-y divide-slate-100">{lookups.depositos.map((item) => <div key={item.id} className="flex items-center justify-between px-4 py-3"><span className="font-bold text-slate-800">{item.nome}</span><div className="flex items-center gap-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${item.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span>{can('oficina_messejana_depositos', 'editar') && <button type="button" onClick={() => setDepositForm(item)} className="text-slate-500 hover:text-emerald-700" aria-label={`Editar ${item.nome}`}><Edit3 size={17} /></button>}</div></div>)}</div></section>}{depositForm && <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><form onSubmit={submitDeposit} className="flex flex-col gap-3 sm:flex-row sm:items-end"><label className="grid flex-1 gap-1 text-sm font-bold">Nome<input required maxLength={100} className="h-11 rounded-lg border border-slate-300 px-3" value={depositForm.nome} onChange={(e) => setDepositForm((current) => ({ ...current, nome: e.target.value }))} /></label><label className="flex h-11 items-center gap-2 text-sm font-bold"><input type="checkbox" checked={depositForm.ativo} onChange={(e) => setDepositForm((current) => ({ ...current, ativo: e.target.checked }))} /> Ativo</label><button type="button" onClick={() => setDepositForm(null)} className="h-11 rounded-lg border px-4 font-bold">Cancelar</button><button type="submit" className="h-11 rounded-lg bg-emerald-600 px-4 font-bold text-white">Salvar</button></form></div>}</div>;
+}
+
+function DepositsTab({ lookups, can, onSaved, onError }) {
+  const [form, setForm] = useState(null);
+  const [searchDraft, setSearchDraft] = useState('');
+  const [search, setSearch] = useState('');
+  const [statusDraft, setStatusDraft] = useState('');
+  const [status, setStatus] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const normalizedSearch = normalizeText(search);
+  const rows = lookups.depositos.filter((item) => {
+    if (status === 'ativo' && !item.ativo) return false;
+    if (status === 'inativo' && item.ativo) return false;
+    if (!normalizedSearch) return true;
+    return normalizeText([item.nome, item.fornecedor?.nome, item.fornecedor?.cnpj].filter(Boolean).join(' ')).includes(normalizedSearch);
+  });
+
+  function openForm(item = null) {
+    setForm(item ? { ...item, fornecedor_id: item.fornecedor_id || '' } : { nome: '', fornecedor_id: '', ativo: true });
+  }
+
+  function selectSupplier(fornecedorId) {
+    const fornecedor = lookups.fornecedores.find((item) => item.id === fornecedorId);
+    setForm((current) => ({
+      ...current,
+      fornecedor_id: fornecedorId,
+      nome: fornecedor ? fornecedor.nome : current.nome,
+    }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await saveDeposito(form.id, form);
+      setForm(null);
+      await onSaved(form.id ? 'Depósito atualizado com sucesso.' : 'Depósito criado com sucesso.');
+    } catch (error) {
+      onError(error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    setSaving(true);
+    try {
+      await deleteDeposito(deleting.id);
+      setDeleting(null);
+      await onSaved('Depósito excluído. O fornecedor cadastrado foi preservado.');
+    } catch (error) {
+      onError(error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedSupplier = lookups.fornecedores.find((item) => item.id === form?.fornecedor_id);
+
+  return <div className="grid gap-4">
+    <SectionTitle title="Depósitos da Central" subtitle="Vincule fornecedores já cadastrados e administre os depósitos da Central de Grãos Messejana." action={can('oficina_messejana_depositos', 'cadastrar') && <button type="button" onClick={() => openForm()} className="primary"><Plus size={17} /> Novo depósito</button>} />
+    <section className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/70 to-cyan-50/50 p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-600 text-white"><Search size={22} /></span><div><h2 className="text-sm font-black">FILTROS DE BUSCA</h2><p className="text-xs text-slate-500">Pesquise por depósito, fornecedor cadastrado ou CNPJ.</p></div></div>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px_auto] sm:items-end">
+        <FilterInput label="Depósito, fornecedor ou CNPJ" value={searchDraft} onChange={setSearchDraft} />
+        <label className="grid gap-1 text-xs font-bold">Status<select className="filter" value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)}><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option></select></label>
+        <div className="flex gap-2"><button type="button" className="secondary" onClick={() => { setSearchDraft(''); setSearch(''); setStatusDraft(''); setStatus(''); }}>Limpar</button><button type="button" className="primary" onClick={() => { setSearch(searchDraft); setStatus(statusDraft); }}><Search size={16} /> Aplicar filtros</button></div>
+      </div>
+      <p className="mt-3 text-xs font-bold text-slate-600">Exibindo <span className="text-emerald-700">{rows.length}</span> de {lookups.depositos.length} depósito(s)</p>
+    </section>
+
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table className="min-w-[900px] w-full text-left text-sm"><thead><tr>{['Depósito','Fornecedor vinculado','CNPJ','Status','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((item) => <tr key={item.id} className="border-t border-slate-100"><Td><span className="font-black text-slate-900">{item.nome}</span></Td><Td>{item.fornecedor?.nome || 'Sem fornecedor vinculado'}</Td><Td>{formatCnpj(item.fornecedor?.cnpj)}</Td><Td><span className={`inline-flex rounded-full px-2 py-1 text-xs font-black ${item.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></Td><Td><div className="flex gap-1">{can('oficina_messejana_depositos', 'editar') && <IconButton label={`Editar ${item.nome}`} onClick={() => openForm(item)}><Edit3 size={17} /></IconButton>}{can('oficina_messejana_depositos', 'excluir') && <IconButton label={`Excluir ${item.nome}`} onClick={() => setDeleting(item)} danger><Trash2 size={17} /></IconButton>}</div></Td></tr>)}{!rows.length && <EmptyRow cols={5} />}</tbody></table></div>
+
+    {form && <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={form.id ? 'Editar depósito' : 'Novo depósito'}><form onSubmit={submit} className="mx-auto my-8 max-w-2xl rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 p-5"><div><h2 className="text-xl font-black">{form.id ? 'Editar depósito' : 'Novo depósito'}</h2><p className="mt-1 text-sm text-slate-500">Selecione um fornecedor existente ou informe somente o nome do depósito.</p></div><button type="button" onClick={() => setForm(null)} aria-label="Fechar"><XCircle /></button></header><div className="grid gap-4 p-5"><label className="grid gap-1 text-sm font-bold">Fornecedor cadastrado (opcional)<select className="filter" value={form.fornecedor_id} onChange={(event) => selectSupplier(event.target.value)}><option value="">Sem fornecedor vinculado</option>{lookups.fornecedores.map((item) => <option key={item.id} value={item.id}>{item.nome}{item.cnpj ? ` — ${formatCnpj(item.cnpj)}` : ''}</option>)}</select></label>{!lookups.fornecedores.length && <p className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">Nenhum fornecedor disponível. Cadastre-o primeiro no menu Cadastros → Fornecedores.</p>}<label className="grid gap-1 text-sm font-bold">Nome do depósito<input required maxLength={100} className="filter" value={form.nome} onChange={(event) => setForm((current) => ({ ...current, nome: event.target.value }))} /></label>{selectedSupplier && <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm"><b>Fornecedor vinculado:</b> {selectedSupplier.nome}<br /><b>CNPJ:</b> {formatCnpj(selectedSupplier.cnpj)}</div>}<label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={form.ativo} onChange={(event) => setForm((current) => ({ ...current, ativo: event.target.checked }))} /> Depósito ativo</label></div><footer className="flex justify-end gap-2 border-t border-slate-200 p-4"><button type="button" className="secondary" onClick={() => setForm(null)}>Cancelar</button><button type="submit" className="primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar depósito'}</button></footer></form></div>}
+
+    {deleting && <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Excluir depósito"><div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="p-5"><h2 className="text-xl font-black text-slate-950">Excluir depósito?</h2><p className="mt-3 text-sm text-slate-600">O depósito <b>{deleting.nome}</b> será excluído somente se não possuir movimentações. O fornecedor cadastrado não será apagado.</p></div><div className="flex justify-end gap-2 border-t border-slate-200 p-4"><button type="button" className="secondary" onClick={() => setDeleting(null)}>Cancelar</button><button type="button" disabled={saving} onClick={confirmDelete} className="inline-flex h-11 items-center gap-2 rounded-lg bg-red-600 px-4 font-bold text-white disabled:opacity-60"><Trash2 size={17} /> {saving ? 'Excluindo...' : 'Excluir depósito'}</button></div></div></div>}
+  </div>;
 }
 
 function EntriesTab(props) {
@@ -250,6 +339,8 @@ function Status({ value }) { return <span className={`inline-flex rounded-full p
 function Pagination({ page, total, onPage }) { const pages=Math.max(1,Math.ceil(total/OFICINA_PAGE_SIZE)); return <div className="flex items-center justify-between text-sm text-slate-600"><span>Exibindo {total?((page-1)*OFICINA_PAGE_SIZE)+1:0} a {Math.min(page*OFICINA_PAGE_SIZE,total)} de {total}</span><div className="flex gap-2"><button type="button" className="secondary" disabled={page<=1} onClick={()=>onPage(page-1)}>Anterior</button><span className="grid min-w-11 place-items-center rounded-lg bg-emerald-600 px-3 font-black text-white">{page}</span><button type="button" className="secondary" disabled={page>=pages} onClick={()=>onPage(page+1)}>Próxima</button></div></div>; }
 function Notice({ tone, text, onClose }) { return <div className={`flex items-center justify-between rounded-xl border p-4 text-sm font-bold ${tone==='error'?'border-red-200 bg-red-50 text-red-800':'border-emerald-200 bg-emerald-50 text-emerald-800'}`}><span>{text}</span><button type="button" onClick={onClose} aria-label="Fechar"><XCircle size={18}/></button></div>; }
 function dateTime(value) { if(!value)return '-'; return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Fortaleza'}).format(new Date(value)); }
+function normalizeText(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+function formatCnpj(value) { const digits=String(value||'').replace(/\D/g,''); return digits.length===14?digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5'):(value||'-'); }
 function formatKg(value) { return new Intl.NumberFormat('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:3}).format(Number(value||0)); }
 function formatSummaryValue(value, suffix) { const number=Number(value||0); return `${formatKg(number)} ${suffix}${suffix==='KG'||number===1?'':'s'}`; }
 function statusLabel(value) { return ({SEM_SAIDA:'Sem saída',SAIDA_PARCIAL:'Saída parcial',SAIDA_TOTAL:'Saída total',CANCELADA:'Cancelada',CONFIRMADA:'Confirmada'})[value]||value||'-'; }
