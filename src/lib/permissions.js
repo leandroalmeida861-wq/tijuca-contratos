@@ -17,6 +17,11 @@ export const MENU_DEFINITIONS = [
   { key: 'balancas_recebimentos', label: 'Balanças - Recebimentos', path: '/balancas?tab=recebimentos' },
   { key: 'balancas_armazenagem', label: 'Balanças - Armazenagem M.P.', path: '/balancas?tab=armazenagem' },
   { key: 'balancas_relatorios', label: 'Balanças - Relatórios', path: '/balancas?tab=relatorios' },
+  { key: 'oficina_messejana', label: 'Central de Grãos Messejana', path: '/central-graos-messejana' },
+  { key: 'oficina_messejana_entradas', label: 'Central Messejana - Entradas', path: '/central-graos-messejana?tab=entradas' },
+  { key: 'oficina_messejana_saidas', label: 'Central Messejana - Saídas', path: '/central-graos-messejana?tab=saidas' },
+  { key: 'oficina_messejana_relatorios', label: 'Central Messejana - Relatórios', path: '/central-graos-messejana?tab=relatorios' },
+  { key: 'oficina_messejana_depositos', label: 'Central Messejana - Depósitos', path: '/central-graos-messejana' },
   { key: 'usuarios', label: 'Usuários e permissões', path: '/admin/acessos' },
   { key: 'auditoria', label: 'Auditoria', path: '/admin/auditoria' },
 ];
@@ -85,6 +90,9 @@ export const TABLE_MENU = {
   notas_fiscais: 'notas_fiscais',
   fretes: 'fretes',
   documentos: 'documentos',
+  oficina_messejana_depositos: 'oficina_messejana_depositos',
+  oficina_messejana_entradas: 'oficina_messejana_entradas',
+  oficina_messejana_saidas: 'oficina_messejana_saidas',
 };
 
 export function permissionsToMap(rows = []) {
@@ -94,6 +102,7 @@ export function permissionsToMap(rows = []) {
 const LANDING_MENU_PRIORITY = [
   'dashboard',
   'balancas',
+  'oficina_messejana',
   'fornecedores',
   'fabricas',
   'produtos',

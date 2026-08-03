@@ -1,0 +1,256 @@
+import {
+  BarChart3, Boxes, ClipboardList, Download, Edit3, Eye, FileDown,
+  FileInput, FileOutput, Plus, RefreshCw, Search, Truck, Warehouse, XCircle,
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import PeriodHistory from '../components/balancas/PeriodHistory.jsx';
+import { ComplementoModal, ConfirmModal, EntradaModal, SaidaModal } from '../components/oficina/OficinaFormModal.jsx';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { exportSimplePdf } from '../lib/pdf.js';
+import { currentPeriod } from '../lib/periodHistory.js';
+import {
+  OFICINA_PAGE_SIZE, cancelEntrada, cancelSaida, getEntrada, getOficinaDashboard,
+  listAllForExport, listEntradas, listOficinaLookups, listSaidas, oficinaUserError,
+  saveDeposito, saveEntrada, saveNotaComplementar, saveSaida,
+} from '../services/oficinaMessejanaService.js';
+
+const TABS = [
+  { key: 'dashboard', label: 'Dashboard', icon: Boxes, menu: 'oficina_messejana' },
+  { key: 'entradas', label: 'Entrada de Notas', icon: FileInput, menu: 'oficina_messejana_entradas' },
+  { key: 'saidas', label: 'Saída de Notas', icon: FileOutput, menu: 'oficina_messejana_saidas' },
+  { key: 'relatorios', label: 'Relatórios', icon: BarChart3, menu: 'oficina_messejana_relatorios' },
+];
+
+const EMPTY_LOOKUPS = { depositos: [], fornecedores: [], produtos: [] };
+const EMPTY_FILTERS = { search: '', fornecedor: '', produto: '', depositoId: '', placa: '', motorista: '', destino: '', status: '' };
+
+export default function OficinaMessejanaPage() {
+  const { can, profileData } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const visibleTabs = TABS.filter((tab) => can(tab.menu, 'visualizar'));
+  const requestedTab = params.get('tab') || 'dashboard';
+  const activeTab = visibleTabs.some((tab) => tab.key === requestedTab) ? requestedTab : visibleTabs[0]?.key || 'dashboard';
+  const [period, setPeriod] = useState(currentPeriod);
+  const [lookups, setLookups] = useState(EMPTY_LOOKUPS);
+  const [entries, setEntries] = useState([]);
+  const [exits, setExits] = useState([]);
+  const [entryCount, setEntryCount] = useState(0);
+  const [exitCount, setExitCount] = useState(0);
+  const [entryPage, setEntryPage] = useState(1);
+  const [exitPage, setExitPage] = useState(1);
+  const [entryFilters, setEntryFilters] = useState(EMPTY_FILTERS);
+  const [exitFilters, setExitFilters] = useState(EMPTY_FILTERS);
+  const [dashboard, setDashboard] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [modal, setModal] = useState(null);
+
+  const loadLookups = useCallback(async () => setLookups(await listOficinaLookups()), []);
+  const loadEntries = useCallback(async () => {
+    const result = await listEntradas({ page: entryPage, period, filters: entryFilters });
+    setEntries(result.rows); setEntryCount(result.count);
+  }, [entryPage, period, entryFilters]);
+  const loadExits = useCallback(async () => {
+    const result = await listSaidas({ page: exitPage, period, filters: exitFilters });
+    setExits(result.rows); setExitCount(result.count);
+  }, [exitPage, period, exitFilters]);
+  const loadDashboard = useCallback(async () => setDashboard(await getOficinaDashboard(period)), [period]);
+  const updateEntryFilters = useCallback((next) => {
+    if (entryFilters.search && !next.search) setPeriod(currentPeriod());
+    setEntryFilters(next);
+  }, [entryFilters.search]);
+  const updateExitFilters = useCallback((next) => {
+    if (exitFilters.search && !next.search) setPeriod(currentPeriod());
+    setExitFilters(next);
+  }, [exitFilters.search]);
+
+  const reload = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const tasks = [loadLookups()];
+      if (activeTab === 'dashboard' || activeTab === 'relatorios') tasks.push(loadDashboard());
+      if (activeTab === 'entradas') tasks.push(loadEntries());
+      if (activeTab === 'saidas') tasks.push(loadExits());
+      await Promise.all(tasks);
+    } catch (loadError) { setError(oficinaUserError(loadError)); }
+    finally { setLoading(false); }
+  }, [activeTab, loadDashboard, loadEntries, loadExits, loadLookups]);
+
+  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { setEntryPage(1); }, [period, entryFilters]);
+  useEffect(() => { setExitPage(1); }, [period, exitFilters]);
+
+  function selectTab(key) { setParams(key === 'dashboard' ? {} : { tab: key }); setMessage(''); setError(''); }
+  async function handleSaveEntry(data) {
+    try { await saveEntrada(modal?.entry?.id, data); setModal(null); setMessage('Entrada salva com sucesso.'); await Promise.all([loadEntries(), loadDashboard(), loadLookups()]); }
+    catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
+  }
+  async function startExit(entry) { setModal({ type: 'exit', entry, exit: null, idempotencyKey: crypto.randomUUID() }); }
+  async function editExit(row) {
+    try { const entry = await getEntrada(row.entrada_id); setModal({ type: 'exit', entry, exit: row, idempotencyKey: row.idempotency_key }); }
+    catch (openError) { setError(oficinaUserError(openError)); }
+  }
+  async function handleSaveExit(data) {
+    try { await saveSaida(modal?.exit?.id, modal.entry.id, modal.idempotencyKey, data); setModal(null); setMessage('Saída salva e saldo recalculado com sucesso.'); await Promise.all([loadExits(), loadDashboard()]); }
+    catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
+  }
+  async function handleSaveComplement(data) {
+    try { await saveNotaComplementar(modal.entry.id, data); setModal(null); setMessage('NF complementar vinculada sem alterar peso ou saldo.'); }
+    catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
+  }
+  async function handleConfirm(reason) {
+    try {
+      if (modal.type === 'cancel-entry') await cancelEntrada(modal.row.id, reason);
+      else await cancelSaida(modal.row.id, reason);
+      setModal(null); setMessage('Cancelamento registrado e saldo recalculado.'); await Promise.all([loadEntries(), loadExits(), loadDashboard()]);
+    } catch (cancelError) { setError(oficinaUserError(cancelError)); throw cancelError; }
+  }
+
+  if (!visibleTabs.length) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900">Você não possui permissão para acessar a Central de Grãos Messejana.</div>;
+
+  return (
+    <div className="mx-auto grid max-w-[1600px] gap-4">
+      <Header />
+      <TabNavigation tabs={visibleTabs} active={activeTab} onSelect={selectTab} />
+      {message && <Notice tone="success" text={message} onClose={() => setMessage('')} />}
+      {error && <Notice tone="error" text={error} onClose={() => setError('')} />}
+      {loading && <div className="flex min-h-48 items-center justify-center rounded-xl border border-slate-200 bg-white"><RefreshCw className="mr-2 animate-spin text-emerald-600" /> Carregando dados...</div>}
+      {!loading && activeTab === 'dashboard' && <Dashboard dashboard={dashboard} period={period} lookups={lookups} can={can} onSaved={async () => { setMessage('Depósito salvo com sucesso.'); await loadLookups(); }} onError={(value) => setError(oficinaUserError(value))} />}
+      {!loading && activeTab === 'entradas' && <EntriesTab rows={entries} total={entryCount} page={entryPage} onPage={setEntryPage} filters={entryFilters} onFilters={updateEntryFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onNew={() => setModal({ type: 'entry', entry: null })} onView={(row) => setModal({ type: 'view-entry', row })} onEdit={(entry) => setModal({ type: 'entry', entry })} onExit={startExit} onComplement={(entry) => setModal({ type: 'complement', entry })} onCancel={(row) => setModal({ type: 'cancel-entry', row })} />}
+      {!loading && activeTab === 'saidas' && <ExitsTab rows={exits} total={exitCount} page={exitPage} onPage={setExitPage} filters={exitFilters} onFilters={updateExitFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onView={(row) => setModal({ type: 'view-exit', row })} onEdit={editExit} onCancel={(row) => setModal({ type: 'cancel-exit', row })} />}
+      {!loading && activeTab === 'relatorios' && <ReportsTab dashboard={dashboard} period={period} onPeriod={setPeriod} can={can} onError={(value) => setError(oficinaUserError(value))} />}
+      {modal?.type === 'entry' && <EntradaModal entry={modal.entry} lookups={lookups} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveEntry} />}
+      {modal?.type === 'exit' && <SaidaModal entry={modal.entry} exit={modal.exit} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveExit} />}
+      {modal?.type === 'complement' && <ComplementoModal entry={modal.entry} onClose={() => setModal(null)} onSave={handleSaveComplement} />}
+      {modal?.type === 'view-entry' && <RecordViewModal title="Detalhes da entrada" row={modal.row} type="entry" onClose={() => setModal(null)} />}
+      {modal?.type === 'view-exit' && <RecordViewModal title="Detalhes da saída" row={modal.row} type="exit" onClose={() => setModal(null)} />}
+      {modal?.type === 'cancel-entry' && <ConfirmModal title="Cancelar entrada" text="A entrada será preservada no histórico. Não é possível cancelar uma entrada com saídas confirmadas." confirmLabel="Cancelar entrada" onClose={() => setModal(null)} onConfirm={handleConfirm} />}
+      {modal?.type === 'cancel-exit' && <ConfirmModal title="Cancelar saída" text="O peso desta saída será devolvido automaticamente ao saldo da entrada." confirmLabel="Cancelar saída" onClose={() => setModal(null)} onConfirm={handleConfirm} />}
+    </div>
+  );
+}
+
+function Header() {
+  return <header className="relative overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-r from-white via-white to-emerald-50 p-5 shadow-sm sm:p-7"><div className="relative z-10 flex items-center gap-5"><div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-200"><Warehouse size={34} /></div><div><h1 className="text-2xl font-black text-slate-950 sm:text-4xl">Central de Grãos Messejana</h1><p className="mt-1 max-w-3xl text-sm font-medium text-slate-600 sm:text-base">Controle exclusivo de entradas, saídas e saldos de notas fiscais de grãos nos depósitos de Messejana.</p></div></div><Warehouse className="absolute -bottom-10 right-8 h-40 w-40 text-emerald-100" strokeWidth={1} /></header>;
+}
+
+function TabNavigation({ tabs, active, onSelect }) {
+  return <nav className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 xl:grid-cols-4">{tabs.map((tab) => <button key={tab.key} type="button" onClick={() => onSelect(tab.key)} className={`relative flex min-h-24 items-center justify-center gap-3 rounded-xl border px-4 text-sm font-black transition sm:flex-col ${active === tab.key ? 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-sm' : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'}`}><tab.icon className={`h-8 w-8 ${active === tab.key ? 'text-emerald-600' : 'text-slate-500'}`} />{tab.label}{active === tab.key && <span className="absolute bottom-0 left-3 right-3 h-1 rounded-t bg-emerald-600" />}</button>)}</nav>;
+}
+
+function Dashboard({ dashboard, period, lookups, can, onSaved, onError }) {
+  const [depositForm, setDepositForm] = useState(null);
+  async function submitDeposit(event) { event.preventDefault(); try { await saveDeposito(depositForm.id, depositForm); setDepositForm(null); await onSaved(); } catch (error) { onError(error); } }
+  const cards = [
+    ['Notas de entrada', dashboard.quantidade_entradas, ClipboardList], ['Peso total de entrada', `${formatKg(dashboard.peso_entradas)} KG`, FileInput],
+    ['Notas de saída', dashboard.quantidade_saidas, Truck], ['Peso total de saída', `${formatKg(dashboard.peso_saidas)} KG`, FileOutput],
+    ['Saldo total disponível', `${formatKg(dashboard.saldo_total)} KG`, Boxes], ['Notas sem saída', dashboard.sem_saida, FileInput],
+    ['Saídas parciais', dashboard.saida_parcial, FileOutput], ['Saídas totais', dashboard.saida_total, FileDown],
+  ];
+  return <div className="grid gap-4"><SectionTitle title="Dashboard" subtitle={`Indicadores do período ${String(period.month).padStart(2, '0')}/${period.year}.`} /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, Icon]) => <article key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><Icon className="h-7 w-7 text-emerald-600" /><p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value ?? 0}</p></article>)}</div><div className="grid gap-4 xl:grid-cols-2"><SummaryList title="Saldo por produto" rows={dashboard.saldo_por_produto || []} labelKey="produto" valueKey="saldo" /><SummaryList title="Saldo por depósito" rows={dashboard.saldo_por_deposito || []} labelKey="deposito" valueKey="saldo" /></div>{can('oficina_messejana_depositos', 'visualizar') && <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><h2 className="font-black">Depósitos da Central</h2><p className="text-xs text-slate-500">Cadastros armazenados no banco, sem nomes fixos no frontend.</p></div>{can('oficina_messejana_depositos', 'cadastrar') && <button type="button" onClick={() => setDepositForm({ nome: '', ativo: true })} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white"><Plus size={16} /> Novo</button>}</div><div className="divide-y divide-slate-100">{lookups.depositos.map((item) => <div key={item.id} className="flex items-center justify-between px-4 py-3"><span className="font-bold text-slate-800">{item.nome}</span><div className="flex items-center gap-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${item.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span>{can('oficina_messejana_depositos', 'editar') && <button type="button" onClick={() => setDepositForm(item)} className="text-slate-500 hover:text-emerald-700" aria-label={`Editar ${item.nome}`}><Edit3 size={17} /></button>}</div></div>)}</div></section>}{depositForm && <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><form onSubmit={submitDeposit} className="flex flex-col gap-3 sm:flex-row sm:items-end"><label className="grid flex-1 gap-1 text-sm font-bold">Nome<input required maxLength={100} className="h-11 rounded-lg border border-slate-300 px-3" value={depositForm.nome} onChange={(e) => setDepositForm((current) => ({ ...current, nome: e.target.value }))} /></label><label className="flex h-11 items-center gap-2 text-sm font-bold"><input type="checkbox" checked={depositForm.ativo} onChange={(e) => setDepositForm((current) => ({ ...current, ativo: e.target.checked }))} /> Ativo</label><button type="button" onClick={() => setDepositForm(null)} className="h-11 rounded-lg border px-4 font-bold">Cancelar</button><button type="submit" className="h-11 rounded-lg bg-emerald-600 px-4 font-bold text-white">Salvar</button></form></div>}</div>;
+}
+
+function EntriesTab(props) {
+  const { rows, total, page, onPage, filters, onFilters, period, onPeriod, lookups, can, onNew, onView, onEdit, onExit, onComplement, onCancel } = props;
+  return <div className="grid gap-4"><SectionTitle title="Entrada de Notas" subtitle="Registre as notas fiscais de grãos e acompanhe o saldo por depósito." action={can('oficina_messejana_entradas', 'cadastrar') && <button type="button" onClick={onNew} className="primary"><Plus size={17} /> Nova entrada</button>} /><Filters type="entradas" value={filters} onChange={onFilters} lookups={lookups} /><PeriodHistory period={period} onChange={onPeriod} counts={new Map()} searchActive={Boolean(filters.search)} /><DataTable><thead><tr>{['Data/hora','NF/série','Fornecedor','Produto','Depósito','Placa','Motorista','Peso entrada','Retirado','Saldo','Status','Responsável','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_entrada)}</Td><Td>{row.nf_numero}/{row.nf_serie}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.produto_nome}</Td><Td>{row.deposito_nome}</Td><Td>{row.placa || '-'}</Td><Td>{row.motorista || '-'}</Td><Td>{formatKg(row.peso_nf)} KG</Td><Td>{formatKg(row.peso_retirado)} KG</Td><Td strong>{formatKg(row.saldo_disponivel)} KG</Td><Td><Status value={row.status_saldo} /></Td><Td>{row.responsavel_nome}</Td><Td sticky><Actions onView={() => onView(row)} onEdit={can('oficina_messejana_entradas','editar') ? () => onEdit(row) : null} onExit={can('oficina_messejana_saidas','cadastrar') && row.status_registro !== 'CANCELADA' && Number(row.saldo_disponivel)>0 ? () => onExit(row) : null} onComplement={can('oficina_messejana_entradas','cadastrar') && row.status_registro !== 'CANCELADA' ? () => onComplement(row) : null} onCancel={can('oficina_messejana_entradas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancel(row) : null} /></Td></tr>)}{!rows.length && <EmptyRow cols={13} />}</tbody></DataTable><Pagination page={page} total={total} onPage={onPage} /></div>;
+}
+
+function ExitsTab(props) {
+  const { rows, total, page, onPage, filters, onFilters, period, onPeriod, lookups, can, onView, onEdit, onCancel } = props;
+  return <div className="grid gap-4"><SectionTitle title="Saída de Notas" subtitle="Saídas vinculadas obrigatoriamente a uma entrada existente." /><Filters type="saidas" value={filters} onChange={onFilters} lookups={lookups} /><PeriodHistory period={period} onChange={onPeriod} counts={new Map()} searchActive={Boolean(filters.search)} /><DataTable><thead><tr>{['Data/hora','NF origem','NF saída','Fornecedor','Produto','Depósito/origem','Destino','Peso entrada','Peso saída','Saldo restante','Placa','Motorista','Status','Responsável','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_saida)}</Td><Td>{row.nf_origem_numero}/{row.nf_origem_serie}</Td><Td>{row.nf_saida_numero}/{row.nf_saida_serie}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.produto_nome}</Td><Td>{row.deposito_origem}</Td><Td>{row.destino}</Td><Td>{formatKg(row.peso_entrada)} KG</Td><Td>{formatKg(row.peso_saida)} KG</Td><Td strong>{formatKg(row.saldo_apos_saida)} KG</Td><Td>{row.placa || '-'}</Td><Td>{row.motorista || '-'}</Td><Td><Status value={row.status_registro} /></Td><Td>{row.responsavel_nome}</Td><Td sticky><Actions onView={() => onView(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEdit(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancel(row) : null} /></Td></tr>)}{!rows.length && <EmptyRow cols={15} />}</tbody></DataTable><Pagination page={page} total={total} onPage={onPage} /></div>;
+}
+
+function ReportsTab({ dashboard, period, onPeriod, can, onError }) {
+  const [exporting, setExporting] = useState(false);
+  async function exportReport(format) {
+    setExporting(true);
+    try {
+      const [entradas, saidas] = await Promise.all([listAllForExport('entradas',{period}), listAllForExport('saidas',{period})]);
+      const rows = entradas.map((row) => ({ Tipo:'Entrada', Data:dateTime(row.data_entrada), NF:`${row.nf_numero}/${row.nf_serie}`, Fornecedor:row.fornecedor_nome, Produto:row.produto_nome, Deposito:row.deposito_nome, Destino:'', Peso:Number(row.peso_nf), Saldo:Number(row.saldo_disponivel), Status:statusLabel(row.status_saldo) })).concat(saidas.map((row) => ({ Tipo:'Saída', Data:dateTime(row.data_saida), NF:`${row.nf_saida_numero}/${row.nf_saida_serie}`, Fornecedor:row.fornecedor_nome, Produto:row.produto_nome, Deposito:row.deposito_origem, Destino:row.destino, Peso:Number(row.peso_saida), Saldo:Number(row.saldo_apos_saida), Status:statusLabel(row.status_registro) })));
+      if (format === 'xlsx') { const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{Aviso:'Nenhum registro'}]),'Movimentações'); XLSX.writeFile(wb,`central-graos-messejana-${period.year}-${String(period.month).padStart(2,'0')}.xlsx`); }
+      else exportSimplePdf({ title:'Central de Grãos Messejana', subtitle:`Movimentações ${String(period.month).padStart(2,'0')}/${period.year}`, fileName:`central-graos-messejana-${period.year}-${period.month}.pdf`, columns:[{key:'Tipo',label:'Tipo'},{key:'Data',label:'Data'},{key:'NF',label:'NF'},{key:'Fornecedor',label:'Fornecedor'},{key:'Produto',label:'Produto'},{key:'Deposito',label:'Depósito'},{key:'Destino',label:'Destino'},{key:'Peso',label:'Peso'},{key:'Saldo',label:'Saldo'},{key:'Status',label:'Status'}], rows, totals:[{label:'Entradas',value:`${formatKg(dashboard.peso_entradas)} KG`},{label:'Saídas',value:`${formatKg(dashboard.peso_saidas)} KG`},{label:'Saldo',value:`${formatKg(dashboard.saldo_total)} KG`}] });
+    } catch (error) { onError(error); } finally { setExporting(false); }
+  }
+  return <div className="grid gap-4"><SectionTitle title="Relatórios" subtitle="Totais calculados no banco e exportações com os mesmos filtros do período." action={can('oficina_messejana_relatorios','exportar') && <div className="flex gap-2"><button disabled={exporting} type="button" className="secondary" onClick={()=>exportReport('xlsx')}><Download size={17}/> Excel</button><button disabled={exporting} type="button" className="primary" onClick={()=>exportReport('pdf')}><FileDown size={17}/> PDF</button></div>} /><PeriodHistory period={period} onChange={onPeriod} counts={new Map()} /><div className="grid gap-4 md:grid-cols-2"><SummaryList title="Saldo por produto" rows={dashboard.saldo_por_produto || []} labelKey="produto" valueKey="saldo" /><SummaryList title="Saldo por depósito" rows={dashboard.saldo_por_deposito || []} labelKey="deposito" valueKey="saldo" /><SummaryList title="Movimentações por destino" rows={dashboard.saidas_por_destino || []} labelKey="destino" valueKey="peso" /><SummaryList title="Movimentações por fornecedor" rows={dashboard.entradas_por_fornecedor || []} labelKey="fornecedor" valueKey="peso" /><SummaryList title="Movimentações por placa" rows={dashboard.movimentacoes_por_placa || []} labelKey="placa" valueKey="peso" /><SummaryList title="Notas complementares de valor" rows={dashboard.notas_complementares || []} labelKey="nota" valueKey="quantidade" suffix="nota" /><SummaryList title="Movimentações canceladas" rows={dashboard.movimentacoes_canceladas || []} labelKey="tipo" valueKey="quantidade" suffix="registro" /><MonthlyMovement rows={dashboard.movimentacao_mensal || []} /></div></div>;
+}
+
+function RecordViewModal({ title, row, type, onClose }) {
+  const fields = type === 'entry' ? [
+    ['Data/hora', dateTime(row.data_entrada)], ['NF/série', `${row.nf_numero}/${row.nf_serie}`],
+    ['Fornecedor', row.fornecedor_nome], ['CNPJ', row.fornecedor_cnpj], ['Produto', row.produto_nome],
+    ['Depósito', row.deposito_nome], ['Peso da entrada', `${formatKg(row.peso_nf)} KG`],
+    ['Peso retirado', `${formatKg(row.peso_retirado)} KG`], ['Saldo', `${formatKg(row.saldo_disponivel)} KG`],
+    ['Placa', row.placa], ['Veículo', row.veiculo], ['Motorista', row.motorista],
+    ['Transportadora', row.transportadora], ['Origem', row.origem], ['Responsável', row.responsavel_nome],
+    ['Status', statusLabel(row.status_saldo)], ['Observação', row.observacao],
+  ] : [
+    ['Data/hora', dateTime(row.data_saida)], ['NF de origem', `${row.nf_origem_numero}/${row.nf_origem_serie}`],
+    ['NF de saída', `${row.nf_saida_numero}/${row.nf_saida_serie}`], ['Fornecedor', row.fornecedor_nome],
+    ['Produto', row.produto_nome], ['Depósito', row.deposito_origem], ['Destino', row.destino],
+    ['Peso da saída', `${formatKg(row.peso_saida)} KG`], ['Saldo restante', `${formatKg(row.saldo_apos_saida)} KG`],
+    ['Placa', row.placa], ['Veículo', row.veiculo], ['Motorista', row.motorista],
+    ['Transportadora', row.transportadora], ['Responsável', row.responsavel_nome],
+    ['Status', statusLabel(row.status_registro)], ['Observação', row.observacao],
+  ];
+  return <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={title}><div className="mx-auto my-8 max-w-4xl rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 p-5"><h2 className="text-xl font-black">{title}</h2><button type="button" onClick={onClose} aria-label="Fechar"><XCircle /></button></header><dl className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map(([label,value])=><div key={label} className="bg-white p-4"><dt className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 font-bold text-slate-900">{value||'-'}</dd></div>)}</dl><div className="flex justify-end p-4"><button type="button" className="secondary" onClick={onClose}>Fechar</button></div></div></div>;
+}
+
+function Filters({ type, value, onChange, lookups = EMPTY_LOOKUPS }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const update=(key,next)=>setDraft((current)=>({...current,[key]:next}));
+  return (
+    <section className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <Search className="text-emerald-600" />
+        <div><h2 className="text-sm font-black">FILTROS DE BUSCA</h2><p className="text-xs text-slate-500">A busca principal consulta todo o histórico.</p></div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <FilterInput label="NF, fornecedor, produto ou placa" value={draft.search} onChange={(v) => update('search', v)} />
+        <FilterInput label="Fornecedor" value={draft.fornecedor} onChange={(v) => update('fornecedor', v)} />
+        <FilterInput label="Produto" value={draft.produto} onChange={(v) => update('produto', v)} />
+        <label className="grid gap-1 text-xs font-bold">Depósito
+          <select className="filter" value={draft.depositoId} onChange={(e) => update('depositoId', e.target.value)}>
+            <option value="">Todos</option>
+            {lookups.depositos.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
+          </select>
+        </label>
+        {type === 'saidas' && <FilterInput label="Destino" value={draft.destino} onChange={(v) => update('destino', v)} />}
+        <FilterInput label="Placa" value={draft.placa} onChange={(v) => update('placa', v)} />
+        <FilterInput label="Motorista" value={draft.motorista} onChange={(v) => update('motorista', v)} />
+        <label className="grid gap-1 text-xs font-bold">Status
+          <select className="filter" value={draft.status} onChange={(e) => update('status', e.target.value)}>
+            <option value="">Todos</option>
+            {type === 'entradas' ? <><option value="SEM_SAIDA">Sem saída</option><option value="SAIDA_PARCIAL">Saída parcial</option><option value="SAIDA_TOTAL">Saída total</option><option value="CANCELADA">Cancelada</option></> : <><option value="CONFIRMADA">Confirmada</option><option value="CANCELADA">Cancelada</option></>}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <button type="button" className="secondary" onClick={() => { setDraft(EMPTY_FILTERS); onChange(EMPTY_FILTERS); }}>Limpar</button>
+        <button type="button" className="primary" onClick={() => onChange(draft)}><Search size={16} /> Aplicar filtros</button>
+      </div>
+    </section>
+  );
+}
+
+function FilterInput({ label, value, onChange }) { return <label className="grid gap-1 text-xs font-bold">{label}<input className="filter" maxLength={80} value={value} onChange={(e)=>onChange(e.target.value)} /></label>; }
+function SectionTitle({ title, subtitle, action }) { return <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="text-2xl font-black text-slate-950">{title}</h2><p className="text-sm text-slate-600">{subtitle}</p></div>{action}</div>; }
+function SummaryList({ title, rows, labelKey, valueKey, suffix='KG' }) { return <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><h3 className="border-b border-slate-200 p-4 font-black">{title}</h3><div className="divide-y divide-slate-100">{rows.map((row,index)=><div key={`${row[labelKey]}-${index}`} className="flex items-center justify-between px-4 py-3 text-sm"><span className="font-bold text-slate-700">{row[labelKey]||'Não informado'}</span><span className="font-black text-emerald-700">{formatSummaryValue(row[valueKey],suffix)}</span></div>)}{!rows.length&&<p className="p-4 text-sm text-slate-500">Nenhum movimento no período.</p>}</div></section>; }
+function MonthlyMovement({ rows }) { return <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><h3 className="border-b border-slate-200 p-4 font-black">Movimentação mensal</h3><div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">{rows.map((row)=><div key={row.mes} className="grid grid-cols-3 gap-2 px-4 py-3 text-sm"><span className="font-black text-slate-700">{row.mes}</span><span className="text-emerald-700">Entrada: <b>{formatKg(row.entradas)} KG</b></span><span className="text-orange-700">Saída: <b>{formatKg(row.saidas)} KG</b></span></div>)}</div></section>; }
+function DataTable({ children }) { return <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table className="min-w-[1500px] w-full text-left text-xs">{children}</table></div>; }
+function Th({ children }) { return <th className="whitespace-nowrap bg-slate-50 px-3 py-3 font-black uppercase tracking-wide text-slate-600">{children}</th>; }
+function Td({ children, strong=false, sticky=false }) { return <td className={`px-3 py-3 align-middle ${strong?'font-black text-emerald-700':'font-medium text-slate-700'} ${sticky?'sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,.5)]':''}`}>{children}</td>; }
+function EmptyRow({ cols }) { return <tr><td colSpan={cols} className="p-10 text-center text-sm text-slate-500">Nenhum registro encontrado.</td></tr>; }
+function Actions({ onView, onEdit, onExit, onComplement, onCancel }) { return <div className="flex min-w-max items-center gap-1"><IconButton label="Visualizar" onClick={onView}><Eye size={17}/></IconButton>{onEdit&&<IconButton label="Editar" onClick={onEdit}><Edit3 size={17}/></IconButton>}{onExit&&<IconButton label="Registrar saída vinculada" onClick={onExit}><Truck size={17}/></IconButton>}{onComplement&&<IconButton label="Vincular NF complementar de valor" onClick={onComplement}><ClipboardList size={17}/></IconButton>}{onCancel&&<IconButton label="Cancelar" onClick={onCancel} danger><XCircle size={17}/></IconButton>}</div>; }
+function IconButton({ label, onClick, danger=false, children }) { return <button type="button" title={label} aria-label={label} onClick={onClick} className={`grid h-9 w-9 place-items-center rounded-lg ${danger?'text-red-600 hover:bg-red-50':'text-slate-600 hover:bg-slate-100'}`}>{children}</button>; }
+function Status({ value }) { return <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-black ${statusClass(value)}`}>{statusLabel(value)}</span>; }
+function Pagination({ page, total, onPage }) { const pages=Math.max(1,Math.ceil(total/OFICINA_PAGE_SIZE)); return <div className="flex items-center justify-between text-sm text-slate-600"><span>Exibindo {total?((page-1)*OFICINA_PAGE_SIZE)+1:0} a {Math.min(page*OFICINA_PAGE_SIZE,total)} de {total}</span><div className="flex gap-2"><button type="button" className="secondary" disabled={page<=1} onClick={()=>onPage(page-1)}>Anterior</button><span className="grid min-w-11 place-items-center rounded-lg bg-emerald-600 px-3 font-black text-white">{page}</span><button type="button" className="secondary" disabled={page>=pages} onClick={()=>onPage(page+1)}>Próxima</button></div></div>; }
+function Notice({ tone, text, onClose }) { return <div className={`flex items-center justify-between rounded-xl border p-4 text-sm font-bold ${tone==='error'?'border-red-200 bg-red-50 text-red-800':'border-emerald-200 bg-emerald-50 text-emerald-800'}`}><span>{text}</span><button type="button" onClick={onClose} aria-label="Fechar"><XCircle size={18}/></button></div>; }
+function dateTime(value) { if(!value)return '-'; return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Fortaleza'}).format(new Date(value)); }
+function formatKg(value) { return new Intl.NumberFormat('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:3}).format(Number(value||0)); }
+function formatSummaryValue(value, suffix) { const number=Number(value||0); return `${formatKg(number)} ${suffix}${suffix==='KG'||number===1?'':'s'}`; }
+function statusLabel(value) { return ({SEM_SAIDA:'Sem saída',SAIDA_PARCIAL:'Saída parcial',SAIDA_TOTAL:'Saída total',CANCELADA:'Cancelada',CONFIRMADA:'Confirmada'})[value]||value||'-'; }
+function statusClass(value) { if(value==='CANCELADA')return 'bg-red-100 text-red-700'; if(value==='SAIDA_PARCIAL')return 'bg-amber-100 text-amber-700'; if(value==='SEM_SAIDA')return 'bg-sky-100 text-sky-700'; return 'bg-emerald-100 text-emerald-700'; }
