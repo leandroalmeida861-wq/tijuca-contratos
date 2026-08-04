@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   CENTRAL_MESSEJANA_NAME, calculateEntryBalance, complementaryNoteChangesWeight,
-  duplicateEntryKey, validateExit,
+  calculateEntryUnitValue, duplicateEntryKey, formatBrazilianDecimal,
+  parseBrazilianDecimal, validateExit,
 } from '../src/lib/oficinaMessejana.js';
 
 const entry = { id: 'entrada-1', peso_nf: 47650, deposito_id: 'feliana', status_registro: 'CONFIRMADA' };
@@ -20,10 +21,19 @@ exits[2].status_registro = 'CANCELADA';
 assert.equal(calculateEntryBalance(entry, exits).balance, 17650);
 assert.notEqual(duplicateEntryKey({ fornecedor_cnpj: '11.111.111/0001-11', nf_numero: '001', nf_serie: '1' }), duplicateEntryKey({ fornecedor_cnpj: '22.222.222/0001-22', nf_numero: '001', nf_serie: '1' }));
 assert.equal(complementaryNoteChangesWeight(), false);
+assert.equal(parseBrazilianDecimal('48.110,000 KG'), 48110);
+assert.equal(parseBrazilianDecimal('R$ 40.091,67'), 40091.67);
+assert.equal(parseBrazilianDecimal('40091.67'), 40091.67);
+assert.equal(parseBrazilianDecimal('0,8333'), 0.8333);
+assert.equal(parseBrazilianDecimal('valor inválido'), null);
+assert.equal(calculateEntryUnitValue('R$ 40.091,67', '48.110,000'), 0.833333);
+assert.equal(formatBrazilianDecimal(calculateEntryUnitValue(40091.67, 48110), 4, 4), '0,8333');
+assert.equal(calculateEntryUnitValue(100, 0), null);
 
 const migration = readFileSync(new URL('../supabase/migrations/20260803193448_oficina_messejana.sql', import.meta.url), 'utf8');
 const depositMigration = readFileSync(new URL('../supabase/migrations/20260803223500_central_depositos_fornecedores.sql', import.meta.url), 'utf8');
 const entryOptionsMigration = readFileSync(new URL('../supabase/migrations/20260803224500_central_entrada_cadastros_xml.sql', import.meta.url), 'utf8');
+const destinationMigration = readFileSync(new URL('../supabase/migrations/20260804125728_central_fornecedor_destino_financeiro.sql', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../src/pages/OficinaMessejanaPage.jsx', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../src/services/oficinaMessejanaService.js', import.meta.url), 'utf8');
 const form = readFileSync(new URL('../src/components/oficina/OficinaFormModal.jsx', import.meta.url), 'utf8');
@@ -54,6 +64,9 @@ assert.match(form, /Veículo e placa cadastrados/);
 assert.match(form, /Motorista cadastrado/);
 assert.match(form, /Valor unitário/);
 assert.match(form, /Valor total da nota/);
+assert.match(form, /Fornecedor destino/);
+assert.match(form, /Buscar por nome ou CNPJ/);
+assert.doesNotMatch(form, /type="number"[^>]*value=\{form\.(peso_nf|valor_unitario|valor_total_nota)\}/);
 assert.doesNotMatch(form, /Depósito de destino/);
 assert.match(service, /oficina_messejana_opcoes_entrada/);
 assert.match(service, /oficina_messejana_salvar_deposito/);
@@ -68,5 +81,16 @@ assert.match(entryOptionsMigration, /create or replace function public\.oficina_
 assert.match(entryOptionsMigration, /v_deposito is null/);
 assert.match(entryOptionsMigration, /valor_total_nota/);
 assert.match(entryOptionsMigration, /revoke all on function public\.oficina_messejana_opcoes_entrada/);
+assert.match(destinationMigration, /add column if not exists fornecedor_destino_id uuid/);
+assert.match(destinationMigration, /references public\.fornecedores\(id\)/);
+assert.match(destinationMigration, /security_invoker = true/);
+assert.match(destinationMigration, /OFICINA_FORNECEDOR_DESTINO_OBRIGATORIO/);
+assert.match(destinationMigration, /f\.empresa_id = v_empresa/);
+assert.match(destinationMigration, /round\(v_valor_total \/ v_peso, 6\)/);
+assert.match(destinationMigration, /entradas_por_fornecedor_destino/);
+assert.match(service, /fornecedor_destino_nome/);
+assert.match(service, /normalizeEntryPayload/);
+assert.match(page, /Fornecedor destino/);
+assert.match(page, /FornecedorDestino/);
 
 console.log('Central de Grãos Messejana: saldo, duplicidade, complemento, paginação, RLS e concorrência verificados.');
