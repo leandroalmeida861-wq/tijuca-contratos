@@ -36,6 +36,56 @@ export function complementaryNoteChangesWeight() {
   return false;
 }
 
+export function parseBrazilianDecimal(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  let text = String(value ?? '').trim();
+  if (!text) return null;
+  text = text.replace(/R\$/gi, '').replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+  const negative = text.startsWith('-');
+  text = text.replace(/-/g, '');
+  if (!text || !/\d/.test(text)) return null;
+
+  const commaIndex = text.lastIndexOf(',');
+  const dotIndex = text.lastIndexOf('.');
+  let normalized;
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    const decimalIndex = Math.max(commaIndex, dotIndex);
+    normalized = `${text.slice(0, decimalIndex).replace(/[.,]/g, '')}.${text.slice(decimalIndex + 1).replace(/[.,]/g, '')}`;
+  } else if (commaIndex >= 0) {
+    normalized = `${text.slice(0, commaIndex).replace(/,/g, '')}.${text.slice(commaIndex + 1).replace(/,/g, '')}`;
+  } else if (dotIndex >= 0) {
+    const parts = text.split('.');
+    const groupedThousands = parts.length > 2 && parts.slice(1).every((part) => part.length === 3);
+    const singleThousands = parts.length === 2 && parts[0] !== '0' && parts[0].length <= 3 && parts[1].length === 3;
+    normalized = groupedThousands || singleThousands
+      ? parts.join('')
+      : `${parts.slice(0, -1).join('')}.${parts.at(-1)}`;
+  } else {
+    normalized = text;
+  }
+
+  const number = Number(`${negative ? '-' : ''}${normalized}`);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function formatBrazilianDecimal(value, minimumFractionDigits, maximumFractionDigits = minimumFractionDigits) {
+  const number = typeof value === 'number' ? value : parseBrazilianDecimal(value);
+  if (number === null || !Number.isFinite(number)) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits,
+    maximumFractionDigits,
+    useGrouping: true,
+  }).format(number);
+}
+
+export function calculateEntryUnitValue(totalValue, weight) {
+  const total = typeof totalValue === 'number' ? totalValue : parseBrazilianDecimal(totalValue);
+  const kilograms = typeof weight === 'number' ? weight : parseBrazilianDecimal(weight);
+  if (total === null || kilograms === null || total < 0 || kilograms <= 0) return null;
+  const unitValue = total / kilograms;
+  return Number.isFinite(unitValue) ? Number(unitValue.toFixed(6)) : null;
+}
+
 function positiveNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : 0;

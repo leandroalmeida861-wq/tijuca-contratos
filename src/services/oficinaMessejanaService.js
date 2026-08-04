@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase.js';
+import { calculateEntryUnitValue, parseBrazilianDecimal } from '../lib/oficinaMessejana.js';
 
 export const OFICINA_PAGE_SIZE = 10;
 
@@ -18,6 +19,7 @@ export async function listOficinaLookups() {
 }
 
 export async function listEntradas({ page = 1, pageSize = OFICINA_PAGE_SIZE, period, filters = {} } = {}) {
+  const lookups = await listOficinaLookups();
   let query = supabase
     .from('oficina_messejana_entradas_resumo')
     .select(ENTRY_SELECT, { count: 'exact' })
@@ -26,23 +28,42 @@ export async function listEntradas({ page = 1, pageSize = OFICINA_PAGE_SIZE, per
   const search = cleanSearch(filters.search);
   if (search) {
     const pattern = `*${search}*`;
+    const destinationIds = supplierIdsForSearch(lookups.fornecedores, search);
     query = query.or([
       `nf_numero.ilike.${pattern}`,
       `fornecedor_nome.ilike.${pattern}`,
       `produto_nome.ilike.${pattern}`,
       `placa.ilike.${pattern}`,
+      ...(destinationIds.length ? [`fornecedor_destino_id.in.(${destinationIds.join(',')})`] : []),
     ].join(','));
   } else {
     query = applyPeriod(query, 'data_entrada', period);
   }
   query = applyTextFilter(query, 'fornecedor_nome', filters.fornecedor);
+  const destinationFilter = cleanSearch(filters.fornecedorDestino);
+  if (destinationFilter) {
+    const destinationIds = supplierIdsForSearch(lookups.fornecedores, destinationFilter);
+    if (!destinationIds.length) return { rows: [], count: 0 };
+    query = query.in('fornecedor_destino_id', destinationIds);
+  }
   query = applyTextFilter(query, 'produto_nome', filters.produto);
   query = applyTextFilter(query, 'placa', filters.placa);
   query = applyTextFilter(query, 'motorista', filters.motorista);
   query = applyExactFilter(query, 'status_saldo', filters.status);
   const { data, error, count } = await query;
   if (error) throw error;
-  return { rows: data || [], count: count || 0 };
+  const suppliers = new Map(lookups.fornecedores.map((item) => [item.id, item]));
+  return {
+    rows: (data || []).map((row) => {
+      const destination = suppliers.get(row.fornecedor_destino_id);
+      return {
+        ...row,
+        fornecedor_destino_nome: row.fornecedor_destino_nome || destination?.nome || null,
+        fornecedor_destino_cnpj: row.fornecedor_destino_cnpj || destination?.cnpj || null,
+      };
+    }),
+    count: count || 0,
+  };
 }
 
 export async function listSaidas({ page = 1, pageSize = OFICINA_PAGE_SIZE, period, filters = {} } = {}) {
@@ -97,9 +118,10 @@ export async function getEntrada(id) {
 }
 
 export async function saveEntrada(id, data) {
+  const normalized = normalizeEntryPayload(data);
   const { data: savedId, error } = await supabase.rpc('oficina_messejana_salvar_entrada', {
     p_entrada_id: id || null,
-    p_dados: normalizePayload(data),
+    p_dados: normalized,
   });
   if (error) throw error;
   return savedId;
@@ -191,11 +213,14 @@ export function oficinaUserError(error) {
   if (message.includes('OFICINA_FORNECEDOR_INVALIDO')) return 'O fornecedor selecionado não existe ou não pertence à sua empresa.';
   if (message.includes('OFICINA_DEPOSITO_NOME_OBRIGATORIO')) return 'Informe o nome do depósito ou selecione um fornecedor cadastrado.';
   if (message.includes('OFICINA_FORNECEDOR_OBRIGATORIO')) return 'Selecione um fornecedor já cadastrado.';
+  if (message.includes('OFICINA_FORNECEDOR_DESTINO_OBRIGATORIO')) return 'Selecione o fornecedor destino onde os grãos ficarão armazenados.';
+  if (message.includes('OFICINA_FORNECEDOR_DESTINO_INVALIDO')) return 'O fornecedor destino não existe ou não pertence à sua empresa.';
   if (message.includes('OFICINA_PRODUTO_OBRIGATORIO')) return 'Selecione um produto já cadastrado.';
   if (message.includes('OFICINA_PRODUTO_INVALIDO')) return 'O produto selecionado não existe ou não pertence à sua empresa.';
   if (message.includes('OFICINA_MOTORISTA_INVALIDO')) return 'O motorista selecionado não existe, está inativo ou pertence a outra empresa.';
   if (message.includes('OFICINA_VEICULO_INVALIDO')) return 'O veículo selecionado não existe, está inativo ou pertence a outra empresa.';
   if (message.includes('OFICINA_VALOR_INVALIDO')) return 'Valor unitário e valor total da nota não podem ser negativos.';
+  if (message.includes('OFICINA_PESO_INVALIDO')) return 'Informe um peso da NF válido e maior que zero.';
   if (message.includes('OFICINA_SALDO_INSUFICIENTE')) return 'O peso informado é maior que o saldo disponível desta entrada.';
   if (message.includes('OFICINA_NF_DUPLICADA')) return 'Esta nota fiscal já foi cadastrada na Central de Grãos Messejana. Revise o lançamento existente.';
   if (message.includes('OFICINA_ENTRADA_CANCELADA')) return 'Não é permitido registrar saída para uma entrada cancelada.';
@@ -249,6 +274,45 @@ function normalizePayload(data = {}) {
     key,
     typeof value === 'string' ? value.trim() : value,
   ]));
+}
+
+function normalizeEntryPayload(data = {}) {
+  const normalized = normalizePayload(data);
+  const weight = parseBrazilianDecimal(normalized.peso_nf);
+  const total = normalized.valor_total_nota === '' || normalized.valor_total_nota === null || normalized.valor_total_nota === undefined
+    ? null
+    : parseBrazilianDecimal(normalized.valor_total_nota);
+  const informedUnit = normalized.valor_unitario === '' || normalized.valor_unitario === null || normalized.valor_unitario === undefined
+    ? null
+    : parseBrazilianDecimal(normalized.valor_unitario);
+  if (weight === null || weight <= 0) throw new Error('OFICINA_PESO_INVALIDO');
+  if (total !== null && total < 0) throw new Error('OFICINA_VALOR_INVALIDO');
+  if (informedUnit !== null && informedUnit < 0) throw new Error('OFICINA_VALOR_INVALIDO');
+  const roundedWeight = Number(weight.toFixed(3));
+  const roundedTotal = total === null ? null : Number(total.toFixed(2));
+  const calculatedUnit = roundedTotal === null ? informedUnit : calculateEntryUnitValue(roundedTotal, roundedWeight);
+  return {
+    ...normalized,
+    peso_nf: roundedWeight,
+    valor_total_nota: roundedTotal,
+    valor_unitario: calculatedUnit,
+  };
+}
+
+function supplierIdsForSearch(suppliers, value) {
+  const term = normalizeSearch(value);
+  if (!term) return [];
+  return suppliers
+    .filter((item) => normalizeSearch(`${item.nome} ${item.cnpj || ''}`).includes(term))
+    .map((item) => item.id);
+}
+
+function normalizeSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
 }
 
 function requireUuid(value) {
