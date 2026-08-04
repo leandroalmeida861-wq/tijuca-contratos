@@ -34,6 +34,7 @@ const migration = readFileSync(new URL('../supabase/migrations/20260803193448_of
 const depositMigration = readFileSync(new URL('../supabase/migrations/20260803223500_central_depositos_fornecedores.sql', import.meta.url), 'utf8');
 const entryOptionsMigration = readFileSync(new URL('../supabase/migrations/20260803224500_central_entrada_cadastros_xml.sql', import.meta.url), 'utf8');
 const destinationMigration = readFileSync(new URL('../supabase/migrations/20260804125728_central_fornecedor_destino_financeiro.sql', import.meta.url), 'utf8');
+const cpfSupplierMigration = readFileSync(new URL('../supabase/migrations/20260804132332_central_aceitar_cpf_fornecedor.sql', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../src/pages/OficinaMessejanaPage.jsx', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../src/services/oficinaMessejanaService.js', import.meta.url), 'utf8');
 const form = readFileSync(new URL('../src/components/oficina/OficinaFormModal.jsx', import.meta.url), 'utf8');
@@ -92,5 +93,9 @@ assert.match(service, /fornecedor_destino_nome/);
 assert.match(service, /normalizeEntryPayload/);
 assert.match(page, /Fornecedor destino/);
 assert.match(page, /FornecedorDestino/);
+assert.match(cpfSupplierMigration, /not in \(11, 14\)/);
+assert.match(cpfSupplierMigration, /fornecedor_cnpj_check[\s\S]*in \(11, 14\)/);
+assert.match(cpfSupplierMigration, /OFICINA_VALIDACAO_DOCUMENTO_NAO_ENCONTRADA/);
+assert.match(cpfSupplierMigration, /revoke all on function public\.oficina_messejana_salvar_entrada/);
 
 console.log('Central de Grãos Messejana: saldo, duplicidade, complemento, paginação, RLS e concorrência verificados.');
