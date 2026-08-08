@@ -602,6 +602,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
   });
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const formRef = useRevealForm(formOpen, editing?.id);
   const [viewing, setViewing] = useState(null);
   const [form, setForm] = useState(novaEntrada);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -876,7 +877,7 @@ function PortariaTab({ rows, options, unidade, balanca, can, loading, reload, se
       <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
 
       {formOpen && (
-        <form onSubmit={submit} noValidate className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+        <form ref={formRef} onSubmit={submit} noValidate className="scroll-mt-4 grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Input label="Data de entrada" type="date" value={form.data_entrada} onChange={(value) => updateField('data_entrada', value)} error={fieldErrors.data_entrada} />
             <Input label="Hora de entrada" type="time" value={form.hora_entrada} onChange={(value) => updateField('hora_entrada', value)} error={fieldErrors.hora_entrada} />
@@ -1057,7 +1058,7 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const formRef = useRef(null);
+  const formRef = useRevealForm(formOpen, editing?.id);
 
   const matchingRows = useMemo(
     () => periodRows.filter((row) => matchesOperationalSearch({
@@ -1082,13 +1083,6 @@ function RecebimentosTab({ rows, options, unidade, balanca, can, loading, reload
     setEditing(row);
     setFormOpen(true);
   }
-
-  useEffect(() => {
-    if (!formOpen) return;
-    window.setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
-  }, [formOpen, editing?.id]);
 
   async function remove(row) {
     if (!window.confirm(`Excluir o recebimento da NF ${row.nf_numero || row.id}?`)) return;
@@ -2099,6 +2093,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
   const [reason, setReason] = useState({});
   const [labForm, setLabForm] = useState(defaultLaboratorioForm);
   const [editingLabId, setEditingLabId] = useState(null);
+  const labFormRef = useRevealForm(Boolean(editingLabId), editingLabId);
   const [savingLab, setSavingLab] = useState(false);
   const [searchFilters, setSearchFilters] = useState(EMPTY_OPERATIONAL_SEARCH);
   const searchActive = hasOperationalSearch(searchFilters);
@@ -2322,7 +2317,7 @@ function LaboratorioTab({ rows, options, can, reload, setError, setMessage }) {
 
       <PeriodHistory period={period} onChange={setPeriod} counts={counts} searchActive={searchActive} />
 
-      {canManageManualRelease ? <form onSubmit={saveManualRelease} className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+      {canManageManualRelease ? <form ref={labFormRef} onSubmit={saveManualRelease} className="scroll-mt-4 grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
         <div>
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-700">{editingLabId ? 'Editar liberacao do laboratorio' : 'Nova liberacao manual'}</h2>
           <p className="mt-1 text-sm text-slate-500">Use quando o grão chegar primeiro no laboratório. A balança completa NF-e, pesos e dados finais depois.</p>
@@ -3813,6 +3808,26 @@ function useElementWidth() {
   }, []);
 
   return [ref, width];
+}
+
+function useRevealForm(open, recordKey) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timer = window.setTimeout(() => {
+      const container = ref.current;
+      if (!container) return;
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const fields = [...container.querySelectorAll('input, select, textarea, [contenteditable="true"]')]
+        .filter((field) => !field.disabled && !field.readOnly && field.tabIndex !== -1 && field.type !== 'hidden');
+      const firstEmpty = fields.find((field) => !['checkbox', 'radio'].includes(field.type) && !String(field.value || '').trim());
+      (firstEmpty || fields[0])?.focus({ preventScroll: true });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [open, recordKey]);
+
+  return ref;
 }
 
 function ProductDonutLabel(props) {

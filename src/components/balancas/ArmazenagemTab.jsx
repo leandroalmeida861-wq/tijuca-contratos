@@ -15,7 +15,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react';
-import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useState } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import {
   Bar,
@@ -589,9 +589,20 @@ function StorageTable({ rows, can, onView, onEdit, onExcluirFechamento, onRestau
 
 function StorageModal({ modal, can, onClose, onSaved, onError }) {
   const readOnly = modal.type === 'view';
+  const formRef = useRef(null);
   const [form, setForm] = useState(modal.form);
   const [saving, setSaving] = useState(false);
   const record = modal.record;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const fields = [...(formRef.current?.querySelectorAll('input, select, textarea') || [])]
+        .filter((field) => !field.disabled && !field.readOnly && field.tabIndex !== -1 && field.type !== 'hidden');
+      const firstEmpty = fields.find((field) => !['checkbox', 'radio'].includes(field.type) && !String(field.value || '').trim());
+      (firstEmpty || fields[0])?.focus({ preventScroll: true });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [modal.record?.id]);
 
   function updateDistribution(index, field, value) {
     setForm((current) => ({
@@ -644,7 +655,7 @@ function StorageModal({ modal, can, onClose, onSaved, onError }) {
   const draftTotals = distributionTotals(form.distribuicoes, record.itens || []);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-3" role="dialog" aria-modal="true">
-      <form onSubmit={submit} className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-lg bg-white shadow-2xl">
+      <form ref={formRef} onSubmit={submit} className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-lg bg-white shadow-2xl">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-4">
           <div><h2 className="text-lg font-extrabold text-slate-950">{readOnly ? 'Visualizar armazenagem' : 'Distribuir peso da NF'}</h2><p className="text-sm text-slate-500">NF {record.recebimento?.nf_numero || '-'} · {productNames(record)}</p></div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100" title="Fechar"><X className="h-5 w-5" /></button>

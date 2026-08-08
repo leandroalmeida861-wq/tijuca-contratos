@@ -49,6 +49,7 @@ for (const { unidade, balanca } of resolvidas) {
 
 const unidadeModulo = await readFile(new URL('../src/components/UnidadeModulo.jsx', import.meta.url), 'utf8');
 const appLayout = await readFile(new URL('../src/components/AppLayout.jsx', import.meta.url), 'utf8');
+const balancasPage = await readFile(new URL('../src/pages/BalancasPage.jsx', import.meta.url), 'utf8');
 const balancasService = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 const armazenagemService = await readFile(new URL('../src/services/armazenagemService.js', import.meta.url), 'utf8');
 const armazenagemTab = await readFile(new URL('../src/components/balancas/ArmazenagemTab.jsx', import.meta.url), 'utf8');
@@ -63,17 +64,31 @@ assert.ok(
   'A troca de rota deve desmontar o estado da unidade anterior',
 );
 assert.ok(
-  appLayout.includes("{ label: 'Unidades de Grãos', icon: Wheat, units: unidadeNavItems }")
+  appLayout.includes("{ label: 'Gestão de Grãos', icon: Wheat, units: unidadeNavItems }")
     && appLayout.includes('useState(false)')
     && appLayout.includes('setUnidadesOpen'),
   'O grupo de unidades deve iniciar recolhido e permitir abrir/fechar',
+);
+assert.ok(
+  (balancasPage.match(/useRevealForm\(formOpen, editing\?\.id\)/g) || []).length === 2
+    && balancasPage.includes('useRevealForm(Boolean(editingLabId), editingLabId)')
+    && balancasPage.includes("querySelectorAll('input, select, textarea")
+    && balancasPage.includes("scrollIntoView({ behavior: 'smooth'")
+    && balancasPage.includes("focus({ preventScroll: true })"),
+  'Portaria, Recebimentos e edição do Laboratório devem revelar o formulário e focar o primeiro campo vazio',
+);
+assert.ok(
+  armazenagemTab.includes('ref={formRef}')
+    && armazenagemTab.includes("querySelectorAll('input, select, textarea')")
+    && armazenagemTab.includes('focus({ preventScroll: true })'),
+  'O formulário modal da Armazenagem deve focar o primeiro campo vazio',
 );
 assert.ok(
   appLayout.includes("can(unit.menu, 'visualizar') && podeAcessarUnidade(unit.unidadeCodigo)"),
   'O submenu deve preservar permissão de módulo e acesso por unidade',
 );
 assert.ok(
-  appLayout.indexOf("label: 'Unidades de Grãos'") < appLayout.indexOf("label: 'Central de Grãos Messejana'"),
+  appLayout.indexOf("label: 'Gestão de Grãos'") < appLayout.indexOf("label: 'Central de Grãos Messejana'"),
   'A Central Messejana deve continuar independente e abaixo do grupo',
 );
 assert.ok(
