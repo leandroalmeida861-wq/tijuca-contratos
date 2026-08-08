@@ -26,7 +26,15 @@ export function usePeriodHistory(rows, getDate, searchActive = false) {
   return { period, setPeriod, counts, periodRows };
 }
 
-export default function PeriodHistory({ period, onChange, counts, searchActive = false }) {
+export default function PeriodHistory({
+  period,
+  onChange,
+  counts,
+  searchActive = false,
+  collapsible = false,
+  defaultExpanded = true,
+}) {
+  const [sectionOpen, setSectionOpen] = useState(defaultExpanded);
   const [openYears, setOpenYears] = useState(() => new Set([period.year]));
 
   useEffect(() => {
@@ -47,24 +55,31 @@ export default function PeriodHistory({ period, onChange, counts, searchActive =
 
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel" aria-label="Histórico por período">
-      <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <button
+        type="button"
+        disabled={!collapsible}
+        onClick={() => collapsible && setSectionOpen((open) => !open)}
+        aria-expanded={sectionOpen}
+        className="flex w-full flex-col gap-2 border-b border-slate-200 px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between disabled:cursor-default"
+      >
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-emerald-700" aria-hidden="true" />
           <h2 className="text-base font-extrabold text-slate-900">Histórico por período</h2>
+          {collapsible && <ChevronDown className={`h-4 w-4 text-emerald-700 transition-transform ${sectionOpen ? '' : '-rotate-90'}`} aria-hidden="true" />}
         </div>
         <div className="flex flex-col gap-1 text-xs font-semibold text-slate-500 lg:flex-row lg:gap-4">
           <span className="inline-flex items-center gap-1.5"><Info className="h-4 w-4" /> Busca ativa consulta todo o histórico da unidade.</span>
           <span className="inline-flex items-center gap-1.5"><LockKeyhole className="h-4 w-4" /> Períodos anteriores mantêm as permissões atuais.</span>
         </div>
-      </div>
+      </button>
 
-      {searchActive && (
+      {sectionOpen && searchActive && (
         <p className="border-b border-sky-100 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-800">
           Busca global ativa: o mês selecionado está temporariamente ignorado.
         </p>
       )}
 
-      <div className="divide-y divide-slate-200">
+      {sectionOpen && <div className="divide-y divide-slate-200">
         {PERIOD_YEARS.map((year) => {
           const open = openYears.has(year);
           return (
@@ -104,7 +119,7 @@ export default function PeriodHistory({ period, onChange, counts, searchActive =
             </div>
           );
         })}
-      </div>
+      </div>}
     </section>
   );
 }
