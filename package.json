@@ -22,7 +22,8 @@
     "test:period-history": "node scripts/test-period-history.mjs",
     "test:central-messejana": "node scripts/test-oficina-messejana.mjs",
     "test:nfe-recebimento": "node scripts/test-nfe-recebimento.mjs",
-    "test:unidades": "node scripts/test-unidades-isolamento.mjs"
+    "test:unidades": "node scripts/test-unidades-isolamento.mjs",
+    "test:iguatu-dashboard": "node scripts/test-iguatu-dashboard.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

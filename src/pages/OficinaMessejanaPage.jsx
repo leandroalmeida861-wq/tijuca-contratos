@@ -5,26 +5,32 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import PeriodHistory from '../components/balancas/PeriodHistory.jsx';
+import BasePeriodHistory from '../components/balancas/PeriodHistory.jsx';
 import { ComplementoModal, ConfirmModal, EntradaModal, SaidaModal } from '../components/oficina/OficinaFormModal.jsx';
+import OficinaMovimentacaoModal, { MOVEMENT_TYPES } from '../components/oficina/OficinaMovimentacaoModal.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { exportSimplePdf } from '../lib/pdf.js';
 import { currentPeriod } from '../lib/periodHistory.js';
 import {
-  OFICINA_PAGE_SIZE, cancelEntrada, cancelSaida, deleteDeposito, getEntrada, getOficinaDashboard,
-  listAllForExport, listEntradas, listOficinaLookups, listSaidas, oficinaUserError,
-  saveDeposito, saveEntrada, saveNotaComplementar, saveSaida,
+  OFICINA_PAGE_SIZE, cancelEntrada, cancelMovimentacao, cancelSaida, deleteDeposito, getEntrada, getOficinaDashboard,
+  listAllForExport, listEntradas, listMovimentacoes, listOficinaLookups, listSaidas, oficinaUserError,
+  saveDeposito, saveEntrada, saveMovimentacao, saveNotaComplementar, saveSaida,
 } from '../services/oficinaMessejanaService.js';
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: Boxes, menu: 'oficina_messejana', tone: 'blue' },
   { key: 'entradas', label: 'Entrada de Notas', icon: FileInput, menu: 'oficina_messejana_entradas', tone: 'teal' },
-  { key: 'saidas', label: 'Saída de Notas', icon: FileOutput, menu: 'oficina_messejana_saidas', tone: 'orange' },
+  { key: 'saidas', label: 'Registro de saída', icon: FileOutput, menu: 'oficina_messejana_saidas', tone: 'orange' },
   { key: 'relatorios', label: 'Relatórios', icon: BarChart3, menu: 'oficina_messejana_relatorios', tone: 'emerald' },
 ];
 
-const EMPTY_LOOKUPS = { depositos: [], fornecedores: [], produtos: [], motoristas: [], veiculos: [] };
+const EMPTY_LOOKUPS = { depositos: [], fornecedores: [], produtos: [], motoristas: [], veiculos: [], unidades: [] };
 const EMPTY_FILTERS = { search: '', fornecedor: '', fornecedorDestino: '', produto: '', placa: '', motorista: '', destino: '', status: '' };
+const EMPTY_MOVEMENT_FILTERS = { search: '', tipo: '', produtoId: '', proprietarioId: '', localId: '', destinatarioId: '' };
+
+function PeriodHistory(props) {
+  return <BasePeriodHistory {...props} collapsible defaultExpanded={false} />;
+}
 
 export default function OficinaMessejanaPage() {
   const { can, profileData } = useAuth();
@@ -36,12 +42,14 @@ export default function OficinaMessejanaPage() {
   const [lookups, setLookups] = useState(EMPTY_LOOKUPS);
   const [entries, setEntries] = useState([]);
   const [exits, setExits] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [entryCount, setEntryCount] = useState(0);
   const [exitCount, setExitCount] = useState(0);
   const [entryPage, setEntryPage] = useState(1);
   const [exitPage, setExitPage] = useState(1);
   const [entryFilters, setEntryFilters] = useState(EMPTY_FILTERS);
   const [exitFilters, setExitFilters] = useState(EMPTY_FILTERS);
+  const [movementFilters, setMovementFilters] = useState(EMPTY_MOVEMENT_FILTERS);
   const [dashboard, setDashboard] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,6 +65,7 @@ export default function OficinaMessejanaPage() {
     const result = await listSaidas({ page: exitPage, period, filters: exitFilters });
     setExits(result.rows); setExitCount(result.count);
   }, [exitPage, period, exitFilters]);
+  const loadMovements = useCallback(async () => setMovements(await listMovimentacoes({ period, filters: movementFilters })), [period, movementFilters]);
   const loadDashboard = useCallback(async () => setDashboard(await getOficinaDashboard(period)), [period]);
   const updateEntryFilters = useCallback((next) => {
     if (entryFilters.search && !next.search) setPeriod(currentPeriod());
@@ -73,11 +82,11 @@ export default function OficinaMessejanaPage() {
       const tasks = [];
       if (activeTab === 'dashboard' || activeTab === 'relatorios') tasks.push(loadDashboard());
       if (activeTab === 'entradas') tasks.push(loadLookups(), loadEntries());
-      if (activeTab === 'saidas') tasks.push(loadExits());
+      if (activeTab === 'saidas') tasks.push(loadLookups(), loadExits(), loadMovements());
       await Promise.all(tasks);
     } catch (loadError) { setError(oficinaUserError(loadError)); }
     finally { setLoading(false); }
-  }, [activeTab, loadDashboard, loadEntries, loadExits, loadLookups]);
+  }, [activeTab, loadDashboard, loadEntries, loadExits, loadLookups, loadMovements]);
 
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => { setEntryPage(1); }, [period, entryFilters]);
@@ -97,6 +106,13 @@ export default function OficinaMessejanaPage() {
     try { await saveSaida(modal?.exit?.id, modal.entry.id, modal.idempotencyKey, data); setModal(null); setMessage('Saída salva e saldo recalculado com sucesso.'); await Promise.all([loadExits(), loadDashboard()]); }
     catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
   }
+  async function handleSaveMovement(data) {
+    try {
+      await saveMovimentacao(modal?.movement?.id, modal.idempotencyKey, data);
+      setModal(null); setMessage('Movimentação salva e estoque recalculado com sucesso.');
+      await Promise.all([loadMovements(), loadDashboard()]);
+    } catch (saveError) { setError(oficinaUserError(saveError)); throw new Error(oficinaUserError(saveError)); }
+  }
   async function handleSaveComplement(data) {
     try { await saveNotaComplementar(modal.entry.id, data); setModal(null); setMessage('NF complementar vinculada sem alterar peso ou saldo.'); }
     catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
@@ -104,8 +120,9 @@ export default function OficinaMessejanaPage() {
   async function handleConfirm(reason) {
     try {
       if (modal.type === 'cancel-entry') await cancelEntrada(modal.row.id, reason);
+      else if (modal.type === 'cancel-movement') await cancelMovimentacao(modal.row.id, reason);
       else await cancelSaida(modal.row.id, reason);
-      setModal(null); setMessage('Cancelamento registrado e saldo recalculado.'); await Promise.all([loadEntries(), loadExits(), loadDashboard()]);
+      setModal(null); setMessage('Cancelamento registrado e saldo recalculado.'); await Promise.all([loadEntries(), loadExits(), loadMovements(), loadDashboard()]);
     } catch (cancelError) { setError(oficinaUserError(cancelError)); throw cancelError; }
   }
 
@@ -120,16 +137,19 @@ export default function OficinaMessejanaPage() {
       {loading && <div className="flex min-h-48 items-center justify-center rounded-xl border border-slate-200 bg-white"><RefreshCw className="mr-2 animate-spin text-emerald-600" /> Carregando dados...</div>}
       {!loading && activeTab === 'dashboard' && <Dashboard dashboard={dashboard} period={period} lookups={lookups} can={() => false} onSaved={loadLookups} onError={(value) => setError(oficinaUserError(value))} />}
       {!loading && activeTab === 'entradas' && <EntriesTab rows={entries} total={entryCount} page={entryPage} onPage={setEntryPage} filters={entryFilters} onFilters={updateEntryFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onNew={() => setModal({ type: 'entry', entry: null })} onView={(row) => setModal({ type: 'view-entry', row })} onEdit={(entry) => setModal({ type: 'entry', entry })} onExit={startExit} onComplement={(entry) => setModal({ type: 'complement', entry })} onCancel={(row) => setModal({ type: 'cancel-entry', row })} />}
-      {!loading && activeTab === 'saidas' && <ExitsTab rows={exits} total={exitCount} page={exitPage} onPage={setExitPage} filters={exitFilters} onFilters={updateExitFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onView={(row) => setModal({ type: 'view-exit', row })} onEdit={editExit} onCancel={(row) => setModal({ type: 'cancel-exit', row })} />}
+      {!loading && activeTab === 'saidas' && <ExitsTab rows={exits} movements={movements} movementFilters={movementFilters} onMovementFilters={setMovementFilters} total={exitCount} page={exitPage} onPage={setExitPage} filters={exitFilters} onFilters={updateExitFilters} period={period} onPeriod={setPeriod} lookups={lookups} can={can} onView={(row) => setModal({ type: 'view-exit', row })} onEdit={editExit} onCancel={(row) => setModal({ type: 'cancel-exit', row })} onNewMovement={(initialType) => setModal({ type: 'movement', movement: null, initialType, idempotencyKey: crypto.randomUUID() })} onViewMovement={(row) => setModal({ type: 'view-movement', row })} onEditMovement={(row) => setModal({ type: 'movement', movement: row, idempotencyKey: row.idempotency_key })} onCancelMovement={(row) => setModal({ type: 'cancel-movement', row })} />}
       {!loading && activeTab === 'depositos' && <DepositsTab lookups={lookups} can={can} onSaved={async (text) => { setMessage(text); await loadLookups(); }} onError={(value) => setError(oficinaUserError(value))} />}
       {!loading && activeTab === 'relatorios' && <ReportsTab dashboard={dashboard} period={period} onPeriod={setPeriod} can={can} onError={(value) => setError(oficinaUserError(value))} />}
       {modal?.type === 'entry' && <EntradaModal entry={modal.entry} lookups={lookups} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveEntry} />}
       {modal?.type === 'exit' && <SaidaModal entry={modal.entry} exit={modal.exit} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveExit} />}
+      {modal?.type === 'movement' && <OficinaMovimentacaoModal movement={modal.movement} initialType={modal.initialType} lookups={lookups} onClose={() => setModal(null)} onSave={handleSaveMovement} />}
       {modal?.type === 'complement' && <ComplementoModal entry={modal.entry} onClose={() => setModal(null)} onSave={handleSaveComplement} />}
       {modal?.type === 'view-entry' && <RecordViewModal title="Detalhes da entrada" row={modal.row} type="entry" onClose={() => setModal(null)} />}
       {modal?.type === 'view-exit' && <RecordViewModal title="Detalhes da saída" row={modal.row} type="exit" onClose={() => setModal(null)} />}
+      {modal?.type === 'view-movement' && <MovementViewModal row={modal.row} onClose={() => setModal(null)} />}
       {modal?.type === 'cancel-entry' && <ConfirmModal title="Cancelar entrada" text="A entrada será preservada no histórico. Não é possível cancelar uma entrada com saídas confirmadas." confirmLabel="Cancelar entrada" onClose={() => setModal(null)} onConfirm={handleConfirm} />}
       {modal?.type === 'cancel-exit' && <ConfirmModal title="Cancelar saída" text="O peso desta saída será devolvido automaticamente ao saldo da entrada." confirmLabel="Cancelar saída" onClose={() => setModal(null)} onConfirm={handleConfirm} />}
+      {modal?.type === 'cancel-movement' && <ConfirmModal title="Cancelar movimentação" text="O registro será preservado e a movimentação será retirada do cálculo do estoque." confirmLabel="Cancelar movimentação" onClose={() => setModal(null)} onConfirm={handleConfirm} />}
     </div>
   );
 }
@@ -158,6 +178,8 @@ function Dashboard({ dashboard, period, lookups, can, onSaved, onError }) {
     ['Notas de saída', dashboard.quantidade_saidas, Truck], ['Peso total de saída', `${formatKg(dashboard.peso_saidas)} KG`, FileOutput],
     ['Saldo total disponível', `${formatKg(dashboard.saldo_total)} KG`, Boxes], ['Notas sem saída', dashboard.sem_saida, FileInput],
     ['Saídas parciais', dashboard.saida_parcial, FileOutput], ['Saídas totais', dashboard.saida_total, FileDown],
+    ['Saldo inicial', `${formatKg(dashboard.saldo_inicial)} KG`, Boxes], ['Transferências', `${formatKg(dashboard.transferencias)} KG`, Truck],
+    ['Vendas/refaturamentos', `${formatKg(dashboard.vendas)} KG`, FileOutput], ['Operações diretas', `${formatKg(dashboard.operacoes_diretas)} KG`, FileDown],
   ];
   return <div className="grid gap-4"><SectionTitle title="Dashboard" subtitle={`Indicadores do período ${String(period.month).padStart(2, '0')}/${period.year}.`} /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, Icon]) => <article key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><Icon className="h-7 w-7 text-emerald-600" /><p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-black text-slate-950">{value ?? 0}</p></article>)}</div><div className="grid gap-4 xl:grid-cols-2"><SummaryList title="Saldo por produto" rows={dashboard.saldo_por_produto || []} labelKey="produto" valueKey="saldo" /><SummaryList title="Saldo por fornecedor" rows={dashboard.saldo_por_deposito || []} labelKey="deposito" valueKey="saldo" /></div>{can('oficina_messejana_depositos', 'visualizar') && <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 p-4"><div><h2 className="font-black">Depósitos da Central</h2><p className="text-xs text-slate-500">Cadastros armazenados no banco, sem nomes fixos no frontend.</p></div>{can('oficina_messejana_depositos', 'cadastrar') && <button type="button" onClick={() => setDepositForm({ nome: '', ativo: true })} className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-bold text-white"><Plus size={16} /> Novo</button>}</div><div className="divide-y divide-slate-100">{lookups.depositos.map((item) => <div key={item.id} className="flex items-center justify-between px-4 py-3"><span className="font-bold text-slate-800">{item.nome}</span><div className="flex items-center gap-3"><span className={`rounded-full px-2 py-1 text-xs font-bold ${item.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span>{can('oficina_messejana_depositos', 'editar') && <button type="button" onClick={() => setDepositForm(item)} className="text-slate-500 hover:text-emerald-700" aria-label={`Editar ${item.nome}`}><Edit3 size={17} /></button>}</div></div>)}</div></section>}{depositForm && <div className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><form onSubmit={submitDeposit} className="flex flex-col gap-3 sm:flex-row sm:items-end"><label className="grid flex-1 gap-1 text-sm font-bold">Nome<input required maxLength={100} className="h-11 rounded-lg border border-slate-300 px-3" value={depositForm.nome} onChange={(e) => setDepositForm((current) => ({ ...current, nome: e.target.value }))} /></label><label className="flex h-11 items-center gap-2 text-sm font-bold"><input type="checkbox" checked={depositForm.ativo} onChange={(e) => setDepositForm((current) => ({ ...current, ativo: e.target.checked }))} /> Ativo</label><button type="button" onClick={() => setDepositForm(null)} className="h-11 rounded-lg border px-4 font-bold">Cancelar</button><button type="submit" className="h-11 rounded-lg bg-emerald-600 px-4 font-bold text-white">Salvar</button></form></div>}</div>;
 }
@@ -247,8 +269,14 @@ function EntriesTab(props) {
 }
 
 function ExitsTab(props) {
-  const { rows, total, page, onPage, filters, onFilters, period, onPeriod, lookups, can, onView, onEdit, onCancel } = props;
-  return <div className="grid gap-4"><SectionTitle title="Saída de Notas" subtitle="Saídas vinculadas obrigatoriamente a uma entrada existente." /><Filters type="saidas" value={filters} onChange={onFilters} lookups={lookups} /><PeriodHistory period={period} onChange={onPeriod} counts={new Map()} searchActive={Boolean(filters.search)} /><DataTable><thead><tr>{['Data/hora','NF origem','NF saída','Fornecedor','Produto','Fornecedor/origem','Destino','Peso entrada','Peso saída','Saldo restante','Placa','Motorista','Status','Responsável','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_saida)}</Td><Td>{row.nf_origem_numero}/{row.nf_origem_serie}</Td><Td>{row.nf_saida_numero}/{row.nf_saida_serie}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.produto_nome}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.destino}</Td><Td>{formatKg(row.peso_entrada)} KG</Td><Td>{formatKg(row.peso_saida)} KG</Td><Td strong>{formatKg(row.saldo_apos_saida)} KG</Td><Td>{row.placa || '-'}</Td><Td>{row.motorista || '-'}</Td><Td><Status value={row.status_registro} /></Td><Td>{row.responsavel_nome}</Td><Td sticky><Actions onView={() => onView(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEdit(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancel(row) : null} /></Td></tr>)}{!rows.length && <EmptyRow cols={15} />}</tbody></DataTable><Pagination page={page} total={total} onPage={onPage} /></div>;
+  const { rows, movements, movementFilters, onMovementFilters, total, page, onPage, filters, onFilters, period, onPeriod, lookups, can, onView, onEdit, onCancel, onNewMovement, onViewMovement, onEditMovement, onCancelMovement } = props;
+  return <div className="grid gap-5">
+    <SectionTitle title="Registro de saída e estoque" subtitle="Registre transferências, vendas, operações diretas, saldo inicial e ajustes com rastreabilidade." action={can('oficina_messejana_saidas','cadastrar') && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onNewMovement('SALDO_INICIAL')} className="secondary"><Plus size={17}/> Registrar saldo inicial</button><button type="button" onClick={() => onNewMovement('AJUSTE_ESTOQUE')} className="secondary"><Plus size={17}/> Ajuste de estoque</button><button type="button" onClick={() => onNewMovement('TRANSFERENCIA_ESTOQUE_PROPRIO')} className="primary"><Plus size={17}/> Nova destinação</button></div>} />
+    <MovementFilters value={movementFilters} onChange={onMovementFilters} lookups={lookups} />
+    <PeriodHistory period={period} onChange={onPeriod} counts={new Map()} searchActive={Boolean(movementFilters.search)} collapsible defaultExpanded={false} />
+    <DataTable><thead><tr>{['Data','Tipo','Proprietário/origem','Local atual','Destino','Produto','Quantidade','NF compra','NF venda','Valor venda','Status','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{movements.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_movimentacao)}</Td><Td>{movementLabel(row.tipo)}</Td><Td>{row.proprietario_nome}</Td><Td>{row.local_origem_nome || row.local_destino_nome || '-'}</Td><Td>{row.destinatario_nome || row.unidade_destino_nome || row.local_destino_nome || '-'}</Td><Td>{row.produto_nome}</Td><Td strong>{formatKg(row.quantidade)} KG</Td><Td>{row.documento_compra || '-'}</Td><Td>{row.documento_venda || '-'}</Td><Td>{formatMoney(row.valor_total_venda)}</Td><Td><Status value={row.status_registro} /></Td><Td sticky><Actions onView={() => onViewMovement(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEditMovement(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancelMovement(row) : null} /></Td></tr>)}{!movements.length && <EmptyRow cols={12} />}</tbody></DataTable>
+    <section className="grid gap-4 border-t border-slate-200 pt-5"><SectionTitle title="Saídas vinculadas às entradas antigas" subtitle="Histórico anterior preservado e disponível para consulta." /><Filters type="saidas" value={filters} onChange={onFilters} lookups={lookups} /><DataTable><thead><tr>{['Data/hora','NF origem','NF saída','Fornecedor','Produto','Destino','Peso entrada','Peso saída','Saldo restante','Placa','Motorista','Status','Responsável','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_saida)}</Td><Td>{row.nf_origem_numero}/{row.nf_origem_serie}</Td><Td>{row.nf_saida_numero}/{row.nf_saida_serie}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.produto_nome}</Td><Td>{row.destino}</Td><Td>{formatKg(row.peso_entrada)} KG</Td><Td>{formatKg(row.peso_saida)} KG</Td><Td strong>{formatKg(row.saldo_apos_saida)} KG</Td><Td>{row.placa || '-'}</Td><Td>{row.motorista || '-'}</Td><Td><Status value={row.status_registro} /></Td><Td>{row.responsavel_nome}</Td><Td sticky><Actions onView={() => onView(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEdit(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancel(row) : null} /></Td></tr>)}{!rows.length && <EmptyRow cols={14} />}</tbody></DataTable><Pagination page={page} total={total} onPage={onPage} /></section>
+  </div>;
 }
 
 function ReportsTab({ dashboard, period, onPeriod, can, onError }) {
@@ -256,8 +284,9 @@ function ReportsTab({ dashboard, period, onPeriod, can, onError }) {
   async function exportReport(format) {
     setExporting(true);
     try {
-      const [entradas, saidas] = await Promise.all([listAllForExport('entradas',{period}), listAllForExport('saidas',{period})]);
+      const [entradas, saidas, movimentacoes] = await Promise.all([listAllForExport('entradas',{period}), listAllForExport('saidas',{period}), listMovimentacoes({ period })]);
       const rows = entradas.map((row) => ({ Tipo:'Entrada', Data:dateTime(row.data_entrada), NF:`${row.nf_numero}/${row.nf_serie}`, Fornecedor:row.fornecedor_nome, FornecedorDestino:row.fornecedor_destino_nome || '', CnpjDestino:row.fornecedor_destino_cnpj || '', Produto:row.produto_nome, Destino:'', Peso:Number(row.peso_nf), ValorUnitario:Number(row.valor_unitario||0), ValorTotal:Number(row.valor_total_nota||0), Saldo:Number(row.saldo_disponivel), Status:statusLabel(row.status_saldo) })).concat(saidas.map((row) => ({ Tipo:'Saída', Data:dateTime(row.data_saida), NF:`${row.nf_saida_numero}/${row.nf_saida_serie}`, Fornecedor:row.fornecedor_nome, FornecedorDestino:'', CnpjDestino:'', Produto:row.produto_nome, Destino:row.destino, Peso:Number(row.peso_saida), ValorUnitario:0, ValorTotal:0, Saldo:Number(row.saldo_apos_saida), Status:statusLabel(row.status_registro) })));
+      rows.push(...movimentacoes.map((row) => ({ Tipo:movementLabel(row.tipo), Data:dateTime(row.data_movimentacao), NF:row.documento_venda || row.documento_compra || '', Fornecedor:row.proprietario_nome, FornecedorDestino:row.destinatario_nome || row.local_destino_nome || row.unidade_destino_nome || '', CnpjDestino:row.destinatario_documento || row.local_destino_documento || '', Produto:row.produto_nome, Destino:row.destinatario_nome || row.unidade_destino_nome || row.local_destino_nome || '', Peso:Number(row.quantidade), ValorUnitario:Number(row.valor_unitario_venda || row.valor_unitario_compra || 0), ValorTotal:Number(row.valor_total_venda || row.valor_total_compra || 0), Saldo:0, Status:statusLabel(row.status_registro) })));
       if (format === 'xlsx') { const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{Aviso:'Nenhum registro'}]),'Movimentações'); XLSX.writeFile(wb,`central-graos-messejana-${period.year}-${String(period.month).padStart(2,'0')}.xlsx`); }
       else exportSimplePdf({ title:'Central de Grãos Messejana', subtitle:`Movimentações ${String(period.month).padStart(2,'0')}/${period.year}`, fileName:`central-graos-messejana-${period.year}-${period.month}.pdf`, columns:[{key:'Tipo',label:'Tipo'},{key:'Data',label:'Data'},{key:'NF',label:'NF'},{key:'Fornecedor',label:'Fornecedor/origem'},{key:'FornecedorDestino',label:'Fornecedor destino'},{key:'Produto',label:'Produto'},{key:'Destino',label:'Destino'},{key:'Peso',label:'Peso'},{key:'ValorUnitario',label:'Valor unit.'},{key:'ValorTotal',label:'Valor total'},{key:'Saldo',label:'Saldo'},{key:'Status',label:'Status'}], rows, totals:[{label:'Entradas',value:`${formatKg(dashboard.peso_entradas)} KG`},{label:'Saídas',value:`${formatKg(dashboard.peso_saidas)} KG`},{label:'Saldo',value:`${formatKg(dashboard.saldo_total)} KG`}] });
     } catch (error) { onError(error); } finally { setExporting(false); }
@@ -286,6 +315,32 @@ function RecordViewModal({ title, row, type, onClose }) {
   ];
   return <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label={title}><div className="mx-auto my-8 max-w-4xl rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 p-5"><h2 className="text-xl font-black">{title}</h2><button type="button" onClick={onClose} aria-label="Fechar"><XCircle /></button></header><dl className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map(([label,value])=><div key={label} className="bg-white p-4"><dt className="text-xs font-black uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 font-bold text-slate-900">{value||'-'}</dd></div>)}</dl><div className="flex justify-end p-4"><button type="button" className="secondary" onClick={onClose}>Fechar</button></div></div></div>;
 }
+
+function MovementFilters({ value, onChange, lookups }) {
+  const update = (key, next) => onChange({ ...value, [key]: next });
+  return <section className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center gap-2"><Search className="text-emerald-600"/><div><h2 className="text-sm font-black">FILTROS DAS MOVIMENTAÇÕES</h2><p className="text-xs text-slate-500">Filtre por período, produto, proprietário, local, destinatário, tipo ou NF.</p></div></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><FilterInput label="Nome, CNPJ ou NF" value={value.search} onChange={(next) => update('search',next)}/><FilterSelect label="Tipo" value={value.tipo} onChange={(next) => update('tipo',next)} rows={MOVEMENT_TYPES.map(([id,nome])=>({id,nome}))}/><FilterSelect label="Produto" value={value.produtoId} onChange={(next) => update('produtoId',next)} rows={lookups.produtos}/><FilterSelect label="Fornecedor proprietário/origem" value={value.proprietarioId} onChange={(next) => update('proprietarioId',next)} rows={lookups.fornecedores}/><FilterSelect label="Local de armazenagem" value={value.localId} onChange={(next) => update('localId',next)} rows={lookups.fornecedores}/><FilterSelect label="Destinatário" value={value.destinatarioId} onChange={(next) => update('destinatarioId',next)} rows={lookups.fornecedores}/></div><div className="mt-3 flex justify-end"><button type="button" className="secondary" onClick={() => onChange(EMPTY_MOVEMENT_FILTERS)}>Limpar filtros</button></div></section>;
+}
+
+function FilterSelect({ label, value, onChange, rows }) {
+  return <label className="grid gap-1 text-xs font-bold">{label}<select className="filter" value={value} onChange={(e)=>onChange(e.target.value)}><option value="">Todos</option>{rows.map((row)=><option key={row.id} value={row.id}>{row.nome}</option>)}</select></label>;
+}
+
+function MovementViewModal({ row, onClose }) {
+  const fields = [
+    ['Tipo',movementLabel(row.tipo)],['Data',dateTime(row.data_movimentacao)],
+    ['Fornecedor proprietário/origem',row.proprietario_nome],['Local atual',row.local_origem_nome],
+    ['Local de armazenagem',row.local_destino_nome],['Unidade de destino',row.unidade_destino_nome],
+    ['Destinatário',row.destinatario_nome],['Produto',row.produto_nome],
+    ['Quantidade',`${formatKg(row.quantidade)} KG`],['NF/documento da compra',row.documento_compra],
+    ['NF/documento da venda',row.documento_venda],['Valor unitário da compra',formatMoney(row.valor_unitario_compra)],
+    ['Valor total da compra',formatMoney(row.valor_total_compra)],['Valor unitário da venda',formatMoney(row.valor_unitario_venda)],
+    ['Valor total da venda',formatMoney(row.valor_total_venda)],['Justificativa',row.justificativa],
+    ['Status',statusLabel(row.status_registro)],['Motivo do cancelamento',row.motivo_cancelamento],['Observação',row.observacao],
+  ];
+  return <div className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true"><div className="mx-auto my-8 max-w-4xl rounded-2xl bg-white shadow-2xl"><header className="flex items-center justify-between border-b p-5"><h2 className="text-xl font-black">Detalhes da movimentação</h2><button type="button" onClick={onClose} aria-label="Fechar"><XCircle/></button></header><dl className="grid gap-px bg-slate-200 sm:grid-cols-2">{fields.map(([label,value])=><div key={label} className="bg-white p-4"><dt className="text-xs font-black uppercase text-slate-500">{label}</dt><dd className="mt-1 font-bold">{value||'-'}</dd></div>)}</dl><div className="flex justify-end p-4"><button type="button" className="secondary" onClick={onClose}>Fechar</button></div></div></div>;
+}
+
+function movementLabel(value) { return MOVEMENT_TYPES.find(([key])=>key===value)?.[1] || value || '-'; }
 
 function Filters({ type, value, onChange }) {
   const [draft, setDraft] = useState(value);

@@ -7,15 +7,50 @@ const ENTRY_SELECT = '*';
 const EXIT_SELECT = '*';
 
 export async function listOficinaLookups() {
-  const { data, error } = await supabase.rpc('oficina_messejana_opcoes_entrada');
+  const [{ data, error }, { data: unidades, error: unidadesError }] = await Promise.all([
+    supabase.rpc('oficina_messejana_opcoes_entrada'),
+    supabase.from('balancas').select('id,nome,identificacao').eq('ativo', true).order('nome'),
+  ]);
   if (error) throw error;
+  if (unidadesError) throw unidadesError;
   return {
     depositos: [],
     fornecedores: data?.fornecedores || [],
     produtos: data?.produtos || [],
     motoristas: data?.motoristas || [],
     veiculos: data?.veiculos || [],
+    unidades: unidades || [],
   };
+}
+
+export async function listMovimentacoes({ period, filters = {} } = {}) {
+  let query = supabase
+    .from('oficina_messejana_movimentacoes_resumo')
+    .select('*')
+    .order('data_movimentacao', { ascending: false });
+  const search = cleanSearch(filters.search);
+  if (search) {
+    const pattern = `*${search}*`;
+    query = query.or([
+      `proprietario_nome.ilike.${pattern}`,
+      `local_origem_nome.ilike.${pattern}`,
+      `local_destino_nome.ilike.${pattern}`,
+      `destinatario_nome.ilike.${pattern}`,
+      `produto_nome.ilike.${pattern}`,
+      `documento_compra.ilike.${pattern}`,
+      `documento_venda.ilike.${pattern}`,
+    ].join(','));
+  } else {
+    query = applyPeriod(query, 'data_movimentacao', period);
+  }
+  if (filters.tipo) query = query.eq('tipo', filters.tipo);
+  if (filters.produtoId) query = query.eq('produto_id', filters.produtoId);
+  if (filters.proprietarioId) query = query.eq('proprietario_id', filters.proprietarioId);
+  if (filters.localId) query = query.or(`local_origem_id.eq.${filters.localId},local_destino_id.eq.${filters.localId}`);
+  if (filters.destinatarioId) query = query.eq('destinatario_id', filters.destinatarioId);
+  const { data: rows, error } = await query;
+  if (error) throw error;
+  return rows || [];
 }
 
 export async function listEntradas({ page = 1, pageSize = OFICINA_PAGE_SIZE, period, filters = {} } = {}) {
@@ -98,12 +133,17 @@ export async function listSaidas({ page = 1, pageSize = OFICINA_PAGE_SIZE, perio
 
 export async function getOficinaDashboard(period) {
   const { start, end } = periodRange(period);
-  const { data, error } = await supabase.rpc('oficina_messejana_dashboard', {
-    p_inicio: start,
-    p_fim: end,
-  });
+  const [{ data, error }, { data: stock, error: stockError }] = await Promise.all([
+    supabase.rpc('oficina_messejana_dashboard', { p_inicio: start, p_fim: end }),
+    supabase.rpc('oficina_messejana_dashboard_estoque', { p_inicio: start, p_fim: end }),
+  ]);
   if (error) throw error;
-  return data || {};
+  if (stockError) throw stockError;
+  return {
+    ...(data || {}),
+    ...(stock || {}),
+    saldo_total: Number(data?.saldo_total || 0) + Number(stock?.saldo_complementar || 0),
+  };
 }
 
 export async function getEntrada(id) {
@@ -149,6 +189,24 @@ export async function saveSaida(id, entradaId, idempotencyKey, data) {
 export async function cancelSaida(id, reason) {
   const { error } = await supabase.rpc('oficina_messejana_cancelar_saida', {
     p_saida_id: requireUuid(id),
+    p_motivo: String(reason || '').trim(),
+  });
+  if (error) throw error;
+}
+
+export async function saveMovimentacao(id, idempotencyKey, data) {
+  const { data: savedId, error } = await supabase.rpc('oficina_messejana_salvar_movimentacao', {
+    p_movimentacao_id: id || null,
+    p_idempotency_key: requireUuid(idempotencyKey),
+    p_dados: normalizeMovementPayload(data),
+  });
+  if (error) throw error;
+  return savedId;
+}
+
+export async function cancelMovimentacao(id, reason) {
+  const { error } = await supabase.rpc('oficina_messejana_cancelar_movimentacao', {
+    p_movimentacao_id: requireUuid(id),
     p_motivo: String(reason || '').trim(),
   });
   if (error) throw error;
@@ -222,6 +280,11 @@ export function oficinaUserError(error) {
   if (message.includes('OFICINA_VALOR_INVALIDO')) return 'Valor unitário e valor total da nota não podem ser negativos.';
   if (message.includes('OFICINA_PESO_INVALIDO')) return 'Informe um peso da NF válido e maior que zero.';
   if (message.includes('OFICINA_SALDO_INSUFICIENTE')) return 'O peso informado é maior que o saldo disponível desta entrada.';
+  if (message.includes('OFICINA_SALDO_INICIAL_DUPLICADO')) return 'Já existe saldo inicial para este proprietário, local, produto e data de referência.';
+  if (message.includes('OFICINA_MOVIMENTACAO_DUPLICADA')) return 'Esta movimentação já foi registrada.';
+  if (message.includes('OFICINA_JUSTIFICATIVA_OBRIGATORIA')) return 'Informe uma justificativa para concluir esta operação.';
+  if (message.includes('OFICINA_MOVIMENTACAO_INVALIDA')) return 'Revise os campos obrigatórios da movimentação.';
+  if (message.includes('OFICINA_CADASTRO_FORA_EMPRESA') || message.includes('OFICINA_LOCAL_INVALIDO') || message.includes('OFICINA_DESTINO_INVALIDO') || message.includes('OFICINA_UNIDADE_INVALIDA')) return 'Um dos cadastros selecionados não pertence à sua empresa ou unidade autorizada.';
   if (message.includes('OFICINA_NF_DUPLICADA')) return 'Esta nota fiscal já foi cadastrada na Central de Grãos Messejana. Revise o lançamento existente.';
   if (message.includes('OFICINA_ENTRADA_CANCELADA')) return 'Não é permitido registrar saída para uma entrada cancelada.';
   if (message.includes('OFICINA_ENTRADA_COM_SAIDAS')) return 'Cancele primeiro as saídas confirmadas antes de cancelar esta entrada.';
@@ -297,6 +360,29 @@ function normalizeEntryPayload(data = {}) {
     valor_total_nota: roundedTotal,
     valor_unitario: calculatedUnit,
   };
+}
+
+function normalizeMovementPayload(data = {}) {
+  const normalized = normalizePayload(data);
+  const quantity = parseBrazilianDecimal(normalized.quantidade);
+  if (quantity === null || quantity <= 0) throw new Error('OFICINA_MOVIMENTACAO_INVALIDA');
+  const numericFields = [
+    'valor_unitario_compra',
+    'valor_total_compra',
+    'valor_unitario_venda',
+    'valor_total_venda',
+  ];
+  for (const field of numericFields) {
+    if (normalized[field] === '' || normalized[field] === null || normalized[field] === undefined) {
+      normalized[field] = null;
+      continue;
+    }
+    const value = parseBrazilianDecimal(normalized[field]);
+    if (value === null || value < 0) throw new Error('OFICINA_VALOR_INVALIDO');
+    normalized[field] = Number(value.toFixed(field.includes('unitario') ? 4 : 2));
+  }
+  normalized.quantidade = Number(quantity.toFixed(3));
+  return normalized;
 }
 
 function supplierIdsForSearch(suppliers, value) {

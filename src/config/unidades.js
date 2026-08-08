@@ -99,7 +99,7 @@ export const UNIDADES = [
     codigo: 'iguatu',
     nome: 'Armazém Iguatu',
     rotulo: 'Unidade Iguatu',
-    descricao: 'Portaria, recebimentos, armazenagem e relatórios da unidade Iguatu.',
+    descricao: 'Dashboard, portaria, recebimentos, armazenagem e relatórios da unidade Iguatu.',
     rotaBase: '/armazem-iguatu',
     modoRota: 'path',
     icone: Warehouse,
@@ -109,7 +109,7 @@ export const UNIDADES = [
     temCadastros: false,
     // Iguatu nao possui laboratorio: as cargas seguem direto para Recebimentos.
     dispensaLaboratorio: true,
-    abas: ['portaria', 'recebimentos', 'armazenagem', 'relatorios'],
+    abas: ['dashboard', 'portaria', 'recebimentos', 'armazenagem', 'relatorios'],
     permissaoBase: 'balancas',
   },
 ];
