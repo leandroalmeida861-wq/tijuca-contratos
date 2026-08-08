@@ -12,9 +12,9 @@ export const MOVEMENT_TYPES = [
 
 const INPUT = 'h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100';
 
-export default function OficinaMovimentacaoModal({ movement, initialType, lookups, onClose, onSave }) {
+export default function OficinaMovimentacaoModal({ movement, defaults, sourceEntry, initialType, lookups, onClose, onSave }) {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(() => toForm(movement, initialType));
+  const [form, setForm] = useState(() => toForm(movement || defaults, initialType));
   const [error, setError] = useState('');
   const type = form.tipo;
   const needsOrigin = ['TRANSFERENCIA_ESTOQUE_PROPRIO', 'REFATURAMENTO_VENDA', 'OPERACAO_DIRETA'].includes(type);
@@ -51,11 +51,12 @@ export default function OficinaMovimentacaoModal({ movement, initialType, lookup
     <div className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Movimentação de estoque">
       <form onSubmit={submit} className="mx-auto my-6 max-w-5xl rounded-2xl bg-white shadow-2xl">
         <header className="flex items-start justify-between border-b border-slate-200 p-5">
-          <div><h2 className="text-xl font-black">{movement ? 'Editar movimentação' : 'Nova movimentação'}</h2><p className="mt-1 text-sm text-slate-500">O tipo escolhido controla os campos e o impacto no estoque.</p></div>
+          <div><h2 className="text-xl font-black">{movement ? 'Editar movimentação' : 'Registrar saída / movimentação'}</h2><p className="mt-1 text-sm text-slate-500">Escolha o tipo da operação. Os campos e o impacto no estoque serão ajustados automaticamente.</p></div>
           <button type="button" onClick={onClose} aria-label="Fechar"><X /></button>
         </header>
         <div className="grid gap-4 p-5">
           {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
+          {sourceEntry && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><p className="font-black">Dados preenchidos a partir da entrada</p><p className="mt-1">NF {sourceEntry.nf_numero}/{sourceEntry.nf_serie} · {sourceEntry.fornecedor_nome} · {sourceEntry.produto_nome} · saldo {formatBrazilianDecimal(sourceEntry.saldo_disponivel, 3, 3)} KG</p></div>}
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Tipo de destinação/movimentação" required><select className={INPUT} required value={type} onChange={(e) => update('tipo', e.target.value)}>{MOVEMENT_TYPES.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
             <Field label="Data da movimentação" required><input type="datetime-local" className={INPUT} required value={form.data_movimentacao} onChange={(e) => update('data_movimentacao', e.target.value)} /></Field>
