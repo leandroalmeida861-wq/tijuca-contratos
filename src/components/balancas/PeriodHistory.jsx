@@ -31,7 +31,7 @@ export default function PeriodHistory({
   onChange,
   counts,
   searchActive = false,
-  collapsible = false,
+  collapsible = true,
   defaultExpanded = true,
 }) {
   const [sectionOpen, setSectionOpen] = useState(defaultExpanded);
@@ -60,12 +60,12 @@ export default function PeriodHistory({
         disabled={!collapsible}
         onClick={() => collapsible && setSectionOpen((open) => !open)}
         aria-expanded={sectionOpen}
-        className="flex w-full flex-col gap-2 border-b border-slate-200 px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between disabled:cursor-default"
+        className={`flex w-full flex-col gap-2 px-4 py-3 text-left sm:flex-row sm:items-center sm:justify-between disabled:cursor-default ${sectionOpen ? 'border-b border-slate-200' : ''}`}
       >
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-emerald-700" aria-hidden="true" />
           <h2 className="text-base font-extrabold text-slate-900">Histórico por período</h2>
-          {collapsible && <ChevronDown className={`h-4 w-4 text-emerald-700 transition-transform ${sectionOpen ? '' : '-rotate-90'}`} aria-hidden="true" />}
+          {collapsible && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-extrabold text-emerald-700"><ChevronDown className={`h-3.5 w-3.5 transition-transform ${sectionOpen ? '' : '-rotate-90'}`} aria-hidden="true" />{sectionOpen ? 'Ocultar período' : 'Mostrar período'}</span>}
         </div>
         <div className="flex flex-col gap-1 text-xs font-semibold text-slate-500 lg:flex-row lg:gap-4">
           <span className="inline-flex items-center gap-1.5"><Info className="h-4 w-4" /> Busca ativa consulta todo o histórico da unidade.</span>

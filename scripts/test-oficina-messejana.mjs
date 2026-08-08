@@ -111,9 +111,15 @@ assert.match(movementForm, /Estoque próprio da empresa/);
 assert.match(movementForm, /Refaturamento\/venda para outra empresa/);
 assert.match(movementForm, /Operação direta/);
 assert.match(movementForm, /Registrar saldo inicial|Saldo inicial/);
+assert.match(movementForm, /Registrar saída \/ movimentação/);
 assert.doesNotMatch(movementForm, /type="number"/);
 assert.match(periodHistory, /defaultExpanded/);
+assert.match(periodHistory, /collapsible = true/);
 assert.match(page, /defaultExpanded=\{false\}/);
+assert.match(page, /Escolha o tipo de saída ou movimentação/);
+assert.match(page, /initialType: 'REFATURAMENTO_VENDA'/);
+assert.match(page, /fornecedor_destino_id \|\| entry\.fornecedor_id/);
+assert.match(page, /Registrar saída ou movimentação/);
 assert.match(service, /oficina_messejana_dashboard_estoque/);
 
 console.log('Central de Grãos Messejana: saldo, duplicidade, complemento, paginação, RLS e concorrência verificados.');

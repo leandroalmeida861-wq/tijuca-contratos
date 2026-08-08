@@ -97,7 +97,23 @@ export default function OficinaMessejanaPage() {
     try { await saveEntrada(modal?.entry?.id, data); setModal(null); setMessage('Entrada salva com sucesso.'); await Promise.all([loadEntries(), loadDashboard(), loadLookups()]); }
     catch (saveError) { setError(oficinaUserError(saveError)); throw saveError; }
   }
-  async function startExit(entry) { setModal({ type: 'exit', entry, exit: null, idempotencyKey: crypto.randomUUID() }); }
+  async function startExit(entry) {
+    setParams({ tab: 'saidas' });
+    setModal({
+      type: 'movement',
+      movement: null,
+      initialType: 'REFATURAMENTO_VENDA',
+      idempotencyKey: crypto.randomUUID(),
+      sourceEntry: entry,
+      defaults: {
+        entrada_id: entry.id,
+        proprietario_id: entry.fornecedor_id,
+        local_origem_id: entry.fornecedor_destino_id || entry.fornecedor_id,
+        produto_id: entry.produto_id,
+        quantidade: entry.saldo_disponivel,
+      },
+    });
+  }
   async function editExit(row) {
     try { const entry = await getEntrada(row.entrada_id); setModal({ type: 'exit', entry, exit: row, idempotencyKey: row.idempotency_key }); }
     catch (openError) { setError(oficinaUserError(openError)); }
@@ -142,7 +158,7 @@ export default function OficinaMessejanaPage() {
       {!loading && activeTab === 'relatorios' && <ReportsTab dashboard={dashboard} period={period} onPeriod={setPeriod} can={can} onError={(value) => setError(oficinaUserError(value))} />}
       {modal?.type === 'entry' && <EntradaModal entry={modal.entry} lookups={lookups} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveEntry} />}
       {modal?.type === 'exit' && <SaidaModal entry={modal.entry} exit={modal.exit} responsibleName={profileData?.nome || profileData?.email} onClose={() => setModal(null)} onSave={handleSaveExit} />}
-      {modal?.type === 'movement' && <OficinaMovimentacaoModal movement={modal.movement} initialType={modal.initialType} lookups={lookups} onClose={() => setModal(null)} onSave={handleSaveMovement} />}
+      {modal?.type === 'movement' && <OficinaMovimentacaoModal movement={modal.movement} defaults={modal.defaults} sourceEntry={modal.sourceEntry} initialType={modal.initialType} lookups={lookups} onClose={() => setModal(null)} onSave={handleSaveMovement} />}
       {modal?.type === 'complement' && <ComplementoModal entry={modal.entry} onClose={() => setModal(null)} onSave={handleSaveComplement} />}
       {modal?.type === 'view-entry' && <RecordViewModal title="Detalhes da entrada" row={modal.row} type="entry" onClose={() => setModal(null)} />}
       {modal?.type === 'view-exit' && <RecordViewModal title="Detalhes da saída" row={modal.row} type="exit" onClose={() => setModal(null)} />}
@@ -272,11 +288,24 @@ function ExitsTab(props) {
   const { rows, movements, movementFilters, onMovementFilters, total, page, onPage, filters, onFilters, period, onPeriod, lookups, can, onView, onEdit, onCancel, onNewMovement, onViewMovement, onEditMovement, onCancelMovement } = props;
   return <div className="grid gap-5">
     <SectionTitle title="Registro de saída e estoque" subtitle="Registre transferências, vendas, operações diretas, saldo inicial e ajustes com rastreabilidade." action={can('oficina_messejana_saidas','cadastrar') && <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onNewMovement('SALDO_INICIAL')} className="secondary"><Plus size={17}/> Registrar saldo inicial</button><button type="button" onClick={() => onNewMovement('AJUSTE_ESTOQUE')} className="secondary"><Plus size={17}/> Ajuste de estoque</button><button type="button" onClick={() => onNewMovement('TRANSFERENCIA_ESTOQUE_PROPRIO')} className="primary"><Plus size={17}/> Nova destinação</button></div>} />
+    {can('oficina_messejana_saidas','cadastrar') && <MovementTypeLauncher onSelect={onNewMovement} />}
     <MovementFilters value={movementFilters} onChange={onMovementFilters} lookups={lookups} />
     <PeriodHistory period={period} onChange={onPeriod} counts={new Map()} searchActive={Boolean(movementFilters.search)} collapsible defaultExpanded={false} />
     <DataTable><thead><tr>{['Data','Tipo','Proprietário/origem','Local atual','Destino','Produto','Quantidade','NF compra','NF venda','Valor venda','Status','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{movements.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_movimentacao)}</Td><Td>{movementLabel(row.tipo)}</Td><Td>{row.proprietario_nome}</Td><Td>{row.local_origem_nome || row.local_destino_nome || '-'}</Td><Td>{row.destinatario_nome || row.unidade_destino_nome || row.local_destino_nome || '-'}</Td><Td>{row.produto_nome}</Td><Td strong>{formatKg(row.quantidade)} KG</Td><Td>{row.documento_compra || '-'}</Td><Td>{row.documento_venda || '-'}</Td><Td>{formatMoney(row.valor_total_venda)}</Td><Td><Status value={row.status_registro} /></Td><Td sticky><Actions onView={() => onViewMovement(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEditMovement(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancelMovement(row) : null} /></Td></tr>)}{!movements.length && <EmptyRow cols={12} />}</tbody></DataTable>
     <section className="grid gap-4 border-t border-slate-200 pt-5"><SectionTitle title="Saídas vinculadas às entradas antigas" subtitle="Histórico anterior preservado e disponível para consulta." /><Filters type="saidas" value={filters} onChange={onFilters} lookups={lookups} /><DataTable><thead><tr>{['Data/hora','NF origem','NF saída','Fornecedor','Produto','Destino','Peso entrada','Peso saída','Saldo restante','Placa','Motorista','Status','Responsável','Ações'].map((value) => <Th key={value}>{value}</Th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-t border-slate-100"><Td>{dateTime(row.data_saida)}</Td><Td>{row.nf_origem_numero}/{row.nf_origem_serie}</Td><Td>{row.nf_saida_numero}/{row.nf_saida_serie}</Td><Td>{row.fornecedor_nome}</Td><Td>{row.produto_nome}</Td><Td>{row.destino}</Td><Td>{formatKg(row.peso_entrada)} KG</Td><Td>{formatKg(row.peso_saida)} KG</Td><Td strong>{formatKg(row.saldo_apos_saida)} KG</Td><Td>{row.placa || '-'}</Td><Td>{row.motorista || '-'}</Td><Td><Status value={row.status_registro} /></Td><Td>{row.responsavel_nome}</Td><Td sticky><Actions onView={() => onView(row)} onEdit={can('oficina_messejana_saidas','editar') && row.status_registro !== 'CANCELADA' ? () => onEdit(row) : null} onCancel={can('oficina_messejana_saidas','cancelar') && row.status_registro !== 'CANCELADA' ? () => onCancel(row) : null} /></Td></tr>)}{!rows.length && <EmptyRow cols={14} />}</tbody></DataTable><Pagination page={page} total={total} onPage={onPage} /></section>
   </div>;
+}
+
+const MOVEMENT_TYPE_HELP = {
+  TRANSFERENCIA_ESTOQUE_PROPRIO: 'Retira do fornecedor depositário e transfere para uma unidade própria, sem duplicar o estoque total.',
+  REFATURAMENTO_VENDA: 'Registra a venda ou o refaturamento para outro cliente, fornecedor ou empresa.',
+  OPERACAO_DIRETA: 'Compra e vende diretamente, sem entrada ou saída do estoque físico próprio.',
+  SALDO_INICIAL: 'Implanta o estoque existente por fornecedor, local de armazenagem e produto.',
+  AJUSTE_ESTOQUE: 'Corrige o saldo para mais ou para menos com justificativa e auditoria.',
+};
+
+function MovementTypeLauncher({ onSelect }) {
+  return <section className="rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-white p-4 shadow-sm" aria-label="Tipos de saída e movimentação"><h3 className="text-base font-black text-slate-950">Escolha o tipo de saída ou movimentação</h3><p className="mt-1 text-sm text-slate-600">Estas são as novas operações da Central de Grãos Messejana.</p><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{MOVEMENT_TYPES.map(([type, label]) => <button key={type} type="button" onClick={() => onSelect(type)} className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-orange-400 hover:shadow-md"><span className="inline-flex rounded-lg bg-orange-100 p-2 text-orange-700"><FileOutput size={19}/></span><strong className="mt-3 block text-sm text-slate-950">{label}</strong><span className="mt-1 block text-xs leading-relaxed text-slate-600">{MOVEMENT_TYPE_HELP[type]}</span></button>)}</div></section>;
 }
 
 function ReportsTab({ dashboard, period, onPeriod, can, onError }) {
@@ -383,7 +412,7 @@ function DataTable({ children }) { return <div className="overflow-x-auto rounde
 function Th({ children }) { return <th className="whitespace-nowrap bg-slate-50 px-3 py-3 font-black uppercase tracking-wide text-slate-600">{children}</th>; }
 function Td({ children, strong=false, sticky=false }) { return <td className={`px-3 py-3 align-middle ${strong?'font-black text-emerald-700':'font-medium text-slate-700'} ${sticky?'sticky right-0 bg-white shadow-[-8px_0_12px_-12px_rgba(15,23,42,.5)]':''}`}>{children}</td>; }
 function EmptyRow({ cols }) { return <tr><td colSpan={cols} className="p-10 text-center text-sm text-slate-500">Nenhum registro encontrado.</td></tr>; }
-function Actions({ onView, onEdit, onExit, onComplement, onCancel }) { return <div className="flex min-w-max items-center gap-1"><IconButton label="Visualizar" onClick={onView}><Eye size={17}/></IconButton>{onEdit&&<IconButton label="Editar" onClick={onEdit}><Edit3 size={17}/></IconButton>}{onExit&&<IconButton label="Registrar saída vinculada" onClick={onExit}><Truck size={17}/></IconButton>}{onComplement&&<IconButton label="Vincular NF complementar de valor" onClick={onComplement}><ClipboardList size={17}/></IconButton>}{onCancel&&<IconButton label="Cancelar" onClick={onCancel} danger><XCircle size={17}/></IconButton>}</div>; }
+function Actions({ onView, onEdit, onExit, onComplement, onCancel }) { return <div className="flex min-w-max items-center gap-1"><IconButton label="Visualizar" onClick={onView}><Eye size={17}/></IconButton>{onEdit&&<IconButton label="Editar" onClick={onEdit}><Edit3 size={17}/></IconButton>}{onExit&&<IconButton label="Registrar saída ou movimentação" onClick={onExit}><Truck size={17}/></IconButton>}{onComplement&&<IconButton label="Vincular NF complementar de valor" onClick={onComplement}><ClipboardList size={17}/></IconButton>}{onCancel&&<IconButton label="Cancelar" onClick={onCancel} danger><XCircle size={17}/></IconButton>}</div>; }
 function IconButton({ label, onClick, danger=false, children }) { return <button type="button" title={label} aria-label={label} onClick={onClick} className={`grid h-9 w-9 place-items-center rounded-lg ${danger?'text-red-600 hover:bg-red-50':'text-slate-600 hover:bg-slate-100'}`}>{children}</button>; }
 function Status({ value }) { return <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-black ${statusClass(value)}`}>{statusLabel(value)}</span>; }
 function Pagination({ page, total, onPage }) { const pages=Math.max(1,Math.ceil(total/OFICINA_PAGE_SIZE)); return <div className="flex items-center justify-between text-sm text-slate-600"><span>Exibindo {total?((page-1)*OFICINA_PAGE_SIZE)+1:0} a {Math.min(page*OFICINA_PAGE_SIZE,total)} de {total}</span><div className="flex gap-2"><button type="button" className="secondary" disabled={page<=1} onClick={()=>onPage(page-1)}>Anterior</button><span className="grid min-w-11 place-items-center rounded-lg bg-emerald-600 px-3 font-black text-white">{page}</span><button type="button" className="secondary" disabled={page>=pages} onClick={()=>onPage(page+1)}>Próxima</button></div></div>; }
