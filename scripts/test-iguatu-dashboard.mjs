@@ -15,6 +15,7 @@ const periodHistory = readFileSync(new URL('../src/components/balancas/PeriodHis
 assert.match(page, /activeTab === 'dashboard'/);
 assert.match(page, /dispensaLaboratorio|semLaboratorio/);
 assert.match(periodHistory, /collapsible = true/);
+assert.match(periodHistory, /defaultExpanded = false/);
 assert.match(periodHistory, /Ocultar período/);
 assert.match(periodHistory, /Mostrar período/);
 

@@ -32,7 +32,7 @@ export default function PeriodHistory({
   counts,
   searchActive = false,
   collapsible = true,
-  defaultExpanded = true,
+  defaultExpanded = false,
 }) {
   const [sectionOpen, setSectionOpen] = useState(defaultExpanded);
   const [openYears, setOpenYears] = useState(() => new Set([period.year]));
