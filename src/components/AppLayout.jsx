@@ -36,7 +36,7 @@ const unidadeNavItems = UNIDADES.map((unidade) => ({
 const navItems = [
   { to: '/inicio', label: 'Início', icon: House, alwaysVisible: true },
   { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
-  { label: 'Unidades de Grãos', icon: Wheat, units: unidadeNavItems },
+  { label: 'Gestão de Grãos', icon: Wheat, units: unidadeNavItems },
   { to: '/central-graos-messejana', label: 'Central de Grãos Messejana', icon: Warehouse, menu: 'oficina_messejana' },
   {
     label: 'Cadastros',
