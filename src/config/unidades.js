@@ -17,7 +17,8 @@
  *
  * @typedef {Object} Unidade
  * @property {string} codigo           Codigo interno da unidade.
- * @property {string} nome             Nome exibido no menu e no titulo da pagina.
+ * @property {string} nome             Nome exibido nos titulos e na interface da unidade.
+ * @property {string} menuLabel        Nome compacto exibido no submenu lateral.
  * @property {string} rotulo           Identificacao visual exibida no cabecalho.
  * @property {string} descricao        Subtitulo da pagina.
  * @property {string} rotaBase         Rota principal do modulo.
@@ -47,9 +48,10 @@ const ABAS_COMPLETAS = ['dashboard', 'portaria', 'laboratorio', 'recebimentos', 
 export const UNIDADES = [
   {
     codigo: 'beberibe',
-    nome: 'Balança Beberibe',
+    nome: 'Unidade de Grãos Beberibe',
+    menuLabel: 'Unidade Beberibe',
     rotulo: 'Unidade Beberibe',
-    descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Beberibe.',
+    descricao: 'Portaria, laboratório, pesagem, recebimento, armazenagem e relatórios da unidade.',
     rotaBase: '/balancas',
     modoRota: 'query',
     icone: Scale,
@@ -65,9 +67,10 @@ export const UNIDADES = [
   },
   {
     codigo: 'haisa',
-    nome: 'Balança Haisa',
+    nome: 'Unidade de Grãos Haisa',
+    menuLabel: 'Unidade Haisa',
     rotulo: 'Unidade Haisa',
-    descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Haisa.',
+    descricao: 'Portaria, laboratório, pesagem, recebimento, armazenagem e relatórios da unidade.',
     rotaBase: '/balanca-haisa',
     modoRota: 'path',
     icone: Scale,
@@ -81,9 +84,10 @@ export const UNIDADES = [
   },
   {
     codigo: 'estrela',
-    nome: 'Balança Estrela',
+    nome: 'Unidade de Grãos Estrela',
+    menuLabel: 'Unidade Estrela',
     rotulo: 'Unidade Estrela',
-    descricao: 'Recebimento, pesagem, conferência de NF-e, laboratório e relatórios da unidade Estrela.',
+    descricao: 'Portaria, laboratório, pesagem, recebimento, armazenagem e relatórios da unidade.',
     rotaBase: '/balanca-estrela',
     modoRota: 'path',
     icone: Scale,
@@ -97,9 +101,10 @@ export const UNIDADES = [
   },
   {
     codigo: 'iguatu',
-    nome: 'Armazém Iguatu',
+    nome: 'Unidade de Grãos Iguatu',
+    menuLabel: 'Unidade Iguatu',
     rotulo: 'Unidade Iguatu',
-    descricao: 'Dashboard, portaria, recebimentos, armazenagem e relatórios da unidade Iguatu.',
+    descricao: 'Portaria, pesagem, recebimento, armazenagem e relatórios da unidade.',
     rotaBase: '/armazem-iguatu',
     modoRota: 'path',
     icone: Warehouse,

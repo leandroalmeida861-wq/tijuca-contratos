@@ -28,6 +28,18 @@ const resolvidas = UNIDADES.map((unidade) => ({
 assert.equal(resolvidas.length, 4, 'As quatro unidades devem permanecer configuradas');
 assert.equal(new Set(resolvidas.map(({ balanca }) => balanca?.id)).size, 4, 'Cada unidade deve resolver uma balança diferente');
 assert.ok(resolvidas.every(({ balanca }) => balanca?.id), 'Nenhuma unidade pode ficar sem balanca_id');
+assert.deepEqual(UNIDADES.map((unidade) => unidade.nome), [
+  'Unidade de Grãos Beberibe',
+  'Unidade de Grãos Haisa',
+  'Unidade de Grãos Estrela',
+  'Unidade de Grãos Iguatu',
+]);
+assert.deepEqual(UNIDADES.map((unidade) => unidade.menuLabel), [
+  'Unidade Beberibe', 'Unidade Haisa', 'Unidade Estrela', 'Unidade Iguatu',
+]);
+assert.deepEqual(UNIDADES.map((unidade) => unidade.rotaBase), [
+  '/balancas', '/balanca-haisa', '/balanca-estrela', '/armazem-iguatu',
+], 'A alteração visual não pode modificar as rotas');
 
 for (const { unidade, balanca } of resolvidas) {
   const escopo = escopoDaUnidade(unidade, balanca);
@@ -36,6 +48,7 @@ for (const { unidade, balanca } of resolvidas) {
 }
 
 const unidadeModulo = await readFile(new URL('../src/components/UnidadeModulo.jsx', import.meta.url), 'utf8');
+const appLayout = await readFile(new URL('../src/components/AppLayout.jsx', import.meta.url), 'utf8');
 const balancasService = await readFile(new URL('../src/services/balancasService.js', import.meta.url), 'utf8');
 const armazenagemService = await readFile(new URL('../src/services/armazenagemService.js', import.meta.url), 'utf8');
 const armazenagemTab = await readFile(new URL('../src/components/balancas/ArmazenagemTab.jsx', import.meta.url), 'utf8');
@@ -48,6 +61,26 @@ const armazenagemIsolationMigration = await readFile(
 assert.ok(
   unidadeModulo.includes('key={unidade.codigo}'),
   'A troca de rota deve desmontar o estado da unidade anterior',
+);
+assert.ok(
+  appLayout.includes("{ label: 'Unidades de Grãos', icon: Wheat, units: unidadeNavItems }")
+    && appLayout.includes('useState(false)')
+    && appLayout.includes('setUnidadesOpen'),
+  'O grupo de unidades deve iniciar recolhido e permitir abrir/fechar',
+);
+assert.ok(
+  appLayout.includes("can(unit.menu, 'visualizar') && podeAcessarUnidade(unit.unidadeCodigo)"),
+  'O submenu deve preservar permissão de módulo e acesso por unidade',
+);
+assert.ok(
+  appLayout.indexOf("label: 'Unidades de Grãos'") < appLayout.indexOf("label: 'Central de Grãos Messejana'"),
+  'A Central Messejana deve continuar independente e abaixo do grupo',
+);
+assert.ok(
+  appLayout.includes("transition-[grid-template-rows,opacity]")
+    && appLayout.includes('lg:hidden')
+    && appLayout.includes('menuOpen'),
+  'A abertura deve ser animada e o menu móvel preservado',
 );
 assert.ok(
   balancasService.includes('requireUnidadeScope(filters);')

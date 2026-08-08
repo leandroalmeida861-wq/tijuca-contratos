@@ -23,12 +23,12 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { UNIDADES, rotaInicialDaUnidade } from '../config/unidades.js';
 import { CONTRATOS_GRAOS_TABS } from './ContratosGraosLayout.jsx';
 
-// Cada unidade e um modulo principal do menu, na ordem de config/unidades.js.
+// Cada unidade preserva sua rota e permissao; o agrupamento abaixo e somente visual.
 const unidadeNavItems = UNIDADES.map((unidade) => ({
   to: rotaInicialDaUnidade(unidade),
   rotaBase: unidade.rotaBase,
   unidadeCodigo: unidade.codigo,
-  label: unidade.nome,
+  label: unidade.menuLabel || unidade.nome,
   icon: unidade.icone,
   menu: unidade.permissaoBase,
 }));
@@ -36,7 +36,7 @@ const unidadeNavItems = UNIDADES.map((unidade) => ({
 const navItems = [
   { to: '/inicio', label: 'Início', icon: House, alwaysVisible: true },
   { label: 'Contratos de Grãos', icon: Wheat, module: CONTRATOS_GRAOS_TABS },
-  ...unidadeNavItems,
+  { label: 'Unidades de Grãos', icon: Wheat, units: unidadeNavItems },
   { to: '/central-graos-messejana', label: 'Central de Grãos Messejana', icon: Warehouse, menu: 'oficina_messejana' },
   {
     label: 'Cadastros',
@@ -60,6 +60,7 @@ export default function AppLayout() {
   const { signOut, can, podeAcessarUnidade, profileData } = useAuth();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unidadesOpen, setUnidadesOpen] = useState(false);
   const [cadastrosOpen, setCadastrosOpen] = useState(() =>
     isCadastroPath(location.pathname, location.search)
   );
@@ -159,6 +160,58 @@ export default function AppLayout() {
                   <ModuleIcon size={18} />
                   <span>{item.label}</span>
                 </NavLink>
+              );
+            }
+
+            if (item.units) {
+              const visibleUnits = item.units.filter((unit) =>
+                can(unit.menu, 'visualizar') && podeAcessarUnidade(unit.unidadeCodigo)
+              );
+              if (!visibleUnits.length) return null;
+              const GroupIcon = item.icon;
+              const isGroupActive = visibleUnits.some((unit) => isUnidadeAtiva(location, unit.rotaBase));
+
+              return (
+                <div key={item.label} className="grid gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setUnidadesOpen((open) => !open)}
+                    aria-expanded={unidadesOpen}
+                    aria-controls="menu-unidades-graos"
+                    className={[
+                      'flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2.5 text-left text-sm font-bold transition',
+                      isGroupActive || unidadesOpen ? 'bg-slate-800 text-white' : 'text-slate-200 hover:bg-slate-800 hover:text-white',
+                    ].join(' ')}
+                  >
+                    <GroupIcon size={18} />
+                    <span className="flex-1">{item.label}</span>
+                    <ChevronDown size={16} className={`transition-transform duration-200 ${unidadesOpen ? 'rotate-180' : '-rotate-90'}`} />
+                  </button>
+                  <div
+                    id="menu-unidades-graos"
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${unidadesOpen ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'}`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 grid gap-1 border-l border-slate-700 pl-3">
+                        {visibleUnits.map((unit) => (
+                          <NavLink
+                            key={unit.to}
+                            to={unit.to}
+                            aria-hidden={!unidadesOpen}
+                            tabIndex={unidadesOpen ? 0 : -1}
+                            className={[
+                              'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition',
+                              isUnidadeAtiva(location, unit.rotaBase) ? 'bg-[#31bf69] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                            ].join(' ')}
+                          >
+                            <unit.icon size={17} />
+                            <span>{unit.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               );
             }
 
